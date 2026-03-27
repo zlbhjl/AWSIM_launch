@@ -88,3 +88,7 @@ strategist.py
 修正後: result = {name: best_point[i] for i, name in enumerate(param_names)}
 
 AIが見つけた「一番怪しい数値のリスト」に、設定ファイルから取ってきた「パラメータ名」を自動でガッチャンコしています。
+
+
+strategist.pyのランダムアルゴリズムをSobolに変更
+
