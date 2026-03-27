@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from typing import List, Tuple, Optional
 
 # ==============================================================================
-# 1. 引数解析と設定の動的読み込み (修正済み)
+# 1. 引数解析と設定の動的読み込み
 # ==============================================================================
 def load_config():
     parser = argparse.ArgumentParser(description="Multi-Scenario Autonomous Driving Test Manager")
@@ -40,7 +40,7 @@ from param_logger import log_parameters
 from strategist import ActiveLearningStrategist
 
 # ==============================================================================
-# 2. コンフィグレーション (変数化済み)
+# 2. コンフィグレーション
 # ==============================================================================
 HOME = os.path.expanduser("~")
 SETUP_BASH = os.path.join(HOME, "autoware/install/setup.bash")
@@ -99,7 +99,6 @@ class ProcessManager:
     def __init__(self):
         self.infra_procs: List[Tuple[str, subprocess.Popen]] = []
         self.client_proc: Optional[subprocess.Popen] = None
-        # Strategist に現在の設定 (cfg) を渡すように修正
         self.strategist = ActiveLearningStrategist(SCENARIO_NAME, cfg, num_candidates=10000)
 
     def _build_command(self, task: Task, sim_num: int) -> str:
@@ -193,7 +192,21 @@ class ProcessManager:
         print(f"=== 自動化システム [{SCENARIO_NAME.upper()} モード] ===")
         os.makedirs(OUTPUT_DIR, exist_ok=True)
         
+        # --- [修正箇所1] 古いCSVファイルのクリーンアップ確認 ---
+        csv_param = os.path.join(OUTPUT_DIR, f"{SCENARIO_NAME}_parameters.csv")
+        csv_result = os.path.join(OUTPUT_DIR, "checker_results.csv")
+        
         current_sim_idx = self.count_target_files()
+        
+        if current_sim_idx == 0:
+            print("[System] 新規実行を検出しました。古いCSVログを初期化します。")
+            if os.path.exists(csv_param):
+                os.remove(csv_param)
+            if os.path.exists(csv_result):
+                os.remove(csv_result)
+        else:
+            print(f"[System] 既存のデータ (sim1 〜 sim{current_sim_idx}) から再開します。")
+        # ---------------------------------------------------
         
         while current_sim_idx < REPEAT_COUNT:
             sim_num = current_sim_idx + 1
@@ -216,14 +229,19 @@ class ProcessManager:
                 # Strategist に次期作戦を要求
                 next_target = self.strategist.decide_next_target()
                 
-                # パラメータの抽出 (reason 以外)
-                current_params = {k: v for k, v in next_target.items() if k != 'reason'}
+                # --- [修正箇所2] パラメータの抽出と reason の安全な分離 ---
+                # pop() を使うことで、next_target 辞書から 'reason' を抜き取りつつ削除します。
+                # これにより、シミュレータに渡す引数に文字列が混ざるのを防ぎます。
+                reason_str = next_target.pop("reason", "")
+                
                 csv_filename = f"{SCENARIO_NAME}_parameters.csv"
-                log_parameters(OUTPUT_DIR, csv_filename, current_loop_num, current_params, reason=next_target.get('reason', ""))
+                # reason は別引数として param_logger に渡す
+                log_parameters(OUTPUT_DIR, csv_filename, current_loop_num, next_target, reason=reason_str)
 
-                # 引数の動的生成 (例: --dx0 10.0 --ego_speed 30.0 ...)
-                param_args = " ".join([f"--{k} {v:.2f}" for k, v in current_params.items()])
+                # 引数の動的生成 (この時点で next_target には数値パラメータしか残っていない)
+                param_args = " ".join([f"--{k} {v:.2f}" for k, v in next_target.items()])
                 dynamic_cmd = f"python3 run_scenario.py --type {SCENARIO_NAME} {param_args}"
+                # ---------------------------------------------------
 
                 dynamic_client_task = Task(
                     name=f"Runner ({SCENARIO_NAME})",
