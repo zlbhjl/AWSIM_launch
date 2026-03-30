@@ -7,6 +7,7 @@ import time
 import sys
 import csv
 import re
+import json  # ← ★JSONパーサーを追加
 
 def main():
     # ---------------------------------------------------------
@@ -16,7 +17,7 @@ def main():
     traces_dir = os.path.expanduser("~/simulation_traces")
     results_csv_path = os.path.join(traces_dir, "checker_results.csv")
 
-    # 検証項目とCSV列名の定義 (将来ここを増減させるだけでOK)
+    # 検証項目とCSV列名の定義
     METRIC_CONFIG = [
         {"formula": '[] ttc("npc1") >= 1.5', "header": "c_ttc_1.5"},
         {"formula": '[] ttc("npc1") >= 1.2', "header": "c_ttc_1.2"},
@@ -40,7 +41,7 @@ def main():
     print(f"--- 初期化開始: {os.getcwd()} ---")
 
     # ---------------------------------------------------------
-    # 3. CSVの読み込み・再開位置の特定 (元の機能を継承)
+    # 3. CSVの読み込み・再開位置の特定
     # ---------------------------------------------------------
     stats = {"Safe": 0, "Unsafe": 0, "Error": 0, "Total": 0}
     current_i = 1
@@ -54,7 +55,6 @@ def main():
                 for row in reader:
                     try:
                         loop_num = int(row["loop_num"])
-                        # 代表として衝突判定(c_collision)を統計に使用
                         is_collision = int(row.get("c_collision", -1))
                         last_loop = max(last_loop, loop_num)
                         stats["Total"] += 1
@@ -68,7 +68,6 @@ def main():
         except Exception as e:
             print(f"[Warning] 復元失敗: {e}")
     else:
-        # 新規作成時にヘッダーを書き込む
         with open(results_csv_path, "w", newline="", encoding="utf-8") as f:
             f.write(",".join(all_headers) + "\n")
 
@@ -80,6 +79,7 @@ def main():
             filename = f"uturn_test_sim{current_i}.json"
             trace_path = os.path.join(traces_dir, filename)
 
+            # ファイルが出現するまで待機
             if not os.path.exists(trace_path):
                 msg = f"待機中... Next: {filename} | 累計統計: Safe={stats['Safe']} Unsafe={stats['Unsafe']}"
                 print(f"\r{msg}", end="")
@@ -87,16 +87,52 @@ def main():
                 continue
             
             print(f"\n\nDetected: {filename}")
+
+            # --- 【修正箇所】JSONの完全な書き込み完了を待つ ---
+            print("  [待機] JSONデータの書き込み完了を待っています...", end="", flush=True)
+            is_valid_json = False
+            for _ in range(15):  # 最大15秒待機
+                time.sleep(1)
+                try:
+                    with open(trace_path, 'r', encoding='utf-8') as f:
+                        json.load(f)
+                    is_valid_json = True
+                    break
+                except (json.JSONDecodeError, ValueError):
+                    print(".", end="", flush=True)
             
-            # AW-CheckerPy 実行 (第3引数を渡さず formulas.txt を使用)
+            if not is_valid_json:
+                print(f"\n[エラー] {filename} の書き込みが完了しませんでした（JSON破損）。")
+                # 行ズレ防止のため、全項目 -1 でCSVに書き込んでスキップ
+                parsed_row = {"loop_num": current_i}
+                for item in METRIC_CONFIG:
+                    parsed_row[item["header"]] = -1
+                
+                with open(results_csv_path, "a", newline="", encoding="utf-8") as f:
+                    writer = csv.DictWriter(f, fieldnames=all_headers)
+                    writer.writerow(parsed_row)
+                
+                stats["Error"] += 1
+                stats["Total"] += 1
+                print(">>> 結果: ERROR ⚠️ (JSON破損のためスキップ)")
+                current_i += 1
+                continue
+            
+            print(" 完了！ 解析を開始します。")
+            # --------------------------------------------------
+
+            # AW-CheckerPy 実行
             command = ["python3", "aw_checkerpy.py", trace_path]
             try:
+                # 【修正箇所】 stderr (エラー出力) も取得するように変更
                 result = subprocess.run(command, cwd=tool_dir, env=my_env, capture_output=True, text=True)
                 output_log = result.stdout
+                error_log = result.stderr 
                 
                 # --- 多項目解析 (Parser) ---
                 parsed_row = {"loop_num": current_i}
-                is_any_fail = False # 統計表示用のフラグ
+                is_any_fail = False
+                has_error = False
 
                 for item in METRIC_CONFIG:
                     pattern = re.escape(item["formula"]) + r".*?Model checking result: (True|False)"
@@ -109,6 +145,14 @@ def main():
                             is_any_fail = True
                     else:
                         parsed_row[item["header"]] = -1
+                        has_error = True
+
+                # 【修正箇所】エラー(-1)発生時に原因をターミナルに表示
+                if has_error:
+                    print(f"\n[⚠️ 警告] Loop {current_i} で解析エラー(-1)が発生しました！")
+                    print("--- AW-CheckerPy エラー出力 (stderr) ---")
+                    print(error_log.strip() if error_log.strip() else "(エラー出力なし。formulas.txtの記述ミスの可能性)")
+                    print("--------------------------------------\n")
 
                 # 統計更新
                 if parsed_row.get("c_collision") == 1: stats["Unsafe"] += 1
@@ -122,7 +166,11 @@ def main():
                     writer.writerow(parsed_row)
 
                 # 結果表示
-                res_str = "UNSAFE ❌" if is_any_fail else "SAFE ✅"
+                if has_error:
+                    res_str = "ERROR ⚠️ (-1 検出)"
+                else:
+                    res_str = "UNSAFE ❌" if is_any_fail else "SAFE ✅"
+                    
                 print(f">>> 結果: {res_str}")
                 print(f"====== 統計 (Total: {stats['Total']}) ======")
                 print(f"  衝突なし: {stats['Safe']} | 衝突あり: {stats['Unsafe']} | エラー: {stats['Error']}")
