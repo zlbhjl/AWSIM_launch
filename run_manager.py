@@ -192,7 +192,7 @@ class ProcessManager:
         print(f"=== 自動化システム [{SCENARIO_NAME.upper()} モード] ===")
         os.makedirs(OUTPUT_DIR, exist_ok=True)
         
-        # --- [修正箇所1] 古いCSVファイルのクリーンアップ確認 ---
+        # 古いCSVファイルのクリーンアップ確認
         csv_param = os.path.join(OUTPUT_DIR, f"{SCENARIO_NAME}_parameters.csv")
         csv_result = os.path.join(OUTPUT_DIR, "checker_results.csv")
         
@@ -206,7 +206,6 @@ class ProcessManager:
                 os.remove(csv_result)
         else:
             print(f"[System] 既存のデータ (sim1 〜 sim{current_sim_idx}) から再開します。")
-        # ---------------------------------------------------
         
         while current_sim_idx < REPEAT_COUNT:
             sim_num = current_sim_idx + 1
@@ -229,7 +228,15 @@ class ProcessManager:
                 # Strategist に次期作戦を要求
                 next_target = self.strategist.decide_next_target()
                 
-                # --- [修正箇所2] パラメータの抽出と reason の安全な分離 ---
+                # === 追加: 堅牢な終了シグナル検知ロジック ===
+                # 辞書から 'system_command' を安全に取得し、"stop" かどうか判定する
+                if next_target.get("system_command") == "stop":
+                    print(f"\n[Manager] 🏁 Strategistから終了シグナルを受信しました。({next_target.get('reason')})")
+                    print("  -> 現存の終了プロセス（cleanup_all）に移行し、システムを安全に停止します...")
+                    return  # execute関数を抜け、一番下の finally ブロック（cleanup_all）へ直行させる
+                # ==========================================
+
+                # パラメータの抽出と reason の安全な分離
                 # pop() を使うことで、next_target 辞書から 'reason' を抜き取りつつ削除します。
                 # これにより、シミュレータに渡す引数に文字列が混ざるのを防ぎます。
                 reason_str = next_target.pop("reason", "")
@@ -241,7 +248,6 @@ class ProcessManager:
                 # 引数の動的生成 (この時点で next_target には数値パラメータしか残っていない)
                 param_args = " ".join([f"--{k} {v:.2f}" for k, v in next_target.items()])
                 dynamic_cmd = f"python3 run_scenario.py --type {SCENARIO_NAME} {param_args}"
-                # ---------------------------------------------------
 
                 dynamic_client_task = Task(
                     name=f"Runner ({SCENARIO_NAME})",
