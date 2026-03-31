@@ -4,58 +4,98 @@
 import os
 import pandas as pd
 import numpy as np
-# 変更点1: Classifier から Regressor に変更
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import RBF, ConstantKernel as C
 from sklearn.preprocessing import StandardScaler
 
 class SafetyEstimator:
     def __init__(self, scenario_name, config, traces_dir="~/simulation_traces"):
+        """
+        汎用安全性推定器 (Gaussian Process Regression)
+        Config-Driven アーキテクチャに基づき、あらゆるシナリオに即座に適応します。
+        """
         self.traces_dir = os.path.expanduser(traces_dir)
         self.param_file = os.path.join(self.traces_dir, f"{scenario_name}_parameters.csv")
         self.result_file = os.path.join(self.traces_dir, "checker_results.csv")
         
         self.config = config
         self.scaler = StandardScaler()
-        kernel = C(1.0, (1e-3, 1e3)) * RBF(1.0, (1e-2, 1e2))
         
-        # 変更点2: GaussianProcessRegressorを使用。alpha=0.01 を追加。
-        self.model = GaussianProcessRegressor(kernel=kernel, alpha=0.01, n_restarts_optimizer=5, random_state=42)
+        # モデル定義: ガウス過程回帰
+        # 予測値の平均(μ)だけでなく、不確実性(σ)を算出するために最適化
+        kernel = C(1.0, (1e-3, 1e3)) * RBF(1.0, (1e-2, 1e2))
+        self.model = GaussianProcessRegressor(
+            kernel=kernel, 
+            alpha=0.01, 
+            n_restarts_optimizer=5, 
+            random_state=42
+        )
         
         self.is_trained = False
+        # [汎用化] 入力パラメータ名を Config のキーから自動取得
         self.feature_names = list(self.config.PARAM_RANGES.keys())
-        self.current_target = None 
 
-    def load_and_merge_data(self, target_column):
-        if not os.path.exists(self.param_file) or not os.path.exists(self.result_file):
-            print(f"[Estimator] エラー: 必要なファイル ({self.param_file} または {self.result_file}) がありません。")
-            return None
-
-        df_params = pd.read_csv(self.param_file)
-        df_results = pd.read_csv(self.result_file)
-
-        df_merged = pd.merge(df_params, df_results, on="loop_num", how="inner")
-        
-        if target_column not in df_merged.columns:
-            print(f"[Estimator] エラー: ターゲット列 '{target_column}' がCSVに存在しません。")
-            return None
-
-        essential_cols = ["loop_num", target_column] + self.feature_names
-        df_merged = df_merged.dropna(subset=essential_cols)
-        
-        df_valid = df_merged[df_merged[target_column].isin([0, 1])]
-        
-        if len(df_valid) == 0:
-            print(f"[Estimator] エラー: '{target_column}' の有効なデータセットが空です。")
+    def load_results(self):
+        """
+        検証結果CSVを読み込む。
+        新旧フォーマット（ヘッダー有無）を自動判別し、Configの定義に同期させる。
+        """
+        if not os.path.exists(self.result_file):
             return None
             
-        if df_valid[target_column].nunique() < 2:
-            print(f"[Estimator] 待機中: '{target_column}' のデータが1種類しかありません（境界線が引けません）。")
+        try:
+            # Config で定義された「あるべき列名」
+            expected_labels = ["loop_num"] + getattr(self.config, 'RESULT_LABELS', [])
+            
+            # 1. まず普通に読み込む
+            df = pd.read_csv(self.result_file)
+            
+            # 2. ヘッダー自動判別ロジック
+            # 最初の列名が数値（loop_numのデータ）なら「ヘッダーなし」と判定
+            if str(df.columns[0]).replace('.','',1).isdigit():
+                df = pd.read_csv(self.result_file, header=None, names=expected_labels)
+            else:
+                # すでに見出しがある場合は、Configの最新定義に名前を強制上書きして同期を保証
+                # (これにより、途中でラベル名を変えても過去のデータが壊れない)
+                df.columns = expected_labels[:len(df.columns)]
+            
+            return df
+        except Exception as e:
+            print(f"[Estimator] ❌ 結果CSVの読み込み失敗: {e}")
+            return None
+
+    def load_and_merge_data(self, target_column):
+        """
+        パラメータと結果を結合し、学習用データセット (X, y) を作成。
+        """
+        df_results = self.load_results()
+        if df_results is None or not os.path.exists(self.param_file):
+            return None
+
+        # パラメータCSVを読み込み、loop_num で内部結合
+        df_params = pd.read_csv(self.param_file)
+        df_merged = pd.merge(df_params, df_results, on="loop_num", how="inner")
+        
+        # ターゲット指標の存在確認
+        if target_column not in df_merged.columns:
+            print(f"[Estimator] ⚠️ 指標 '{target_column}' が見つかりません。")
+            return None
+
+        # 欠損値の除去と、0/1 (Boolean) データへの絞り込み
+        essential_cols = ["loop_num", target_column] + self.feature_names
+        df_merged = df_merged.dropna(subset=essential_cols)
+        df_valid = df_merged[df_merged[target_column].isin([0, 1])]
+        
+        # 学習には「安全(0)」と「危険(1)」の両方のサンプルが必要
+        if len(df_valid) < 2 or df_valid[target_column].nunique() < 2:
             return None
             
         return df_valid
 
-    def train(self, target_column="c_collision"):
+    def train(self, target_column):
+        """
+        指定されたターゲット指標の境界線を学習。
+        """
         df = self.load_and_merge_data(target_column)
         if df is None:
             return False
@@ -63,27 +103,25 @@ class SafetyEstimator:
         X = df[self.feature_names].values
         y = df[target_column].values
 
+        # 特徴量を標準化（スケーリング）して学習効率を向上
         X_scaled = self.scaler.fit_transform(X)
 
-        print(f"[Estimator] {len(X)}件のデータで '{target_column}' を学習中... (項目: {self.feature_names})")
-        
         try:
             self.model.fit(X_scaled, y)
             self.is_trained = True
-            self.current_target = target_column
-            print(f"[Estimator] 学習完了。最適化カーネル: {self.model.kernel_}")
             return True
         except Exception as e:
-            print(f"[Estimator] 学習失敗: {e}")
+            print(f"[Estimator] ❌ 学習失敗: {e}")
             return False
 
     def predict_uncertainty(self, X_new):
+        """
+        未実行地点の平均予測値と、モデルの「自信のなさ（不確実性）」を算出。
+        """
         if not self.is_trained:
             return None, None
-
+            
         X_new_scaled = self.scaler.transform(X_new)
-        
-        # 変更点3: predict_probaの代わりにpredictを使い、return_std=Trueで真のバラつき(std)を取得
+        # ガウス過程回帰の核心: return_std=True で標準偏差(σ)を取得
         mean, std = self.model.predict(X_new_scaled, return_std=True)
-
         return mean, std
