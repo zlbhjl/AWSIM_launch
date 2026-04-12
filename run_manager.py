@@ -9,6 +9,7 @@ import glob
 import sys
 import argparse
 import importlib
+import json
 from dataclasses import dataclass
 from typing import List, Tuple, Optional
 
@@ -18,19 +19,39 @@ from typing import List, Tuple, Optional
 def load_config():
     parser = argparse.ArgumentParser(description="Multi-Scenario Autonomous Driving Test Manager")
     parser.add_argument("--type", type=str, default="uturn", help="Scenario type (e.g., uturn, cutin)")
+    parser.add_argument("--mode", type=str, choices=["explore", "focus"], default="explore", help="Search mode: explore (default) or focus")
+    parser.add_argument("--focus_points", type=str, default=None, help="JSON string for focus points (e.g., '[{\"dx0\": 15.0}]')")
     args = parser.parse_args()
 
     try:
         # configs フォルダ内のモジュールを動的にインポート
         config_module = importlib.import_module(f"configs.{args.type}")
         print(f"[System] シナリオ設定 'configs.{args.type}' を正常に読み込みました。")
-        return args.type, config_module
     except ImportError:
         print(f"[Fatal] 設定ファイル configs/{args.type}.py が見つかりません。")
         print("  -> configs/ フォルダ内にファイルがあるか、__init__.py が存在するか確認してください。")
         sys.exit(1)
 
-SCENARIO_NAME, cfg = load_config()
+    focus_points = None
+    if args.mode == "focus":
+        if args.focus_points:
+            try:
+                focus_points = json.loads(args.focus_points)
+                print(f"[System] CLI引数からフォーカス(集中)モードを有効化しました: {focus_points}")
+            except json.JSONDecodeError as e:
+                print(f"[Fatal] --focus_points 引数のJSONパースに失敗しました: {e}")
+                sys.exit(1)
+        else:
+            focus_points = getattr(config_module, 'FOCUS_POINTS', None)
+            if focus_points:
+                print(f"[System] Configからフォーカス(集中)モードを有効化しました: {focus_points}")
+            else:
+                print("[Fatal] --mode focus が指定されましたが、CLIにもConfigにも FOCUS_POINTS が設定されていません。")
+                sys.exit(1)
+
+    return args.type, config_module, args.mode, focus_points
+
+SCENARIO_NAME, cfg, RUN_MODE, FOCUS_POINTS = load_config()
 
 LAUNCH_DIR = os.path.dirname(os.path.abspath(__file__))
 if LAUNCH_DIR not in sys.path:
@@ -77,7 +98,7 @@ INFRA_TASKS = [
             f"map_path:={HOME}/autoware_map/nishishinjuku_autoware_map "
             "launch_vehicle_interface:=true"
         ),
-        delay=20,
+        delay=40,
         source_setup=True
     ),
     Task(
@@ -99,7 +120,7 @@ class ProcessManager:
     def __init__(self):
         self.infra_procs: List[Tuple[str, subprocess.Popen]] = []
         self.client_proc: Optional[subprocess.Popen] = None
-        self.strategist = ActiveLearningStrategist(SCENARIO_NAME, cfg, num_candidates=10000)
+        self.strategist = ActiveLearningStrategist(SCENARIO_NAME, cfg, num_candidates=10000, focus_points=FOCUS_POINTS)
 
     def _build_command(self, task: Task, sim_num: int) -> str:
         cmd = task.command.replace("{sim_num}", str(sim_num))
@@ -242,8 +263,6 @@ class ProcessManager:
                 reason_str = next_target.pop("reason", "")
                 
                 csv_filename = f"{SCENARIO_NAME}_parameters.csv"
-                # reason は別引数として param_logger に渡す
-                log_parameters(OUTPUT_DIR, csv_filename, current_loop_num, next_target, reason=reason_str)
 
                 # 引数の動的生成 (この時点で next_target には数値パラメータしか残っていない)
                 param_args = " ".join([f"--{k} {v:.2f}" for k, v in next_target.items()])
@@ -279,6 +298,8 @@ class ProcessManager:
                     break 
                 else:
                     self.kill_client()
+                    # シミュレーションが成功したときのみパラメータを記録する
+                    log_parameters(OUTPUT_DIR, csv_filename, current_loop_num, next_target, reason=reason_str)
                     current_sim_idx += 1
                     
                     if current_sim_idx % REFRESH_INTERVAL == 0 and current_sim_idx < REPEAT_COUNT:

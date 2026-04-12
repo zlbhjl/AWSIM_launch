@@ -13,16 +13,26 @@ REPEAT_COUNT = 3000
 RESULT_LABELS = [
     "c_collision",     # 衝突の有無 (0:安全, 1:衝突)
     "c_ttc_1.5",       # TTC 1.5秒以下
+    "c_ttc_1.3",       # TTC 1.3秒以下
     "c_ttc_1.2",       # TTC 1.2秒以下
+    "c_ttc_1.1",       # TTC 1.1秒以下
+    "c_ttc_0.9",       # TTC 0.9秒以下
     "c_ttc_0.7",       # TTC 0.7秒以下 (危険領域の指標)
+    "c_ttc_0.5",       # TTC 0.5秒以下
+    "c_ttc_0.3",       # TTC 0.3秒以下
     "c_pos_diff_4.0"   # 車間距離 4.0m以内
 ]
 
 # AIが重点的に検証し、境界線を引くターゲットの優先順位
 TARGET_PRIORITIES = [
     "c_collision",
+    "c_ttc_0.3",
+    "c_ttc_0.5",
     "c_ttc_0.7",
+    "c_ttc_0.9",
+    "c_ttc_1.1",
     "c_ttc_1.2",
+    "c_ttc_1.3",
     "c_ttc_1.5"
 ]
 
@@ -70,3 +80,18 @@ FIXED_PARAMS = {
     
     "acceleration": 7.0
 }
+
+# ==========================================
+# 5. フォーカス（集中）モードの設定
+# ==========================================
+# コマンドで --mode focus を指定し、かつ --focus_points を省略した場合に以下の点が探索されます
+FOCUS_POINTS = [
+    {"dx0": 10.09, "ego_speed": 37.98, "npc_speed": 14.20},
+    {"dx0": 14.81, "ego_speed": 39.80, "npc_speed": 13.49},
+    {"dx0": 10.23, "ego_speed": 35.96, "npc_speed": 17.80},
+    {"dx0": 13.29, "ego_speed": 39.33, "npc_speed": 13.95},
+    {"dx0": 14.16, "ego_speed": 35.43, "npc_speed": 10.02},
+    {"dx0": 11.17, "ego_speed": 31.90, "npc_speed": 11.91}
+]
+FOCUS_NOISE = 0.05
+FOCUS_EXACT_REPEATS = 20  # 指定したポイント自体を最初に検証する回数

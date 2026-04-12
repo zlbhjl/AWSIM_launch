@@ -8,7 +8,7 @@ from scipy.stats import qmc  # Sobol配列生成用
 from estimator import SafetyEstimator
 
 class ActiveLearningStrategist:
-    def __init__(self, scenario_name, config, num_candidates=10000):
+    def __init__(self, scenario_name, config, num_candidates=10000, focus_points=None):
         self.scenario_name = scenario_name
         self.config = config
         self.num_candidates = num_candidates
@@ -26,6 +26,10 @@ class ActiveLearningStrategist:
         # [追加] フェーズ移行のしきい値とマージン範囲をConfigから取得
         self.STEP3_THRESHOLD = getattr(self.config, 'GRAY_ZONE_THRESHOLD_STEP3', 0.15)
         self.MARGIN_RANGE = getattr(self.config, 'MARGIN_RANGE', (0.3, 0.48))
+        
+        # コマンドライン引数で渡された focus_points を使用 (Configに依存しない)
+        self.FOCUS_POINTS = focus_points
+        self.FOCUS_NOISE = getattr(self.config, 'FOCUS_NOISE', 0.05)
 
     def get_sobol_point(self, index):
         sampler = qmc.Sobol(d=self.dim, scramble=True, seed=42)
@@ -48,9 +52,32 @@ class ActiveLearningStrategist:
         best_target = self.get_best_target(df_results)
         num_violations = (df_results[best_target] == 1).sum() if (df_results is not None and best_target) else 0
 
+        # --- 【STEP 0】フォーカスモードのピンポイント検証 ---
+        if self.FOCUS_POINTS:
+            exact_repeats = getattr(self.config, 'FOCUS_EXACT_REPEATS', 20)
+            total_exact_samples = len(self.FOCUS_POINTS) * exact_repeats
+            
+            if num_samples < total_exact_samples:
+                # どのポイントを何回目のリピートで実行するか計算
+                point_idx = (num_samples // exact_repeats) % len(self.FOCUS_POINTS)
+                repeat_idx = (num_samples % exact_repeats) + 1
+                
+                exact_point = self.FOCUS_POINTS[point_idx]
+                result = {name: exact_point.get(name, sum(self.config.PARAM_RANGES[name])/2.0) for name in self.param_names}
+                result["reason"] = f"[FOCUS] Exact Point {point_idx+1}/{len(self.FOCUS_POINTS)} (Repeat {repeat_idx}/{exact_repeats})"
+                return result
+
         # --- STEP 1: 初期探索 ---
         if num_samples < self.INITIAL_EXPLORATION_LIMIT or num_violations == 0:
-            return {**self.get_sobol_point(num_samples), "reason": f"STEP1: Global Search (V:{num_violations})"}
+            if self.FOCUS_POINTS:
+                # フォーカスモード時は、全体探索ではなく Focus の周辺をランダム探索する
+                candidates = self.generate_candidate_points()
+                best_point = candidates[np.random.randint(len(candidates))]
+                result = {name: best_point[i] for i, name in enumerate(self.param_names)}
+                result["reason"] = f"STEP1: Focus Neighborhood Search (V:{num_violations})"
+                return result
+            else:
+                return {**self.get_sobol_point(num_samples), "reason": f"STEP1: Global Search (V:{num_violations})"}
 
         # AI学習・予測
         self.estimator.train(target_column=best_target)
@@ -102,6 +129,10 @@ class ActiveLearningStrategist:
         best_point = candidates[best_idx]
         result = {name: best_point[i] for i, name in enumerate(self.param_names)}
         result["reason"] = reason
+        
+        if self.FOCUS_POINTS:
+            result["reason"] = "[FOCUS] " + result["reason"]
+            
         print(f"[Strategist] {phase} | Gray: {gray_ratio*100:.1f}% | Unverified Margin: {len(unverified_idx)}")
         return result
 
@@ -112,5 +143,32 @@ class ActiveLearningStrategist:
         print("="*55 + "\n")
 
     def generate_candidate_points(self):
-        cols = [np.random.uniform(self.config.PARAM_RANGES[n][0], self.config.PARAM_RANGES[n][1], self.num_candidates) for n in self.param_names]
-        return np.column_stack(cols)
+        if not self.FOCUS_POINTS:
+            # 従来の全体探索モード (一様分布)
+            cols = [np.random.uniform(self.config.PARAM_RANGES[n][0], self.config.PARAM_RANGES[n][1], self.num_candidates) for n in self.param_names]
+            return np.column_stack(cols)
+        else:
+            # 集中探索(Focus)モード: 指定されたポイントの周辺に正規分布で生成
+            cols = []
+            num_per_point = self.num_candidates // len(self.FOCUS_POINTS)
+            
+            for name in self.param_names:
+                param_range = self.config.PARAM_RANGES[name][1] - self.config.PARAM_RANGES[name][0]
+                std_dev = param_range * self.FOCUS_NOISE  # パラメータの幅に応じた標準偏差
+                
+                param_candidates = []
+                for point in self.FOCUS_POINTS:
+                    # 指定ポイントに該当のパラメータが無ければ範囲の中央を基準にする
+                    center = point.get(name, sum(self.config.PARAM_RANGES[name])/2.0)
+                    samples = np.random.normal(loc=center, scale=std_dev, size=num_per_point)
+                    param_candidates.extend(samples)
+                
+                # 端数合わせ
+                while len(param_candidates) < self.num_candidates:
+                    param_candidates.append(np.random.uniform(self.config.PARAM_RANGES[name][0], self.config.PARAM_RANGES[name][1]))
+                    
+                # 定義された範囲外にはみ出た値をクリップ（制限）する
+                clipped = np.clip(param_candidates[:self.num_candidates], self.config.PARAM_RANGES[name][0], self.config.PARAM_RANGES[name][1])
+                cols.append(clipped)
+                
+            return np.column_stack(cols)
