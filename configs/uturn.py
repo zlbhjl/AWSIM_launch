@@ -53,17 +53,18 @@ INITIAL_EXPLORATION_LIMIT = 100  # STEP 1: 最初のデータ収集回数
 MIN_SAMPLES = 500               # STEP 3 完了判定を開始する最低回数
 MAX_SAMPLES = 3000              # 強制終了する最大回数
 
-# --- 戦略のキーパラメータ ---
-# STEP 2 (境界形成) から STEP 3 (安全確証) への移行閾値
-# グレーゾーン（不確実領域）が全体の15%を切ったら、マージン検証へ移行
-GRAY_ZONE_THRESHOLD_STEP3 = 0.15 
+# --- 戦略のキーパラメータ (境界安定性・マージン検証) ---
+# 境界線の安定性を評価し、STEP 2 から STEP 3 へ移行するための設定
+STABILITY_REFERENCE_POINTS = 2000
+STABILITY_HISTORY_LENGTH = 50
+STABILITY_HYSTERESIS = (0.40, 0.60)
+STABILITY_SHIFT_THRESHOLD = 0.01
+STABILITY_REQUIRED_STREAK = 3
+STEP2_MAX_EXPLORATION = 500
 
-# STEP 3 で徹底的に叩く「安全マージン領域」 (AI予測値 mean の範囲)
-# 0.5(境界線)のすぐ内側。ここにある「不確実性」をゼロにすることが最終ゴール
+# STEP 3 で徹底的に叩く「安全マージン領域」と終了条件
 MARGIN_RANGE = (0.3, 0.48)
-
-# 全体の許容不確実性 (目安)
-TOLERANCE_GRAY_ZONE = 0.01      
+MARGIN_MAX_UNCERTAINTY = 0.05
 
 # ==========================================
 # 4. 固定パラメータ (シミュレータに渡す定数値)
