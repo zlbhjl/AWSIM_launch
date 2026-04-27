@@ -1,0 +1,98 @@
+# ==========================================
+# uturn.py (加速型3ステップ検証・最適化版)
+# ==========================================
+
+SCENARIO_TYPE = "uturn"
+
+# run_manager.py のループ上限 (AIの最大試行回数より大きく設定)
+REPEAT_COUNT = 3000
+
+# ==========================================
+# 1. 出力データの定義 (checker_results.csv の列名)
+# ==========================================
+RESULT_LABELS = [
+    "c_collision",     # 衝突の有無 (0:安全, 1:衝突)
+    "c_ttc_1.5",       # TTC 1.5秒以下
+    "c_ttc_1.3",       # TTC 1.3秒以下
+    "c_ttc_1.2",       # TTC 1.2秒以下
+    "c_ttc_1.1",       # TTC 1.1秒以下
+    "c_ttc_0.9",       # TTC 0.9秒以下
+    "c_ttc_0.7",       # TTC 0.7秒以下 (危険領域の指標)
+    "c_ttc_0.5",       # TTC 0.5秒以下
+    "c_ttc_0.3",       # TTC 0.3秒以下
+    "c_pos_diff_4.0"   # 車間距離 4.0m以内
+]
+
+# AIが重点的に検証し、境界線を引くターゲットの優先順位
+TARGET_PRIORITIES = [
+    "c_collision",
+    "c_ttc_0.3",
+    "c_ttc_0.5",
+    "c_ttc_0.7",
+    "c_ttc_0.9",
+    "c_ttc_1.1",
+    "c_ttc_1.2",
+    "c_ttc_1.3",
+    "c_ttc_1.5"
+]
+
+# ==========================================
+# 2. 入力データの定義 (AIが探索するパラメータ範囲)
+# ==========================================
+PARAM_RANGES = {
+    "dx0": (10.0, 25.0),         # 自車とNPCの初期距離 (m)
+    "ego_speed": (30.0, 40.0),   # 自車の速度 (km/h)
+    "npc_speed": (10.0, 25.0),   # NPCの速度 (km/h)
+}
+
+# ==========================================
+# 3. AI の検証戦略・終了条件 (3ステップ戦略用)
+# ==========================================
+# --- フェーズ移行・リミット設定 ---
+INITIAL_EXPLORATION_LIMIT = 100  # STEP 1: 最初のデータ収集回数
+MIN_SAMPLES = 500               # STEP 3 完了判定を開始する最低回数
+MAX_SAMPLES = 3000              # 強制終了する最大回数
+
+# --- 戦略のキーパラメータ (境界安定性・マージン検証) ---
+# 境界線の安定性を評価し、STEP 2 から STEP 3 へ移行するための設定
+STABILITY_REFERENCE_POINTS = 2000
+STABILITY_HISTORY_LENGTH = 50
+STABILITY_HYSTERESIS = (0.40, 0.60)
+STABILITY_SHIFT_THRESHOLD = 0.01
+STABILITY_REQUIRED_STREAK = 3
+STEP2_MAX_EXPLORATION = 500
+
+# STEP 3 で徹底的に叩く「安全マージン領域」と終了条件
+MARGIN_RANGE = (0.3, 0.48)
+MARGIN_MAX_UNCERTAINTY = 0.05
+
+# ==========================================
+# 4. 固定パラメータ (シミュレータに渡す定数値)
+# ==========================================
+FIXED_PARAMS = {
+    "ego_init_lane": "514", 
+    "ego_init_offset": 30,  
+    "ego_goal_lane": "516",
+    "ego_goal_offset": 20,
+
+    "npc_init_lane": "521",
+    "npc_init_offset": 32,
+    "uturn_next_lane": "514", # 衝突リスクを作るため自車と同じレーンへ
+    
+    "acceleration": 7.0
+}
+
+# ==========================================
+# 5. フォーカス（集中）モードの設定
+# ==========================================
+# コマンドで --mode focus を指定し、かつ --focus_points を省略した場合に以下の点が探索されます
+FOCUS_POINTS = [
+    {"dx0": 10.09, "ego_speed": 37.98, "npc_speed": 14.20},
+    {"dx0": 14.81, "ego_speed": 39.80, "npc_speed": 13.49},
+    {"dx0": 10.23, "ego_speed": 35.96, "npc_speed": 17.80},
+    {"dx0": 13.29, "ego_speed": 39.33, "npc_speed": 13.95},
+    {"dx0": 14.16, "ego_speed": 35.43, "npc_speed": 10.02},
+    {"dx0": 11.17, "ego_speed": 31.90, "npc_speed": 11.91}
+]
+FOCUS_NOISE = 0.05
+FOCUS_EXACT_REPEATS = 20  # 指定したポイント自体を最初に検証する回数
