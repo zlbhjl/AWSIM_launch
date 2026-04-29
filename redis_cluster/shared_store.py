@@ -11,42 +11,95 @@ from datetime import datetime
 class SharedStoreActor:
     def __init__(self):
         print("[SharedStoreActor] 共有ストア (金庫番) が起動しました。スレッドセーフな書き込みを管理します。")
+        self.param_buffer = {}
+        self.output_dir = os.path.expanduser("~/simulation_traces")
+        os.makedirs(self.output_dir, exist_ok=True)
+        # 古いデータを破棄するまでの制限時間（秒）
+        # run_managerのタイムアウト(300秒)より余裕を持たせて600秒(10分)に設定
+        self.buffer_timeout_sec = 600
+
+    def _cleanup_stale_buffer(self):
+        """一定時間経過した古いバッファを削除してメモリリークを防ぐ"""
+        now = datetime.now()
+        stale_keys = []
+        for loop_num, data in self.param_buffer.items():
+            if (now - data["timestamp"]).total_seconds() > self.buffer_timeout_sec:
+                stale_keys.append(loop_num)
+        
+        for k in stale_keys:
+            print(f"[SharedStoreActor] ⚠️ 警告: loop_num {k} のデータが長時間放置されたため、バッファから破棄されました。")
+            self.param_buffer.pop(k, None)
 
     def log_parameters(self, output_dir: str, file_name: str, loop_num: int, params_dict: dict, reason: str = ""):
-        os.makedirs(output_dir, exist_ok=True)
-        log_file = os.path.join(output_dir, file_name)
-        file_exists = os.path.exists(log_file)
-        
-        clean_keys = [k for k in params_dict.keys() if k != "reason"]
-        fieldnames = ["loop_num"] + clean_keys + ["reason"]
-        
-        with open(log_file, "a", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=fieldnames)
-            if not file_exists:
-                writer.writeheader()
-            
-            row_data = {"loop_num": loop_num}
-            for key, value in params_dict.items():
-                if key == "reason":
-                    continue
-                if isinstance(value, (float, np.float64, np.float32)):
-                    row_data[key] = f"{value:.4f}" 
-                else:
-                    row_data[key] = value
-            row_data["reason"] = reason
-            writer.writerow(row_data)
+        """パラメータをメモリ上のバッファに一時保存する"""
+        self._cleanup_stale_buffer()
+        self.param_buffer[loop_num] = {
+            "params": params_dict,
+            "reason": reason,
+            "timestamp": datetime.now()
+        }
 
-    def log_checker_result(self, results_csv_path: str, all_headers: list, parsed_row: dict):
-        os.makedirs(os.path.dirname(results_csv_path), exist_ok=True)
-        file_needs_header = not os.path.exists(results_csv_path) or os.path.getsize(results_csv_path) == 0
-        with open(results_csv_path, "a", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=all_headers)
-            if file_needs_header: 
+    def _write_to_dataset(self, scenario_name: str, full_row: dict):
+        """単一のデータセットCSVに1行を書き込む共通関数"""
+        dataset_file = os.path.join(self.output_dir, f"{scenario_name}_dataset.csv")
+        file_exists = os.path.exists(dataset_file)
+        
+        # ヘッダーの順番を一定に保つためソートする
+        fieldnames = sorted(full_row.keys())
+
+        with open(dataset_file, "a", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            if not file_exists or os.path.getsize(dataset_file) == 0:
                 writer.writeheader()
-            writer.writerow(parsed_row)
+            writer.writerow(full_row)
+
+    def log_and_merge_result(self, scenario_name: str, result_row: dict):
+        """結果を受け取り、バッファ内のパラメータと結合してCSVに書き込む"""
+        loop_num = result_row.get("loop_num")
+        if loop_num is None:
+            return
+
+        if loop_num in self.param_buffer:
+            buffered_data = self.param_buffer.pop(loop_num)
+            params_dict = buffered_data["params"]
+            
+            # パラメータと結果を結合
+            full_row = result_row.copy()
+            full_row.update(params_dict)
+            full_row["reason"] = buffered_data["reason"]
+            
+            # 値をフォーマット
+            for key, value in full_row.items():
+                if isinstance(value, (float, np.float64, np.float32)):
+                    full_row[key] = f"{value:.4f}"
+
+            self._write_to_dataset(scenario_name, full_row)
+        else:
+            # パラメータがバッファにない場合（タイムアウトなどで先にフラッシュされた可能性）
+            print(f"[SharedStoreActor] 警告: loop_num {loop_num} のパラメータがバッファに見つかりません。")
+
+    def flush_timeout_task(self, scenario_name: str, loop_num: int, params_dict: dict, reason: str, result_headers: list):
+        """タイムアウトしたタスクをエラーとして記録する"""
+        # 結果部分を-1で埋める
+        result_row = {"loop_num": loop_num}
+        for header in result_headers:
+            if header != "loop_num":
+                result_row[header] = -1
+
+        # パラメータと結合
+        full_row = result_row.copy()
+        full_row.update(params_dict)
+        full_row["reason"] = reason
+
+        # バッファに残っていても削除
+        self.param_buffer.pop(loop_num, None)
+
+        self._write_to_dataset(scenario_name, full_row)
 
     def log_error_detail(self, error_detail_log_path: str, target_file: str, header: str, output_log: str, error_log: str):
-        os.makedirs(os.path.dirname(error_detail_log_path), exist_ok=True)
-        with open(error_detail_log_path, "a", encoding="utf-8") as ef:
+        # 出力先は self.output_dir に統一
+        error_log_path = os.path.join(self.output_dir, os.path.basename(error_detail_log_path))
+        os.makedirs(os.path.dirname(error_log_path), exist_ok=True)
+        with open(error_log_path, "a", encoding="utf-8") as ef:
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             ef.write(f"[{timestamp}] {target_file} | {header}\nSTDOUT: {output_log}\nSTDERR: {error_log}\n{'-'*30}\n")

@@ -90,10 +90,10 @@ class ActiveLearningStrategist:
         return is_stable, shift_rate
 
     def decide_next_target(self):
-        df_results = self.estimator.load_results()
-        num_samples = len(df_results) if df_results is not None else 0
-        best_target = self.get_best_target(df_results)
-        num_violations = (df_results[best_target] == 1).sum() if (df_results is not None and best_target) else 0
+        df_dataset = self.estimator.load_dataset()
+        num_samples = len(df_dataset) if df_dataset is not None else 0
+        best_target = self.get_best_target(df_dataset)
+        num_violations = (df_dataset[best_target] == 1).sum() if (df_dataset is not None and best_target) else 0
         
         # CSV完了数ではなく、タスク生成回数を基準にして決定論的な重複を防ぐ
         current_idx = self.dispatched_task_count

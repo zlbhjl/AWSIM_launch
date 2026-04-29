@@ -32,8 +32,8 @@ def main():
 
     tool_dir = "/home/passd/aw-cheaker/Maude-3.5.1/AW-CheckerPy"
     traces_dir = "/home/passd/simulation_traces"
-    results_csv_path = os.path.join(traces_dir, "checker_results.csv")
     formulas_path = os.path.join(tool_dir, "formulas.txt")
+    dataset_csv_path = os.path.join(traces_dir, f"{args.type}_dataset.csv")
     error_detail_log_path = os.path.join(traces_dir, "checker_errors_detail.log")
     local_history_path = os.path.join(traces_dir, "processed_loops_history.csv")
 
@@ -76,10 +76,10 @@ def main():
     stats = {"Safe": 0, "Unsafe": 0, "Error": 0, "Total": 0}
     processed_loops = set()
 
-    if os.path.exists(results_csv_path):
+    if os.path.exists(dataset_csv_path):
         print(f"[Info] 既存のCSVから履歴を復元します。")
         try:
-            with open(results_csv_path, "r", encoding="utf-8") as f:
+            with open(dataset_csv_path, "r", encoding="utf-8") as f:
                 reader = csv.DictReader(f)
                 for row in reader:
                     try:
@@ -87,13 +87,16 @@ def main():
                         processed_loops.add(loop_num)
                         stats["Total"] += 1
                         
-                        values = [int(v) for k, v in row.items() if k != "loop_num" and v != ""]
-                        if -1 in values:
-                            stats["Error"] += 1
-                        elif 1 in values:
+                        # 統計の復元 (result_labels に基づく)
+                        has_error = any(str(row.get(label)) == "-1" for label in result_labels)
+                        is_unsafe = any(str(row.get(label)) == "1" for label in result_labels)
+
+                        if has_error:
+                            stats["Error"] +=1
+                        elif is_unsafe:
                             stats["Unsafe"] += 1
                         else:
-                            stats["Safe"] += 1
+                            stats["Safe"] +=1
                     except ValueError:
                         pass
             print(f"[Info] 復元完了 - 統計: Safe={stats['Safe']}, Unsafe={stats['Unsafe']}, Error={stats['Error']}")
@@ -145,12 +148,14 @@ def main():
                 # --- 旧バージョンの安全性：JSONパースによる書き込み完了待機 ---
                 print("  [待機] JSONデータの書き込み完了を待っています...", end="", flush=True)
                 is_valid_json = False
+                is_timeout_dummy = False
                 for _ in range(15):
                     time.sleep(1)
                     try:
                         with open(target_path, 'r', encoding='utf-8') as f:
                             content = f.read().strip()
                             if content == "TIMEOUT":
+                                is_timeout_dummy = True
                                 is_valid_json = False
                                 break # タイムアウト用ダミーファイルなら待たずに即エラー判定
                             json.loads(content)
@@ -158,6 +163,14 @@ def main():
                         break
                     except (json.JSONDecodeError, ValueError):
                         print(".", end="", flush=True)
+
+                if is_timeout_dummy:
+                    print(f"\n[スキップ] {target_file} はタイムアウトによりManagerで記録済みです。")
+                    processed_loops.add(current_loop)
+                    # ローカルの処理済み履歴に記録して次回以降は無視する
+                    with open(local_history_path, "a", encoding="utf-8") as f:
+                        f.write(f"{current_loop}\n")
+                    continue
 
                 if not is_valid_json:
                     print(f"\n[エラー] {target_file} の書き込みが完了しませんでした（JSON破損）。")
@@ -168,15 +181,10 @@ def main():
                     stats["Total"] += 1
                     
                     # CSV保存処理（continueでスキップされる前に書き込む）
+                    # [修正] 共有金庫に結果をマージさせる
                     if shared_store:
-                        ray.get(shared_store.log_checker_result.remote(results_csv_path, all_headers, parsed_row))
-                    else:
-                        file_needs_header = not os.path.exists(results_csv_path) or os.path.getsize(results_csv_path) == 0
-                        with open(results_csv_path, "a", newline="", encoding="utf-8") as f:
-                            writer = csv.DictWriter(f, fieldnames=all_headers)
-                            if file_needs_header: writer.writeheader()
-                            writer.writerow(parsed_row)
-                        
+                        ray.get(shared_store.log_and_merge_result.remote(args.type, parsed_row))
+                    
                     processed_loops.add(current_loop)
                     # ローカルの処理済み履歴に記録
                     with open(local_history_path, "a", encoding="utf-8") as f:
@@ -235,15 +243,10 @@ def main():
                 stats["Total"] += 1
 
                 # CSV保存
+                # [修正] 共有金庫に結果をマージさせる
                 if shared_store:
-                    ray.get(shared_store.log_checker_result.remote(results_csv_path, all_headers, parsed_row))
-                else:
-                    file_needs_header = not os.path.exists(results_csv_path) or os.path.getsize(results_csv_path) == 0
-                    with open(results_csv_path, "a", newline="", encoding="utf-8") as f:
-                        writer = csv.DictWriter(f, fieldnames=all_headers)
-                        if file_needs_header: writer.writeheader()
-                        writer.writerow(parsed_row)
-
+                    ray.get(shared_store.log_and_merge_result.remote(args.type, parsed_row))
+                
                 processed_loops.add(current_loop)
                 # ローカルの処理済み履歴に記録
                 with open(local_history_path, "a", encoding="utf-8") as f:

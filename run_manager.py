@@ -71,7 +71,8 @@ SETUP_BASH = os.path.join(HOME, "autoware/install/setup.bash")
 REPEAT_COUNT = cfg.REPEAT_COUNT
 OUTPUT_DIR = os.path.join(HOME, "simulation_traces")
 FILE_PATTERN = f"{SCENARIO_NAME}_test_*.json"
-TIMEOUT_SEC = 300
+# シナリオの設定(config)に TIMEOUT_SEC があればそれを使い、なければデフォルトで200秒とする
+TIMEOUT_SEC = getattr(cfg, 'TIMEOUT_SEC', 200)
 INTERVAL_SEC = 1
 REFRESH_INTERVAL = 10
 
@@ -188,6 +189,14 @@ class ProcessManager:
             except ValueError:
                 print("  -> 司令塔がまだ起動していません。5秒後に再試行します...")
                 time.sleep(5)
+        
+        print("[Manager] 共有金庫 (SharedStoreActor) を探しています...")
+        try:
+            self.shared_store = ray.get_actor("SharedStoreActor")
+            print("[Manager] 共有金庫 (SharedStoreActor) への接続に成功しました！")
+        except ValueError:
+            print("[Manager] ⚠️ 共有金庫が見つかりませんでした。データ記録に失敗する可能性があります。")
+            self.shared_store = None
 
     def _build_command(self, task: Task, sim_num: int) -> str:
         cmd = task.command.replace("{sim_num}", str(sim_num))
@@ -408,10 +417,13 @@ class ProcessManager:
 
                 if is_timeout:
                     # タイムアウト(失敗)時もパラメータを記録し、理由にエラーを明記する
-                    failed_reason = reason_str + " [ERROR: TIMEOUT]"
-                    log_parameters(OUTPUT_DIR, csv_filename, current_loop_num, next_target, reason=failed_reason)
+                    failed_reason = f"{reason_str} [ERROR: TIMEOUT]"
                     
-                    # タイムアウト時はダミーファイルを生成
+                    # [修正] 共有金庫にタイムアウトしたタスクを直接記録させる
+                    if self.shared_store:
+                        result_labels = getattr(cfg, 'RESULT_LABELS', [])
+                        ray.get(self.shared_store.flush_timeout_task.remote(SCENARIO_NAME, current_loop_num, next_target, failed_reason, result_labels))
+                    
                     with open(global_target_json, 'w') as f:
                         f.write("TIMEOUT")
                         
