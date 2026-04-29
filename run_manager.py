@@ -84,24 +84,47 @@ class Task:
     source_setup: bool = False
     resident: bool = False
 
+# ==============================================================================
+# [追加] 実行号機(マスターかリモートか)の判定と起動コマンドの分岐
+# ==============================================================================
+ROS_DOMAIN_ID = os.environ.get("ROS_DOMAIN_ID", "0")
+IS_MASTER = (ROS_DOMAIN_ID == "21")
+
+if IS_MASTER:
+    # 21号機(マスター): 従来通り RViz と AWSIM の画面を表示する
+    AWSIM_CMD = "./awsim_labs.x86_64 -noise false"
+    AUTOWARE_CMD = (
+        "ros2 launch autoware_launch e2e_simulator.launch.xml "
+        "vehicle_model:=awsim_labs_vehicle "
+        "sensor_model:=awsim_labs_sensor_kit "
+        f"map_path:={HOME}/autoware_map/nishishinjuku_autoware_map "
+        "launch_vehicle_interface:=true"
+    )
+    AW_DELAY = 40
+else:
+    # 22, 23号機(リモート): Xvfb環境下で通常通り(画面・RVizありで)起動させる
+    AWSIM_CMD = "./awsim_labs.x86_64 -noise false"
+    AUTOWARE_CMD = (
+        "ros2 launch autoware_launch e2e_simulator.launch.xml "
+        "vehicle_model:=awsim_labs_vehicle "
+        "sensor_model:=awsim_labs_sensor_kit "
+        f"map_path:={HOME}/autoware_map/nishishinjuku_autoware_map "
+        "launch_vehicle_interface:=true"
+    )
+    AW_DELAY = 90
+
 INFRA_TASKS = [
     Task(
         name="AWSIM Labs",
         work_dir=os.path.join(HOME, "awsim_labs"),
-        command="./awsim_labs.x86_64 -noise false",
+        command=AWSIM_CMD,
         delay=15
     ),
     Task(
         name="Autoware",
         work_dir=os.path.join(HOME, "autoware"),
-        command=(
-            "ros2 launch autoware_launch e2e_simulator.launch.xml "
-            "vehicle_model:=awsim_labs_vehicle "
-            "sensor_model:=awsim_labs_sensor_kit "
-            f"map_path:={HOME}/autoware_map/nishishinjuku_autoware_map "
-            "launch_vehicle_interface:=true"
-        ),
-        delay=40,
+        command=AUTOWARE_CMD,
+        delay=AW_DELAY,
         source_setup=True
     ),
     Task(

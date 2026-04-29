@@ -26,7 +26,11 @@ CLUSTER_NODES = {
         "enabled": True,   # ★ ここが必ず True になっていることを確認！
         "container": {
             "name": "sim_worker_21",
-            "ros_domain_id": 21
+            "ros_domain_id": 21,
+            "password": "passd",
+            "user": "passd",
+            "workspace": "/home/passd",
+            "image": "autoware_internal:2026"
         }
     },
     
@@ -41,7 +45,11 @@ CLUSTER_NODES = {
         "enabled": False,  # [修正] このノードを一時的に無効化
         "container": {
             "name": "sim_worker_22",
-            "ros_domain_id": 22
+            "ros_domain_id": 22,
+            "password": "passd",
+            "user": "passd",
+            "workspace": "/home/passd",
+            "image": "autoware_internal:2026"
         }
     },
     "worker2": {
@@ -51,10 +59,14 @@ CLUSTER_NODES = {
         "user": "tomita2",
         "mac": "9c:6b:00:d0:36:0d",
         "role": "worker",
-        "enabled": False,  # ★ 22号機は電源が切れているなら False にする
+        "enabled": True,
         "container": {
             "name": "sim_worker_23",
-            "ros_domain_id": 23
+            "ros_domain_id": 23,
+            "password": "passd",
+            "user": "passd",
+            "workspace": "/home/passd",
+            "image": "autoware_internal:2026"
         }
     },
     
@@ -72,7 +84,11 @@ CLUSTER_NODES = {
     #     "role": "worker",
     #     "container": {
     #         "name": "sim_worker_24",
-    #         "ros_domain_id": 24
+    #         "ros_domain_id": 24,
+    #         "password": "passd",
+    #         "user": "passd",
+    #         "workspace": "/home/passd",
+    #         "image": "autoware_internal:2026"
     #     }
     # }
 }

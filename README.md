@@ -76,18 +76,21 @@ python3 awchecker.py --type uturn
 3. `run_scenario.py` 内のロジックにシナリオ生成の分岐 (例: `elif args.type == "cutin":`) を追加します。
 4. `--type cutin` を指定して実行します。
 
-## 技術的な工夫・トラブルシューティング (Dockerコンテナの外部操作に関する解決策)
+## 技術的な工夫・トラブルシューティング (分散自動化に関する解決策)
 
-ホストOS（外側）から `docker exec` を用いてコンテナ内のシミュレーションを完全自動化する際、手動でコンテナに入って実行した時と異なり「車が動かない」「レーダー（点群）が消える」「通信が詰まる」といった特有の問題に対処するため、以下の実装が組み込まれています。
+本システムは、マスター機からリモート機を制御し、バックグラウンドでシミュレーションを完全自動化しています。その際、手動でターミナルから実行した時と異なり「車が動かない」「レーダー（点群）が消える」「通信が詰まる」といった特有の問題に対処するため、以下の実装が組み込まれています。
 
-1. **GUI・ROS環境変数の明示的な引き継ぎ (`master_orchestrator.py`)**
-   `docker exec` にはホストの画面情報が自動で引き継がれないため、`$DISPLAY`, `$XDG_RUNTIME_DIR`, `$ROS_DOMAIN_ID` をホストから取得し、`-e` オプションとしてコンテナに注入してAWSIMのクラッシュを防いでいます。
-2. **実行ユーザーと作業ディレクトリの固定**
-   デフォルトの root ユーザーでの実行を防ぐため、`--user passd` と `--workdir /home/passd/AWSIM_launch` を指定し、手動実行時と権限・カレントディレクトリ環境を一致させています。
-3. **パイプ詰まり（ハングアップ）の防止 (`run_manager.py`)**
-   マスターからの指令完了後にターミナルが閉じられると、コンテナ内で生き残ったAWSIMやAutowareがログの出力先を失い、内部でフリーズする現象（車が途中で止まる原因）が起きます。これを防ぐため、インフラプロセスの出力を `stdout=subprocess.DEVNULL`, `stderr=subprocess.DEVNULL` に向けて完全にバックグラウンド化しています。
-4. **対話型シェル (`bash -i`) による完全なROS/DDS環境ロード**
-   非対話型シェル（通常の `bash -c`）での呼び出しでは、Ubuntuの仕様により `~/.bashrc` の読み込みが途中でキャンセルされます。これによりCycloneDDS等の大容量通信向けのチューニング設定がAutowareに適用されず、レーダーデータが消失する問題がありました。これを `bash -i -c` を用いて人間が直接操作している対話モードを偽装することで、手動ログイン時と全く同じROS通信環境を確立しています。
+1. **対話型シェル (`bash -i`) による完全なROS/DDS環境ロード (`cluster_manager.py` / `run_manager.py`)**
+   コンテナを起動してバックグラウンドでコマンドを実行する際、通常の `bash -c` ではUbuntuの仕様により `~/.bashrc` の読み込みが途中でキャンセルされます。これによりCycloneDDS等の大容量通信向けのチューニング設定がAutowareに適用されず、通信詰まりやレーダーデータが消失する問題がありました。これを `bash -i -c` を用いて対話モードを偽装することで、手動ログイン時と全く同じROS通信環境を確立しています。
+2. **マスター・リモート間のROS通信の分離 (`cluster_manager.py`)**
+   複数台のコンピュータで同時にシミュレーションを実行する際、ROS 2の通信がネットワーク上で混線しないよう、コンテナ起動時に `ROS_DOMAIN_ID` を号機ごとに割り当て、完全に独立した通信環境を構築しています。
+3. **リモート環境 (ヘッドレス) での仮想ディスプレイ(Xvfb)とGPU連携 (`cluster_manager.py`)**
+   物理ディスプレイが接続されていないリモートPC (22, 23号機) では、画面を描画できないためにRVizが無限クラッシュしたり、AWSIMのLiDAR点群が生成されなくなる問題が発生します。これを以下の3つの連携で解決しています。
+   - **Xvfbの自動起動**: コンテナ内で `Xvfb :99` を立ち上げ、`DISPLAY=:99` を指定することで、すべてのGUIアプリケーションの描画先を仮想モニターに向け、画面エラーによるクラッシュを防ぎます。
+   - **NVIDIA GPUの強制認識**: 通常、Xvfb環境ではGPUが使われませんが、AWSIMのLiDAR計算はGPU(Vulkan)に依存しています。そこで環境変数 `VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/nvidia_icd.json` を注入し、仮想画面下でも強制的にGPUを認識させて点群データを正常に生成させています。
+   - **AWSIMの通常起動**: AWSIMの `-batchmode` (画面なしモード) はセンサーデータ欠損を引き起こすため使用せず、Xvfbに向かって「通常起動」させることで正常なシミュレーションを実現しています。
+4. **ログの隔離とハングアップの防止 (`run_manager.py`)**
+   AWSIMとAutowareの膨大な標準出力がパイプを詰まらせてプロセスをフリーズさせないよう、各出力は `awsim.log` および `autoware.log` の専用ファイルに隔離しています。現場監督の進行状況は、Pythonのアンバッファード出力（`-u` オプション）を利用してリアルタイムに監視できるようにしています。
 
 ## 分散実行アーキテクチャ (改造プラン)
 
@@ -227,3 +230,24 @@ docker run -it \
 # [検証1] 昔のように手動で AWSIM と Autoware を動かしてみる
 cd /home/passd/awsim_labs && ./awsim_labs.x86_64 -noise false &
 cd /home/passd/autoware && source install/setup.bash && ros2 launch autoware_launch e2e_simulator.launch.xml vehicle_model:=awsim_labs_vehicle sensor_model:=awsim_labs_sensor_kit map_path:=/home/passd/autoware_map/nishishinjuku_autoware_map launch_vehicle_interface:=true
+
+    fix: 分散シミュレーションのコンテナ起動とROS 2通信エラーの完全修正
+    
+    コンテナを利用した完全自動化テストループにおいて、起動失敗やAutowareのクラッシュ、ログのハングアップを引き起こしていた複数の問題を解決し、安定した連続実行環境を確立。
+    
+    【主な修正内容】
+    1. Dockerコンテナの権限と環境変数の修正 (cluster_manager.py)
+       - root実行を防ぐため `--user passd` を指定し、Rayのインストールパスを `pip install --user` と `~/.local/bin` に修正。
+       - $DISPLAY などの環境変数が空の環境でも構文エラーにならないよう引数指定を修正。
+       - エラー発生時もコンテナが自爆せずログを残せるよう `|| sleep infinity` を追加。
+    
+    2. RayクラスターのIPアドレス固定化
+       - 複数のIPを持つ環境でRayが意図しないIP（.108等）で立ち上がるのを防ぐため、ray.init() に `_node_ip_address=MASTER_IP` を追加し、通信経路を強制的に固定。
+    
+    3. ROS 2 (CycloneDDS) の通信衝突エラーの解消
+       - Docker起動時の `-e ROS_LOCALHOST_ONLY=1` を削除し、「loインターフェースの二重指定」による rmw_create_node エラー（Autoware即死問題）を解決。
+       - `bash -i` を用いて対話型シェルを偽装し、コンテナ内の ~/.bashrc に記述されたCycloneDDSチューニングを最後まで確実にロード。
+    
+    4. ログの隔離とハングアップ防止 (run_manager.py)
+       - AWSIMとAutowareの膨大な標準出力を `awsim.log` と `autoware.log` に隔離。
+       - メインプロセスのパイプ詰まり（フリーズ）を防止しつつ、現場監督のログがリアルタイム表示されるよう Pythonに `-u` オプションを付与。

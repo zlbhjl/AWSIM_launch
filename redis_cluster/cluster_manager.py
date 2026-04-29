@@ -66,10 +66,9 @@ class ClusterManager:
                 if info["ip"] != self.master_ip:
                     print(f"  -> {info['machine']} へ最新のコードと設定ファイルを同期中 (rsync)...")
                     ssh_opts = "-o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=5"
-                    # [修正] -az ではなく -rltvz を使い、所有者情報のコピー(-g -o)を省くことでPermission deniedを回避
-                    sync_awsim_cmd = f"rsync -rltvz -e 'ssh {ssh_opts}' --exclude 'simulation_traces' --exclude '__pycache__' ~/AWSIM_launch/ {info['user']}@{info['ip']}:~/AWSIM_launch/"
-                    # [修正] エラーになりやすい隠しディレクトリ(.venv)を同期から除外し、同期失敗を防ぐ
-                    sync_formulas_cmd = f"rsync -rltvz -e 'ssh {ssh_opts}' --exclude '.venv' ~/aw-cheaker/Maude-3.5.1/AW-CheckerPy/ {info['user']}@{info['ip']}:~/aw-cheaker/Maude-3.5.1/AW-CheckerPy/"
+                    # [修正] 同期先での権限エラー(Operation not permitted)を完全に防ぐため、--no-perms --no-owner --no-group を明示
+                    sync_awsim_cmd = f"rsync -rtvz --no-perms --no-owner --no-group -e 'ssh {ssh_opts}' --exclude 'simulation_traces' --exclude '__pycache__' ~/AWSIM_launch/ {info['user']}@{info['ip']}:~/AWSIM_launch/"
+                    sync_formulas_cmd = f"rsync -rtvz --no-perms --no-owner --no-group -e 'ssh {ssh_opts}' --exclude '.venv' ~/aw-cheaker/Maude-3.5.1/AW-CheckerPy/ {info['user']}@{info['ip']}:~/aw-cheaker/Maude-3.5.1/AW-CheckerPy/"
                     try:
                         subprocess.run(sync_awsim_cmd, shell=True, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
                         subprocess.run(sync_formulas_cmd, shell=True, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
@@ -81,32 +80,59 @@ class ClusterManager:
                 c_info = info["container"]
                 c_name = c_info.get("name", "sim_worker")
                 ros_id = c_info.get("ros_domain_id", 0)
-                
-                # =================================================================
-                # [重要] PCに存在する正しいDockerイメージ名に変更してください
-                DOCKER_IMAGE = "autoware_internal:2026" 
-                # =================================================================
+                # [追加] コンフィグからコンテナのパスワードを取得（未設定時は "passd" をデフォルトとする）
+                c_pass = c_info.get("password", "passd")
+                c_user = c_info.get("user", "passd")
+                c_home = c_info.get("workspace", "/home/passd")
+                c_image = c_info.get("image", "autoware_internal:2026")
 
+                # -------------------------------------------------------------
+                # [追加] 取得したパスワードを使って、sudoコマンドの自動入力動作を抽象化
+                # [修正] コンテナ起動コマンド全体のシングルクォートと衝突しないよう、ダブルクォートに変更
+                sudo_cmd = f"echo \"{c_pass}\" | sudo -S"
+                # -------------------------------------------------------------
+                # [修正] マスター機(自機)とリモート機で画面出力の設定を分ける
+                # -------------------------------------------------------------
+
+                if info["ip"] == self.master_ip:
+                    # 21号機: 物理ディスプレイに画面を表示する通常設定
+                    display_mount = f"-v /tmp/.X11-unix:/tmp/.X11-unix "
+                    display_env = f"-e DISPLAY "
+                    xhost_setup = f"xhost +local:docker > /dev/null 2>&1 || true; "
+                    xvfb_setup = "" # マスターはXvfbを使用しない
+                else:
+                    # 22, 23号機: Xvfb (仮想ディスプレイ) を使用して画面エラーを回避しつつバックグラウンドで実行
+                    display_mount = "" # Xvfbは物理Xサーバーに依存しないためマウントは不要
+                    # [修正] DISPLAYを確実に固定し、Vulkan(LiDAR)にNVIDIA GPUを強制認識させて点群エラーを解決する
+                    display_env = f"-e DISPLAY=:99 -e VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/nvidia_icd.json "
+                    xhost_setup = ""
+                    # Xvfbをインストールして起動するコマンド
+                    xvfb_setup = (
+                        f"{sudo_cmd} apt-get update > /dev/null 2>&1 && "
+                        f"{sudo_cmd} DEBIAN_FRONTEND=noninteractive apt-get install -y xvfb > /dev/null 2>&1 && "
+                        f"Xvfb :99 -screen 0 1920x1080x24 > /dev/null 2>&1 & "
+                    )
                 # 1. コンテナのクリーン起動と初期化処理の一括実行
                 # 毎回古いコンテナを強制破棄し、コンテナ起動時にRayのインストール〜現場監督の起動までをすべて直列で行う
                 remote_setup_cmd = (
-                    f"xhost +local:docker > /dev/null 2>&1 || true; "
+                    f"{xhost_setup}"
                     f"docker rm -f {c_name} > /dev/null 2>&1 || true; "
                     f"rm -rf ~/simulation_traces_{c_name}/* > /dev/null 2>&1 || true; "  # [追加] マウント元を完全に空にして古いデータを隠蔽
                     f"mkdir -p ~/simulation_traces_{c_name} && chmod 777 ~/simulation_traces_{c_name}; "
-                    f"docker run -d -it --name {c_name} --user passd --net=host --privileged --gpus all --shm-size=16gb "
+                    f"docker run -d -it --name {c_name} --user {c_user} --net=host --privileged --gpus all --shm-size=16gb "
                     f"-e NVIDIA_DRIVER_CAPABILITIES=all -e __NV_PRIME_RENDER_OFFLOAD=1 -e __GLX_VENDOR_LIBRARY_NAME=nvidia "
-                    f"-v /tmp/.X11-unix:/tmp/.X11-unix -v ~/AWSIM_launch:/home/passd/AWSIM_launch "
-                    f"-v ~/aw-cheaker/Maude-3.5.1/AW-CheckerPy:/home/passd/aw-cheaker/Maude-3.5.1/AW-CheckerPy "
-                    f"-v ~/simulation_traces_{c_name}:/home/passd/simulation_traces "
-                    f"-v /run/user/$(id -u):/run/user/$(id -u) -e DISPLAY -e XDG_RUNTIME_DIR "
-                    # [修正] コンテナ内の HOME を /home/passd に強制上書きし、AutowareやAWSIMのパスエラー/画面出ない問題を解決
-                    f"-e ROS_DOMAIN_ID={ros_id} -e HOME=/home/passd {DOCKER_IMAGE} "
+                    f"{display_mount}-v ~/AWSIM_launch:{c_home}/AWSIM_launch "
+                    f"-v ~/aw-cheaker/Maude-3.5.1/AW-CheckerPy:{c_home}/aw-cheaker/Maude-3.5.1/AW-CheckerPy "
+                    f"-v ~/simulation_traces_{c_name}:{c_home}/simulation_traces "
+                    f"-v /run/user/$(id -u):/run/user/$(id -u) {display_env}-e XDG_RUNTIME_DIR "
+                    # [修正] コンテナ内の HOME を強制上書きし、AutowareやAWSIMのパスエラー/画面出ない問題を解決
+                    f"-e ROS_DOMAIN_ID={ros_id} -e HOME={c_home} {c_image} "
                     # [修正] ホストOSのRayバージョン(2.55.0)と合わせるためにバージョンを固定してインストール
-                    f"bash -c '{{ export HOME=/home/passd && export PATH=$HOME/.local/bin:$PATH && "
-                    f"python3 -m pip install --user --no-cache-dir ray==2.55.0 && ray start --address=\"{head_address}\" --node-ip-address=\"{info['ip']}\" && "
-                    f"mkdir -p /home/passd/simulation_traces && cd /home/passd/AWSIM_launch && "
-                    f"python3 -u run_manager.py --type {scenario_type} --mode {run_mode}; }} > /home/passd/simulation_traces/worker_log_{c_name}.txt 2>&1 || sleep infinity'"
+                    # [修正] PATH評価の複雑なエスケープ問題を回避するため、絶対パスでrayを直接起動する
+                    f"bash -i -c '{{ export HOME={c_home} && {xvfb_setup}"
+                    f"python3 -m pip install --user --no-cache-dir ray==2.55.0 && {c_home}/.local/bin/ray start --address=\"{head_address}\" --node-ip-address=\"{info['ip']}\" && "
+                    f"mkdir -p {c_home}/simulation_traces && cd {c_home}/AWSIM_launch && "
+                    f"python3 -u run_manager.py --type {scenario_type} --mode {run_mode}; }} > {c_home}/simulation_traces/worker_log_{c_name}.txt 2>&1 || sleep infinity'"
                 )
                 
                 full_cmd = remote_setup_cmd
