@@ -329,6 +329,11 @@ class ProcessManager:
                     else:
                         p = self._start_process(task, local_total_count + 1)
                         if p: self.infra_procs.append((task.name, p))
+                
+                # [追加] 初回起動時はOSのディスクキャッシュがなくロードが遅いため、追加で暖機待機する
+                if local_total_count == 0:
+                    print("  [System] 初回起動のため、AutowareのマップロードとDDS通信の確立を追加で待機します (40秒)...")
+                    time.sleep(40)
             
             while True:
                 # --- [分散対応] 司令塔から次のパラメータを取得 ---

@@ -40,9 +40,9 @@ CLUSTER_NODES = {
         "ip": "150.65.227.22",
         "hostname": "227-022.jaist.ac.jp",
         "user": "tomita1",
-        "mac": "9c:6b:80:d0:36:d8",
+        "mac": "9c:6b:00:d0:36:d8",
         "role": "worker",
-        "enabled": False,  # [修正] このノードを一時的に無効化
+        "enabled": True,
         "container": {
             "name": "sim_worker_22",
             "ros_domain_id": 22,
@@ -69,26 +69,38 @@ CLUSTER_NODES = {
             "image": "autoware_internal:2026"
         }
     },
-    
-    # ========================================================
-    # 【将来の追加用テンプレート】
-    # 新しいPC（例: 24号機）を追加する際は、以下のコメントアウトを
-    # 外して適切に書き換えてください。ROS_DOMAIN_ID は必ず被らないように設定します。
-    # ========================================================
-    # "worker3": {
-    #     "machine": "24号機",
-    #     "ip": "150.65.227.24",
-    #     "hostname": "227-024.jaist.ac.jp",
-    #     "user": "ユーザー名",
-    #     "enabled": True,
-    #     "role": "worker",
-    #     "container": {
-    #         "name": "sim_worker_24",
-    #         "ros_domain_id": 24,
-    #         "password": "passd",
-    #         "user": "passd",
-    #         "workspace": "/home/passd",
-    #         "image": "autoware_internal:2026"
-    #     }
-    # }
+    "worker3": {
+        "machine": "24号機",
+        "ip": "150.65.227.24",
+        "hostname": "227-024.jaist.ac.jp",
+        "user": "tomita4",
+        "mac": "9c:6b:00:cd:51:c3",
+        "role": "worker",
+        "enabled": False,
+        "container": {
+            "name": "sim_worker_24",
+            "ros_domain_id": 24,
+            "password": "passd",
+            "user": "passd",
+            "workspace": "/home/passd",
+            "image": "autoware_internal:2026"
+        }
+    },
+    "worker4": {
+        "machine": "25号機",
+        "ip": "150.65.227.25",
+        "hostname": "227-25.jaist.ac.jp",
+        "user": "tomita3",
+        "mac": "9c:6b:00:cd:51:c7",
+        "role": "worker",
+        "enabled": True,
+        "container": {
+            "name": "sim_worker_25",
+            "ros_domain_id": 25,
+            "password": "passd",
+            "user": "passd",
+            "workspace": "/home/passd",
+            "image": "autoware_internal:2026"
+        }
+    }
 }
