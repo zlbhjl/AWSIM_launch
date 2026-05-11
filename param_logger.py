@@ -5,6 +5,16 @@ import os
 import csv
 import numpy as np
 import ray
+import importlib
+
+# 理論安全領域計算モジュールのインポート
+try:
+    from theoretical_calculator import TheoreticalSafetyCalculator
+except ImportError:
+    TheoreticalSafetyCalculator = None
+
+# 計算クラスのインスタンスをキャッシュ（毎ループ初期化するのを防ぐ）
+_calculator_instance = None
 
 def log_parameters(output_dir: str, file_name: str, loop_num: int, params_dict: dict, reason: str = ""):
     """
@@ -15,6 +25,29 @@ def log_parameters(output_dir: str, file_name: str, loop_num: int, params_dict: 
     worker_id = os.environ.get("ROS_DOMAIN_ID", "master")
     log_dict = params_dict.copy()
     log_dict["worker_id"] = worker_id
+
+    # --- 新規追加部分: 理論値の算出と結合 ---
+    global _calculator_instance
+    if TheoreticalSafetyCalculator and all(k in log_dict for k in ["dx0", "ego_speed", "npc_speed"]):
+        if _calculator_instance is None:
+            # configを動的に読み込む（ファイル名からシナリオ名を推測: 例 'uturn_parameters.csv' -> 'uturn'）
+            scenario_name = file_name.replace("_parameters.csv", "")
+            cfg = None
+            try:
+                cfg = importlib.import_module(f"configs.{scenario_name}")
+            except ImportError:
+                pass
+            
+            _calculator_instance = TheoreticalSafetyCalculator(cfg)
+            
+        # アプローチA, B 両方の計算結果を取得
+        theory_results = _calculator_instance.evaluate(
+            log_dict["dx0"], 
+            log_dict["ego_speed"], 
+            log_dict["npc_speed"]
+        )
+        log_dict.update(theory_results)  # 結果をログにマージ
+    # ----------------------------------------
 
     # 分散対応: Actorが立ち上がっていれば、共有ストア経由で安全に書き込む
     if ray.is_initialized():
