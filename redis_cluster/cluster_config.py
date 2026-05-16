@@ -93,7 +93,7 @@ CLUSTER_NODES = {
         "user": "tomita3",
         "mac": "9c:6b:00:cd:51:c7",
         "role": "worker",
-        "enabled": True,
+        "enabled": False,
         "container": {
             "name": "sim_worker_25",
             "ros_domain_id": 25,

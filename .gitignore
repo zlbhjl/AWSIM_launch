@@ -1,1 +1,10 @@
-manager_log.txt
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Simulation trace outputs
+simulation_traces/
+simulation_traces_host/
+simulation_traces_*/
+*.log

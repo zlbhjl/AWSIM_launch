@@ -23,7 +23,24 @@ RESULT_LABELS = [
     "c_ttc_0.7",       # TTC 0.7秒以下 (危険領域の指標)
     "c_ttc_0.5",       # TTC 0.5秒以下
     "c_ttc_0.3",       # TTC 0.3秒以下
-    "c_pos_diff_4.0"   # 車間距離 4.0m以内
+    "c_pos_diff_4.0",  # 車間距離 4.0m以内
+    "c_npc_stuck"      # NPC1が途中で停止していないか
+]
+
+# 上記の RESULT_LABELS に対応する Maude の検証式
+# awchecker.py が起動時にこれを formulas.txt に自動で書き込みます
+FORMULAS = [
+    '[] ~ collision("ego", "npc1")',
+    '[] ttc("npc1") >= 1.5',
+    '[] ttc("npc1") >= 1.3',
+    '[] ttc("npc1") >= 1.2',
+    '[] ttc("npc1") >= 1.1',
+    '[] ttc("npc1") >= 0.9',
+    '[] ttc("npc1") >= 0.7',
+    '[] ttc("npc1") >= 0.5',
+    '[] ttc("npc1") >= 0.3',
+    '[] pos-diff("ego", "npc1") >= 4.0',
+    '<> speed("npc1") >= 0.1'  # 変更: より確実にスタックだけを検知するため 0.1 m/s まで低下
 ]
 
 # AIが重点的に検証し、境界線を引くターゲットの優先順位

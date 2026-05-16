@@ -8,10 +8,11 @@ from scipy.stats import qmc  # Sobol配列生成用
 from estimator import SafetyEstimator
 
 class ActiveLearningStrategist:
-    def __init__(self, scenario_name, config, num_candidates=10000, focus_points=None):
+    def __init__(self, scenario_name, config, num_candidates=10000, focus_points=None, run_mode="explore"):
         self.scenario_name = scenario_name
         self.config = config
         self.num_candidates = num_candidates
+        self.run_mode = run_mode
         
         self.estimator = SafetyEstimator(scenario_name, config)
         self.param_names = list(self.config.PARAM_RANGES.keys())
@@ -42,7 +43,7 @@ class ActiveLearningStrategist:
         self.stability_history = []
         self.stability_streak = 0
         self.step2_exploration_count = 0
-        self.current_phase = "STEP1"
+        self.current_phase = "STEP3" if self.run_mode == "margin" else "STEP1"
         self.dispatched_task_count = 0
 
     def get_sobol_point(self, index):
@@ -91,7 +92,13 @@ class ActiveLearningStrategist:
 
     def decide_next_target(self):
         df_dataset = self.estimator.load_dataset()
-        num_samples = len(df_dataset) if df_dataset is not None else 0
+        
+        # [修正] 行数ではなく、CSVに記録されている最大のループ番号と同期させる（データ欠損対策）
+        if df_dataset is not None and 'loop_num' in df_dataset.columns:
+            max_loop = int(df_dataset['loop_num'].max())
+            if self.dispatched_task_count < max_loop:
+                self.dispatched_task_count = max_loop
+            
         best_target = self.get_best_target(df_dataset)
         num_violations = (df_dataset[best_target] == 1).sum() if (df_dataset is not None and best_target) else 0
         
@@ -115,7 +122,7 @@ class ActiveLearningStrategist:
                 return result
 
         # --- STEP 1: 初期探索 ---
-        if current_idx < self.INITIAL_EXPLORATION_LIMIT or num_violations == 0:
+        if self.current_phase == "STEP1" and (current_idx < self.INITIAL_EXPLORATION_LIMIT or num_violations == 0):
             if self.FOCUS_POINTS:
                 # フォーカスモード時は、全体探索ではなく Focus の周辺をランダム探索する
                 candidates = self.generate_candidate_points()
@@ -128,6 +135,13 @@ class ActiveLearningStrategist:
                 result = {**self.get_sobol_point(current_idx), "reason": f"STEP1: Global Search (V:{num_violations})"}
                 self.dispatched_task_count += 1
                 return result
+                
+        # --- マージンモードのセーフティ (危険データが1つもない場合は境界が引けないためランダム探索でごまかす) ---
+        if self.current_phase == "STEP3" and num_violations == 0:
+            print("[Strategist] ⚠️ STEP3(マージンモード)で起動されましたが、データセットに衝突(1)の記録がありません。境界構築のため一時的にグローバル探索を実施します。")
+            result = {**self.get_sobol_point(current_idx), "reason": "STEP3 Fallback: Global Search (No Violations)"}
+            self.dispatched_task_count += 1
+            return result
 
         # AI学習・予測
         self.estimator.train(target_column=best_target)
@@ -156,22 +170,22 @@ class ActiveLearningStrategist:
                 self.current_phase = "STEP3"
 
         # --- 次のターゲットの選択 ---
-        m_low, m_high = self.MARGIN_RANGE
-        margin_idx = np.where((mean >= m_low) & (mean <= m_high))[0]
+        # [修正] ギリギリの境界だけでなく、「安全」と予測されている領域全体(mean <= 0.5)を対象とする
+        safe_idx = np.where(mean <= 0.5)[0]
 
         if self.current_phase == "STEP3":
-            if len(margin_idx) > 0:
-                max_std = np.max(std[margin_idx])
-                print(f"[Strategist] STEP3 | マージン候補数: {len(margin_idx)} | 最大不確実性 σ = {max_std:.4f} (目標 < {self.MARGIN_MAX_UNCERTAINTY})")
+            if len(safe_idx) > 0:
+                max_std = np.max(std[safe_idx])
+                print(f"[Strategist] STEP3 | 安全領域(mean<=0.5)候補数: {len(safe_idx)} | 最大不確実性 σ = {max_std:.4f} (目標 < {self.MARGIN_MAX_UNCERTAINTY})")
                 
                 if max_std < self.MARGIN_MAX_UNCERTAINTY:
-                    self._print_final_report(current_idx, best_target, "マージン領域の死角を完全に排除しました")
-                    return {"system_command": "stop", "reason": "Target Area Verification Complete"}
+                    self._print_final_report(current_idx, best_target, "安全領域の死角(不確実性)を完全に排除しました")
+                    return {"system_command": "stop", "reason": "Safe Area Verification Complete"}
                 
-                best_idx = margin_idx[np.argmax(std[margin_idx])]
-                reason = f"STEP3: Margin Cleanup (σ={max_std:.4f})"
+                best_idx = safe_idx[np.argmax(std[safe_idx])]
+                reason = f"STEP3: Safe Area Cleanup (σ={max_std:.4f})"
             else:
-                print(f"[Strategist] STEP3 | マージン領域に該当する候補点がありません。バックアップ探索を実施します。")
+                print(f"[Strategist] STEP3 | 安全と予測される領域がありません。バックアップ探索を実施します。")
                 best_idx = np.argmax(std)
                 reason = f"STEP3: Backup Search (M:{mean[best_idx]:.2f})"
         else:

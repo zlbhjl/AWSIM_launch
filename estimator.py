@@ -59,6 +59,29 @@ class SafetyEstimator:
             print(f"[Estimator] ⚠️ 指標 '{target_column}' が見つかりません。")
             return None
 
+        # --- 新機能: 異常データのフィルタリング ---
+        # 1. 各種評価指標で解析エラー (-1) が発生したデータを除外
+        for col in df_dataset.columns:
+            if col.startswith("c_") or col.startswith("formula_"):
+                df_dataset = df_dataset[~df_dataset[col].isin([-1, "-1", -1.0])]
+                
+        # 2. NPCのスタック (c_npc_stuck 等) が発生したデータを除外 (値が 1 の場合)
+        stuck_cols = [col for col in df_dataset.columns if "stuck" in col]
+        for col in stuck_cols:
+            df_dataset = df_dataset[~df_dataset[col].isin([1, "1", 1.0])]
+        # ----------------------------------------
+        
+        # --- [追加] 既存データに含まれる TTC の論理矛盾（すり抜け）を学習前に補正 ---
+        if "c_collision" in df_dataset.columns:
+            collision_mask = df_dataset["c_collision"].isin([1, "1", 1.0])
+            for col in df_dataset.columns:
+                if col.startswith("c_ttc_"):
+                    df_dataset.loc[collision_mask, col] = 1
+                    
+        ttc_cols = sorted([c for c in df_dataset.columns if c.startswith('c_ttc_')], key=lambda x: float(x.split('_')[-1]))
+        for i in range(len(ttc_cols) - 1):
+            df_dataset.loc[df_dataset[ttc_cols[i]].isin([1, "1", 1.0]), ttc_cols[i+1]] = 1
+
         # 欠損値の除去と、0/1 (Boolean) データへの絞り込み
         essential_cols = ["loop_num", target_column] + self.feature_names
         df_dataset = df_dataset.dropna(subset=essential_cols)

@@ -13,7 +13,13 @@ class SharedStoreActor:
         print("[SharedStoreActor] 共有ストア (金庫番) が起動しました。スレッドセーフな書き込みを管理します。")
         self.param_buffer = {}
         self.output_dir = os.path.expanduser("~/simulation_traces")
-        os.makedirs(self.output_dir, exist_ok=True)
+        try:
+            os.makedirs(self.output_dir, exist_ok=True)
+            if not os.access(self.output_dir, os.W_OK):
+                print(f"[SharedStoreActor] 🚨 致命的エラー: {self.output_dir} への書き込み権限がありません！")
+                print("  -> マスターPCで 'sudo chown -R $USER:$USER ~/simulation_traces' を実行してください。")
+        except Exception as e:
+            print(f"[SharedStoreActor] 🚨 致命的エラー: {self.output_dir} の作成に失敗しました: {e}")
         # 古いデータを破棄するまでの制限時間（秒）
         # run_managerのタイムアウト(300秒)より余裕を持たせて600秒(10分)に設定
         self.buffer_timeout_sec = 600
@@ -42,16 +48,22 @@ class SharedStoreActor:
     def _write_to_dataset(self, scenario_name: str, full_row: dict):
         """単一のデータセットCSVに1行を書き込む共通関数"""
         dataset_file = os.path.join(self.output_dir, f"{scenario_name}_dataset.csv")
-        file_exists = os.path.exists(dataset_file)
         
-        # ヘッダーの順番を一定に保つためソートする
-        fieldnames = sorted(full_row.keys())
+        try:
+            file_exists = os.path.exists(dataset_file)
+            
+            # ヘッダーの順番を一定に保つためソートする
+            fieldnames = sorted(full_row.keys())
 
-        with open(dataset_file, "a", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=fieldnames)
-            if not file_exists or os.path.getsize(dataset_file) == 0:
-                writer.writeheader()
-            writer.writerow(full_row)
+            with open(dataset_file, "a", newline="", encoding="utf-8") as f:
+                writer = csv.DictWriter(f, fieldnames=fieldnames)
+                if not file_exists or os.path.getsize(dataset_file) == 0:
+                    writer.writeheader()
+                writer.writerow(full_row)
+        except PermissionError:
+            print(f"[SharedStoreActor] 🚨 権限エラー: {dataset_file} に書き込めません。(Permission denied)")
+        except Exception as e:
+            print(f"[SharedStoreActor] ❌ 書き込みエラー: {e}")
 
     def log_and_merge_result(self, scenario_name: str, result_row: dict):
         """結果を受け取り、バッファ内のパラメータと結合してCSVに書き込む"""
@@ -99,7 +111,12 @@ class SharedStoreActor:
     def log_error_detail(self, error_detail_log_path: str, target_file: str, header: str, output_log: str, error_log: str):
         # 出力先は self.output_dir に統一
         error_log_path = os.path.join(self.output_dir, os.path.basename(error_detail_log_path))
-        os.makedirs(os.path.dirname(error_log_path), exist_ok=True)
-        with open(error_log_path, "a", encoding="utf-8") as ef:
-            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            ef.write(f"[{timestamp}] {target_file} | {header}\nSTDOUT: {output_log}\nSTDERR: {error_log}\n{'-'*30}\n")
+        try:
+            os.makedirs(os.path.dirname(error_log_path), exist_ok=True)
+            with open(error_log_path, "a", encoding="utf-8") as ef:
+                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                ef.write(f"[{timestamp}] {target_file} | {header}\nSTDOUT: {output_log}\nSTDERR: {error_log}\n{'-'*30}\n")
+        except PermissionError:
+            print(f"[SharedStoreActor] 🚨 権限エラー: {error_log_path} にエラー詳細を書き込めません。")
+        except Exception as e:
+            print(f"[SharedStoreActor] ❌ 書き込みエラー: {e}")

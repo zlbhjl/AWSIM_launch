@@ -53,6 +53,7 @@ def main():
     # マスターのRayプロセスやOrchestratorも念のためクリーンアップする
     print("\n[Local] Orchestrator と Ray の残存プロセスを停止しています...")
     subprocess.run("pkill -9 -f master_orchestrator.py > /dev/null 2>&1 || true", shell=True, executable="/bin/bash")
+    subprocess.run("pkill -9 -f run_manager.py > /dev/null 2>&1 || true", shell=True, executable="/bin/bash")
     subprocess.run("ray stop --force > /dev/null 2>&1 || true", shell=True, executable="/bin/bash")
 
     print("\n[Cluster] 各ノードのコンテナを停止・削除しています...")

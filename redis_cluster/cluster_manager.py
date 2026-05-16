@@ -12,7 +12,7 @@ class ClusterManager:
         self.master_ip = cluster_config.MASTER_IP
         self.ray_port = cluster_config.RAY_PORT
 
-    def start_cluster(self, scenario_type="uturn", run_mode="explore"):
+    def start_cluster(self, scenario_type="uturn", run_mode="explore", with_host_worker=False):
         """
         Ray/Redis クラスターを起動し、ワーカーを参加させます。
         """
@@ -56,6 +56,11 @@ class ClusterManager:
             # [追加] enabled フラグをチェックし、Falseならこのノードの処理をスキップ
             if not info.get("enabled", True):
                 print(f"[Worker] {info['machine']} ({info['ip']}) は設定により無効化されています。スキップします。")
+                continue
+                
+            # ホストワーカー併用モードの場合、21号機(自機)のコンテナ起動をスキップする
+            if with_host_worker and info["ip"] == self.master_ip:
+                print(f"[Worker] ホストワーカー併用モード (--with_host_worker) が有効なため、{info['machine']} のコンテナ起動をスキップします。")
                 continue
 
             # コンテナ設定があるノード（マスター自身を含む）は、すべてワーカーコンテナを起動する

@@ -21,7 +21,7 @@ from typing import List, Tuple, Optional
 def load_config():
     parser = argparse.ArgumentParser(description="Multi-Scenario Autonomous Driving Test Manager")
     parser.add_argument("--type", type=str, default="uturn", help="Scenario type (e.g., uturn, cutin)")
-    parser.add_argument("--mode", type=str, choices=["explore", "focus"], default="explore", help="Search mode: explore (default) or focus")
+    parser.add_argument("--mode", type=str, choices=["explore", "focus", "margin"], default="explore", help="Search mode: explore (default), focus, or margin")
     parser.add_argument("--focus_points", type=str, default=None, help="JSON string for focus points (e.g., '[{\"dx0\": 15.0}]')")
     args = parser.parse_args()
 
@@ -68,8 +68,21 @@ from param_logger import log_parameters
 HOME = "/home/passd"
 SETUP_BASH = os.path.join(HOME, "autoware/install/setup.bash")
 
+# ==============================================================================
+# [追加] 実行号機(マスターかリモートか)の判定と出力先ディレクトリの分岐
+# ==============================================================================
+ROS_DOMAIN_ID = os.environ.get("ROS_DOMAIN_ID", "0")
+IS_MASTER = (ROS_DOMAIN_ID == "21")
+IS_HOST_MODE = (os.environ.get("EXEC_MODE") == "host")
+WORKER_NAME = f"{ROS_DOMAIN_ID}号機"
+
 REPEAT_COUNT = cfg.REPEAT_COUNT
-OUTPUT_DIR = os.path.join(HOME, "simulation_traces")
+if IS_HOST_MODE:
+    OUTPUT_DIR = os.path.join(HOME, "simulation_traces_host")
+else:
+    OUTPUT_DIR = os.path.join(HOME, "simulation_traces")
+os.environ["AW_OUTPUT_DIR"] = OUTPUT_DIR
+
 FILE_PATTERN = f"{SCENARIO_NAME}_test_*.json"
 # シナリオの設定(config)に TIMEOUT_SEC があればそれを使い、なければデフォルトで200秒とする
 TIMEOUT_SEC = getattr(cfg, 'TIMEOUT_SEC', 200)
@@ -84,12 +97,6 @@ class Task:
     delay: int = 2
     source_setup: bool = False
     resident: bool = False
-
-# ==============================================================================
-# [追加] 実行号機(マスターかリモートか)の判定と起動コマンドの分岐
-# ==============================================================================
-ROS_DOMAIN_ID = os.environ.get("ROS_DOMAIN_ID", "0")
-IS_MASTER = (ROS_DOMAIN_ID == "21")
 
 if IS_MASTER:
     # 21号機(マスター): 従来通り RViz と AWSIM の画面を表示する
@@ -338,6 +345,10 @@ class ProcessManager:
             while True:
                 # --- [分散対応] 司令塔から次のパラメータを取得 ---
                 print(f"  [Manager] 司令塔から次のタスク(パラメータ)を待機中...")
+                try:
+                    ray.get(self.task_queue.update_worker_status.remote(WORKER_NAME, "待機中"))
+                except Exception:
+                    pass
                 while True:
                     try:
                         # キューからタスクを要求（なければ None が返ってくる設計）
@@ -396,6 +407,11 @@ class ProcessManager:
                 )
 
                 self._run_trigger_once(dynamic_client_task, current_loop_num)
+                
+                try:
+                    ray.get(self.task_queue.update_worker_status.remote(WORKER_NAME, f"Sim {current_loop_num} 実行中"))
+                except Exception:
+                    pass
 
                 print(f"  >>> 監視中... (Timeout: {TIMEOUT_SEC}s)")
                 start_wait = time.time()
@@ -406,6 +422,10 @@ class ProcessManager:
                     if os.path.exists(local_target_json):
                         print(f"  [成功] {os.path.basename(local_target_json)} 生成確認")
                         time.sleep(5)  # JSON書き込み完了を待機
+                        
+                        # [修正] チェッカーが検知して解析する前に、確実にパラメータを金庫に預けておく
+                        log_parameters(OUTPUT_DIR, csv_filename, current_loop_num, next_target, reason=reason_str)
+                        
                         os.rename(local_target_json, global_target_json) # グローバルIDに合わせる
                         print(f"  [変換] -> {os.path.basename(global_target_json)} にリネーム完了")
                         
@@ -425,12 +445,16 @@ class ProcessManager:
                     failed_reason = f"{reason_str} [ERROR: TIMEOUT]"
                     
                     # [修正] 共有金庫にタイムアウトしたタスクを直接記録させる
-                    if self.shared_store:
+                    if self.shared_store and not IS_HOST_MODE:
                         result_labels = getattr(cfg, 'RESULT_LABELS', [])
                         ray.get(self.shared_store.flush_timeout_task.remote(SCENARIO_NAME, current_loop_num, next_target, failed_reason, result_labels))
                     
                     with open(global_target_json, 'w') as f:
                         f.write("TIMEOUT")
+                        
+                    try:
+                        ray.get(self.task_queue.update_worker_status.remote(WORKER_NAME, f"Sim {current_loop_num} タイムアウト"))
+                    except Exception: pass
                         
                     local_exec_count += 1
                     local_total_count += 1
@@ -443,12 +467,17 @@ class ProcessManager:
                     break 
                 else:
                     self.kill_client()
-                    log_parameters(OUTPUT_DIR, csv_filename, current_loop_num, next_target, reason=reason_str)
+                    # log_parameters(...) はリネーム前に移動したため削除
+                    
                     local_exec_count += 1
                     local_total_count += 1
                     
                     # マスターへ完了（成功）を報告
                     try: ray.get(self.task_queue.report_completion.remote(current_loop_num, "success"))
+                    except Exception: pass
+                    
+                    try:
+                        ray.get(self.task_queue.update_worker_status.remote(WORKER_NAME, f"Sim {current_loop_num} 完了"))
                     except Exception: pass
                     
                     if local_exec_count % REFRESH_INTERVAL == 0:
