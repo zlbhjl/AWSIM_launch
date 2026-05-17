@@ -124,8 +124,11 @@ class ClusterManager:
                     f"docker rm -f {c_name} > /dev/null 2>&1 || true; "
                     f"rm -rf ~/simulation_traces_{c_name}/* > /dev/null 2>&1 || true; "  # [追加] マウント元を完全に空にして古いデータを隠蔽
                     f"mkdir -p ~/simulation_traces_{c_name} && chmod 777 ~/simulation_traces_{c_name}; "
-                    f"docker run -d -it --name {c_name} --user {c_user} --net=host --privileged --gpus all --shm-size=16gb "
+                    f"docker run -d -it --name {c_name} --user {c_user} --net=host --privileged --gpus all --shm-size=32gb "
                     f"-e NVIDIA_DRIVER_CAPABILITIES=all -e __NV_PRIME_RENDER_OFFLOAD=1 -e __GLX_VENDOR_LIBRARY_NAME=nvidia "
+                    # [追加] CycloneDDSの通信バッファを拡張し、大容量データ(点群等)のパケットドロップによる遅延を防ぐ
+                    #f"-e RMW_IMPLEMENTATION=rmw_cyclonedds_cpp "
+                    #f"-e CYCLONEDDS_URI=\"<CycloneDDS><Domain><Internal><MinimumSocketReceiveBufferSize>10485760</MinimumSocketReceiveBufferSize></Internal></Domain></CycloneDDS>\" "
                     f"{display_mount}-v ~/AWSIM_launch:{c_home}/AWSIM_launch "
                     f"-v ~/aw-cheaker/Maude-3.5.1/AW-CheckerPy:{c_home}/aw-cheaker/Maude-3.5.1/AW-CheckerPy "
                     f"-v ~/simulation_traces_{c_name}:{c_home}/simulation_traces "

@@ -46,22 +46,18 @@ def main():
     # [修正] 各号機が自分のIPで正しく接続できるよう _node_ip_address を削除
     ray.init(address=f"{MASTER_IP}:{RAY_PORT}", namespace='awsim_cluster', ignore_reinit_error=True)
     
-    # 実行号機の判定 (マスターである 21号機 かどうか)
-    is_master = os.environ.get("ROS_DOMAIN_ID", "0") == "21"
     is_host_mode = os.environ.get("EXEC_MODE") == "host"
 
     # --- 新機能: config に FORMULAS が定義されていれば formulas.txt を自動生成/上書き ---
     if formulas_config:
-        if is_master:
-            try:
-                with open(formulas_path, "w", encoding="utf-8") as f:
-                    for formula in formulas_config:
-                        f.write(f"{formula}\n")
-                print(f"[Info] {formulas_path} を設定ファイルに基づいて生成・上書きしました。")
-            except Exception as e:
-                print(f"[Warning] formulas.txt の生成に失敗しました (権限エラー等): {e}")
-        else:
-            print("[Info] ワーカー機のため、マスターから同期された formulas.txt を使用します。")
+        # [修正] マスターからの同期を待たず、各自が独自のコンテナ内で formulas.txt を生成する
+        try:
+            with open(formulas_path, "w", encoding="utf-8") as f:
+                for formula in formulas_config:
+                    f.write(f"{formula}\n")
+            print(f"[Info] {formulas_path} を設定ファイルに基づいて生成・上書きしました。")
+        except Exception as e:
+            print(f"[Warning] formulas.txt の生成に失敗しました (権限エラー等): {e}")
 
     print("[AW Checker] 共有金庫 (SharedStoreActor) を探しています...")
     for _ in range(10): # 最大約50秒待機
@@ -201,7 +197,7 @@ def main():
                     
                     # CSV保存処理（continueでスキップされる前に書き込む）
                     # [修正] 共有金庫に結果をマージさせる
-                    if shared_store and not is_host_mode:
+                    if shared_store:
                         ray.get(shared_store.log_and_merge_result.remote(args.type, parsed_row))
                     
                     # [追加] コンテナローカルにも結果を保存
@@ -259,7 +255,7 @@ def main():
                         parsed_row[header] = -1
                         has_error = True
                         # エラーログへの記録
-                        if shared_store and not is_host_mode:
+                        if shared_store:
                             ray.get(shared_store.log_error_detail.remote(error_detail_log_path, target_file, header, output_log, error_log))
                         
                         # [追加] コンテナローカルにもエラーログを常に保存
@@ -303,7 +299,7 @@ def main():
 
                 # CSV保存
                 # [修正] 共有金庫に結果をマージさせる
-                if shared_store and not is_host_mode:
+                if shared_store:
                     ray.get(shared_store.log_and_merge_result.remote(args.type, parsed_row))
                 
                 # [追加] コンテナローカルにも結果を保存

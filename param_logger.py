@@ -51,7 +51,8 @@ def log_parameters(output_dir: str, file_name: str, loop_num: int, params_dict: 
     # ----------------------------------------
 
     # 分散対応: Actorが立ち上がっていれば、共有ストア経由で安全に書き込む
-    if ray.is_initialized() and not is_host_mode:
+    # [修正] ホストモードの制限を解除し、21号機もAI用の共有金庫にパラメータを預ける
+    if ray.is_initialized():
         try:
             store = ray.get_actor("SharedStoreActor")
             ray.get(store.log_parameters.remote(output_dir, file_name, loop_num, log_dict, reason))

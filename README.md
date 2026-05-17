@@ -32,6 +32,9 @@ AWSIM_launch/
 ├── param_logger.py     # テスト実行時のパラメータを一時的に共有金庫のバッファへ送信。
 ├── theoretical_calculator.py # JAMA物理モデルに基づく理論的安全領域(Zone)とマージンを計算するモジュール。
 ├── visualize_traces.py # 実行結果のCSVデータを読み込み、3Dグラフとして可視化するスクリプト。
+├── visualize_traces_split.py # ホスト(21号機)とコンテナ(22・23号機)の実行結果を分割し、それぞれ独立した3Dグラフとして可視化するスクリプト。
+├── visualize_worker_stats.py # ワーカー別（ホスト vs コンテナ）の衝突やTTC違反の発生確率を棒グラフで比較・可視化するスクリプト。
+├── visualize_jama_zones.py # JAMA物理モデルに基づく理論的な安全領域(Zone)の分布をグラフ化して可視化・分析するスクリプト。
 ├── redis_cluster/      # 分散クラスター管理モジュール
 │   ├── cluster_config.py  # ワーカーPCのIPやコンテナ名、通信割り当て設定などを一元管理。
 │   ├── cluster_manager.py # 各PCにSSH接続し、Dockerコンテナを自動起動・同期するクラスター構築スクリプト。

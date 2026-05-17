@@ -445,7 +445,8 @@ class ProcessManager:
                     failed_reason = f"{reason_str} [ERROR: TIMEOUT]"
                     
                     # [修正] 共有金庫にタイムアウトしたタスクを直接記録させる
-                    if self.shared_store and not IS_HOST_MODE:
+                    # [修正] ホストモードであってもタイムアウト結果をAIの金庫に共有する
+                    if self.shared_store:
                         result_labels = getattr(cfg, 'RESULT_LABELS', [])
                         ray.get(self.shared_store.flush_timeout_task.remote(SCENARIO_NAME, current_loop_num, next_target, failed_reason, result_labels))
                     
