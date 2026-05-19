@@ -23,6 +23,7 @@ def load_config():
     parser.add_argument("--type", type=str, default="uturn", help="Scenario type (e.g., uturn, cutin)")
     parser.add_argument("--mode", type=str, choices=["explore", "focus", "margin"], default="explore", help="Search mode: explore (default), focus, or margin")
     parser.add_argument("--focus_points", type=str, default=None, help="JSON string for focus points (e.g., '[{\"dx0\": 15.0}]')")
+    parser.add_argument("--headless", action="store_true", help="Run with Xvfb (No GUI)")
     args = parser.parse_args()
 
     try:
@@ -51,9 +52,9 @@ def load_config():
                 # 分散ワーカーとしてはマスターの指示（タスク）に従うだけなので、ここでプロセスを落とさない
                 print("[System] ConfigにFOCUS_POINTSがありませんが、マスターからの指示に従って動作します。")
 
-    return args.type, config_module, args.mode, focus_points
+    return args.type, config_module, args.mode, focus_points, args.headless
 
-SCENARIO_NAME, cfg, RUN_MODE, FOCUS_POINTS = load_config()
+SCENARIO_NAME, cfg, RUN_MODE, FOCUS_POINTS, HEADLESS_MODE = load_config()
 
 LAUNCH_DIR = os.path.dirname(os.path.abspath(__file__))
 if LAUNCH_DIR not in sys.path:
@@ -204,6 +205,15 @@ class ProcessManager:
         except ValueError:
             print("[Manager] ⚠️ 共有金庫が見つかりませんでした。データ記録に失敗する可能性があります。")
             self.shared_store = None
+            
+        self.xvfb_proc = None
+        if HEADLESS_MODE:
+            print("\n[Manager] 🖥️ ヘッドレスモード (Xvfb) を有効化します。画面は表示されず裏で実行されます。")
+            os.system("pkill -9 -f 'Xvfb :199' > /dev/null 2>&1") # 念のため既存の仮想画面を掃除
+            self.xvfb_proc = subprocess.Popen(["Xvfb", ":199", "-screen", "0", "1920x1080x24"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            os.environ["DISPLAY"] = ":199"
+            os.environ["VK_ICD_FILENAMES"] = "/usr/share/vulkan/icd.d/nvidia_icd.json"
+            time.sleep(2)
 
     def _build_command(self, task: Task, sim_num: int) -> str:
         cmd = task.command.replace("{sim_num}", str(sim_num))
@@ -221,6 +231,8 @@ class ProcessManager:
             out_target = open(os.path.join(OUTPUT_DIR, "awsim.log"), "w")
         elif task.name == "Autoware":
             out_target = open(os.path.join(OUTPUT_DIR, "autoware.log"), "w")
+        elif task.name == "AW Checker (Safety Evaluator)":
+            out_target = open(os.path.join(OUTPUT_DIR, "awchecker_error.log"), "w")
             
         try:
             proc = subprocess.Popen(
@@ -285,6 +297,12 @@ class ProcessManager:
 
         self.client_proc = None
         self.infra_procs = []
+        
+        # Xvfbはシステム完全終了時のみ停止する（定期リフレッシュ時はつけっぱなし）
+        if kill_resident:
+            if getattr(self, 'xvfb_proc', None):
+                self._send_signal(self.xvfb_proc, "Xvfb", signal.SIGKILL)
+                self.xvfb_proc = None
 
     def kill_client(self):
         if self.client_proc:
@@ -357,7 +375,10 @@ class ProcessManager:
                             break
                     except Exception as e:
                         print(f"  [警告] 司令塔との通信エラー（数秒後に再試行します）: {e}")
-                    time.sleep(2)
+                        
+                    # [追加] 21号機がタスクを独占しないよう、待機時間にランダムな揺らぎ（ジッター）を加える
+                    import random
+                    time.sleep(1.0 + random.uniform(0.0, 2.0))
                 
                 # === 追加: 堅牢な終了シグナル検知ロジック ===
                 # 辞書から 'system_command' を安全に取得し、"stop" かどうか判定する

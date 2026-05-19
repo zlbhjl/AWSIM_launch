@@ -73,6 +73,7 @@ def load_config():
     parser.add_argument("--mode", type=str, choices=["explore", "focus", "margin"], default="explore", help="Search mode")
     parser.add_argument("--focus_points", type=str, default=None, help="JSON string for focus points")
     parser.add_argument("--with_host_worker", action="store_true", help="Run a local worker on the host machine (ROS_DOMAIN_ID=21, EXEC_MODE=host)")
+    parser.add_argument("--headless_host", action="store_true", help="Run the host worker with Xvfb (No GUI)")
     args = parser.parse_args()
 
     try:
@@ -92,7 +93,7 @@ def load_config():
                 print("[Fatal] --mode focus が指定されましたが FOCUS_POINTS が設定されていません。")
                 sys.exit(1)
 
-    return args.type, config_module, args.mode, focus_points, args.with_host_worker
+    return args.type, config_module, args.mode, focus_points, args.with_host_worker, args.headless_host
 
 # ==============================================================================
 # [追加] 過去のデータセットから最大ループ番号を取得
@@ -120,7 +121,7 @@ def get_last_processed_loop(scenario_name):
 # メインオーケストレーター処理
 # ==============================================================================
 def main():
-    scenario_name, cfg, run_mode, focus_points, with_host_worker = load_config()
+    scenario_name, cfg, run_mode, focus_points, with_host_worker, headless_host = load_config()
 
     # 1. クラスターの一斉起動 (21〜23号機のコンテナを自動で立ち上げる)
     cluster_manager = ClusterManager()
@@ -146,7 +147,16 @@ def main():
 
     # 4. 共有金庫 (SharedStoreActor) の作成
     try:
-        shared_store = SharedStoreActor.options(name="SharedStoreActor", lifetime="detached", num_cpus=0).remote()
+        # 共有金庫を確実にマスター機(21号機)のローカルで起動させる制約を追加
+        shared_store = SharedStoreActor.options(
+            name="SharedStoreActor", 
+            lifetime="detached", 
+            num_cpus=0,
+            scheduling_strategy=ray.util.scheduling_strategies.NodeAffinitySchedulingStrategy(
+                node_id=ray.get_runtime_context().get_node_id(),
+                soft=False
+            )
+        ).remote()
         print("[Orchestrator] 共有金庫 (SharedStoreActor) を新しく作成しました。")
     except ValueError:
         shared_store = ray.get_actor("SharedStoreActor")
@@ -174,6 +184,8 @@ def main():
         cmd = ["python3", "-u", "run_manager.py", "--type", scenario_name, "--mode", run_mode]
         if focus_points:
             cmd.extend(["--focus_points", json.dumps(focus_points)])
+        if headless_host:
+            cmd.append("--headless")
             
         host_worker_proc = subprocess.Popen(cmd, env=env, stdout=host_worker_log, stderr=subprocess.STDOUT)
         print(f"[Orchestrator] ホストワーカーのコンソール出力は {log_path} に記録されます。")

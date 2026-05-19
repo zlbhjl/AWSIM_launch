@@ -126,6 +126,7 @@ class ClusterManager:
                     f"mkdir -p ~/simulation_traces_{c_name} && chmod 777 ~/simulation_traces_{c_name}; "
                     f"docker run -d -it --name {c_name} --user {c_user} --net=host --privileged --gpus all --shm-size=32gb "
                     f"-e NVIDIA_DRIVER_CAPABILITIES=all -e __NV_PRIME_RENDER_OFFLOAD=1 -e __GLX_VENDOR_LIBRARY_NAME=nvidia "
+                    f"-e RAY_gcs_rpc_server_reconnect_timeout_s=600 -e RAY_gcs_server_request_timeout_seconds=600 "
                     # [追加] CycloneDDSの通信バッファを拡張し、大容量データ(点群等)のパケットドロップによる遅延を防ぐ
                     #f"-e RMW_IMPLEMENTATION=rmw_cyclonedds_cpp "
                     #f"-e CYCLONEDDS_URI=\"<CycloneDDS><Domain><Internal><MinimumSocketReceiveBufferSize>10485760</MinimumSocketReceiveBufferSize></Internal></Domain></CycloneDDS>\" "

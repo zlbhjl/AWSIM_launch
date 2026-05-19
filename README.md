@@ -64,12 +64,16 @@ python3 master_orchestrator.py --type uturn --mode explore
 
 # 【ホスト併用モード】21号機のみ画面を表示して直接検証し、他のワーカーはコンテナで実行する場合
 python3 master_orchestrator.py --type uturn --mode explore --with_host_worker
-```
+
+# 21号機をホストOSで動かすが、画面は出さずに完全に裏で回す場合
+python3 master_orchestrator.py --type uturn --mode explore --with_host_worker --headless_host
+
+# (任意) 上記をバックグラウンドで永続稼働させる場合
+nohup python3 master_orchestrator.py --type uturn --mode explore --with_host_worker --headless_host > orchestrator_out.log 2>&1 &
 
 # 【マージンモード】過去のデータからAIの学習のみを行い、「安全領域の死角」だけを潰すことに特化する場合
 python3 master_orchestrator.py --type uturn --mode margin
 
-```bash
 # Config (uturn.py) 内に定義された FOCUS_POINTS を使用する場合
 python3 run_manager.py --type uturn --mode focus
 
@@ -80,7 +84,7 @@ python3 master_orchestrator.py --type uturn --mode focus
 ```
 
 ### 3. チェッカープロセスの起動 (別ターミナル)
-生成されたシミュレーションデータ (JSON) をリアルタイムで監視し、安全性を判定するために、別のターミナルでチェッカーを起動してください。
+生成されたシミュレーションデータ (JSON)を手動で安全性を判定するために、ターミナルでチェッカーを使ってくださいしてください。
 
 ```bash
 python3 awchecker.py --type uturn

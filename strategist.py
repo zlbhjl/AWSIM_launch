@@ -45,6 +45,10 @@ class ActiveLearningStrategist:
         self.step2_exploration_count = 0
         self.current_phase = "STEP3" if self.run_mode == "margin" else "STEP1"
         self.dispatched_task_count = 0
+        
+        # [追加] AIの重い処理を減らすためのタスクキャッシュ機構
+        self.task_cache = []
+        self.CACHE_SIZE = 5
 
     def get_sobol_point(self, index):
         sampler = qmc.Sobol(d=self.dim, scramble=True, seed=42)
@@ -91,6 +95,11 @@ class ActiveLearningStrategist:
         return is_stable, shift_rate
 
     def decide_next_target(self):
+        # キャッシュされたタスクがあればAIの重い計算をスキップして即座に返す
+        if self.task_cache:
+            self.dispatched_task_count += 1
+            return self.task_cache.pop(0)
+            
         df_dataset = self.estimator.load_dataset()
         
         # [修正] 行数ではなく、CSVに記録されている最大のループ番号と同期させる（データ欠損対策）
@@ -173,6 +182,8 @@ class ActiveLearningStrategist:
         # [修正] ギリギリの境界だけでなく、「安全」と予測されている領域全体(mean <= 0.5)を対象とする
         safe_idx = np.where(mean <= 0.5)[0]
 
+        best_indices = []
+
         if self.current_phase == "STEP3":
             if len(safe_idx) > 0:
                 max_std = np.max(std[safe_idx])
@@ -182,30 +193,38 @@ class ActiveLearningStrategist:
                     self._print_final_report(current_idx, best_target, "安全領域の死角(不確実性)を完全に排除しました")
                     return {"system_command": "stop", "reason": "Safe Area Verification Complete"}
                 
-                best_idx = safe_idx[np.argmax(std[safe_idx])]
+                # [修正] 最大不確実性を持つ上位のインデックスを複数取得してキャッシュ用にする
+                sorted_idx = np.argsort(std[safe_idx])[::-1]
+                best_indices = safe_idx[sorted_idx[:self.CACHE_SIZE]]
                 reason = f"STEP3: Safe Area Cleanup (σ={max_std:.4f})"
             else:
                 print(f"[Strategist] STEP3 | 安全と予測される領域がありません。バックアップ探索を実施します。")
-                best_idx = np.argmax(std)
-                reason = f"STEP3: Backup Search (M:{mean[best_idx]:.2f})"
+                sorted_idx = np.argsort(std)[::-1]
+                best_indices = sorted_idx[:self.CACHE_SIZE]
+                reason = f"STEP3: Backup Search (M:{mean[best_indices[0]]:.2f})"
         else:
             dice = np.random.rand()
             if dice < 0.3:
-                best_idx = np.argmax(std)
+                sorted_idx = np.argsort(std)[::-1]
+                best_indices = sorted_idx[:self.CACHE_SIZE]
                 reason = "STEP2: Exploration (Max σ)"
             else:
-                best_idx = np.argmin(np.abs(mean - 0.5))
+                sorted_idx = np.argsort(np.abs(mean - 0.5))
+                best_indices = sorted_idx[:self.CACHE_SIZE]
                 reason = "STEP2: Boundary 0.5"
         
         if current_idx >= self.MAX_SAMPLES:
             return {"system_command": "stop", "reason": "Max Samples Reached"}
 
-        best_point = candidates[best_idx]
-        result = {name: best_point[i] for i, name in enumerate(self.param_names)}
-        result["reason"] = "[FOCUS] " + reason if self.FOCUS_POINTS else reason
+        # 選ばれた上位の候補をキャッシュに保存
+        for b_idx in best_indices:
+            best_point = candidates[b_idx]
+            result = {name: best_point[i] for i, name in enumerate(self.param_names)}
+            result["reason"] = "[FOCUS] " + reason if self.FOCUS_POINTS else reason
+            self.task_cache.append(result)
         
         self.dispatched_task_count += 1
-        return result
+        return self.task_cache.pop(0)
 
     def _print_final_report(self, num_samples, target, reason):
         print("\n" + "="*60 + f"\n🎉 [検証完了] {reason}\n" + "="*60)
