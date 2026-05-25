@@ -1,0 +1,419 @@
+load kinematic
+
+view GTVehicle from TRIV to GROUND-TRUTH-VEHICLE is
+  sort Elt to GTVehicle .
+endv 
+view PObject from TRIV to PERCEPTION-OBJECT is
+  sort Elt to PObject .
+endv
+view BBPObject from TRIV to BOUNDING-BOX-PERCEPTION-OBJECT is
+  sort Elt to BBPObject .
+endv
+
+fmod GTVEHICLE-AND-NULL is
+  pr VECTOR3-AND-NULL + RECT-AND-NULL .
+  pr MAYBE{GTVehicle} * (op maybe{GTVehicle} to nullGTVehicle) .
+  op gtPosition : Maybe{GTVehicle} -> Maybe{Vector3} .
+  op gtLinearVel : Maybe{GTVehicle} -> Maybe{Vector3} .
+  op gtAccel : Maybe{GTVehicle} -> Maybe{Vector3} .
+  op gtRectOnCamera : Maybe{GTVehicle} -> Maybe{Rect} .
+  op gtYawAngle : Maybe{GTVehicle} -> Maybe{Float} .
+
+  eq gtPosition(nullGTVehicle) = nullVector3 .
+  eq gtLinearVel(nullGTVehicle) = nullVector3 .
+  eq gtAccel(nullGTVehicle) = nullVector3 .
+  eq gtRectOnCamera(nullGTVehicle) = nullRect .
+endfm
+
+fmod POBJECT-AND-NULL is
+  pr MAYBE{PObject} * (op maybe{PObject} to nullPObject) .
+endfm
+fmod BBPOBJECT-AND-NULL is
+  pr MAYBE{BBPObject} * (op maybe{BBPObject} to nullBBPObject) .
+endfm
+
+mod AWSTATE is
+  pr GROUND-TRUTH-EGO + SET{GTVehicle} + SET{PObject} + SET{BBPObject} .
+  pr SET{String} .
+  pr RECT-AND-NULL + GTVEHICLE-AND-NULL + POBJECT-AND-NULL + BBPOBJECT-AND-NULL .
+  pr MAP{String, Vector3} .
+
+  sort AWState .
+  op _|_|_|_|_ : Float GTEgo Set{GTVehicle} Set{PObject} Set{BBPObject} -> AWState [ctor] .
+
+  --- vehicles dimensions
+  op gtSizes : -> Map{String, Vector3} .
+  op gtCenters : -> Map{String, Vector3} .
+
+  --- variables
+  vars GTVes : Set{GTVehicle} .
+  var POBJs : Set{PObject} .
+  var BBPOBJs : Set{BBPObject} .
+  vars GTVe : GTVehicle .
+  var GTEg : GTEgo .
+  vars POBJ POBJ2 : PObject .
+  vars BBPOBJ BBPOBJ2 : BBPObject .
+  vars POSE POSE2 : Pose .
+  vars TWIST ACCEL TWIST2 ACCEL2 : Twist .
+  vars X Y Z D DLA DLO DLO2 SPEED SPEED2 DIS DIS0 DIS2 X2 T T2 Y2 Z2 PROB W H W2 H2 : Float .
+  vars CX CY CZ EX EY EZ CX2 CY2 CZ2 EX2 EY2 EZ2 ANGLE ANGLE2 SLA2 SLO SLO2 F F2 IOU : Float .
+  vars V V2 V3 V4 P P2 V5 V6 : Vector3 .
+  vars VERTICES VERTICES2 VERTICES3 VERTICES4 : List{Vector2} .
+  vars STR STR2 : String .
+  vars AWST : AWState .
+  vars UUID : String .
+  vars CLS : Set{Class} .
+  vars N N2 : Nat .
+  vars RECT RECT2 : Rect .
+  vars VTX VTX2 VEL VEL2 : Vector2 .
+
+--- PROJECTION FUNCTIONS ---
+----------------------------
+  op timeStamp : AWState -> Float .
+  op gtEgo : AWState String -> GTEgo .
+  op gtVehicle : AWState String -> Maybe{GTVehicle} .
+  op gtPosition : AWState String -> Maybe{Vector3} .
+  op gtCenterPosition : AWState String -> Maybe{Vector3} .
+  op gtLinearVel : AWState String -> Maybe{Vector3} .
+  op gtSpeed : AWState String -> Maybe{Float} .
+  op gtRectOnCamera : AWState String -> Maybe{Rect} .
+  op gtYawAngle : AWState String -> Maybe{Float} .
+  op gtAccel : AWState String -> Maybe{Vector3} .
+  op gtAccelScalar : AWState String -> Maybe{Float} .
+  op closestDetectedObject : AWState String -> Maybe{PObject} .
+  op allNPCVehicles : AWState -> Set{String} .
+
+  --- perception-related
+  op perpPosition : AWState String -> Maybe{Vector3} .
+  op perpYawAngle : AWState String -> Maybe{Float} .
+  op perpLinearVel : AWState String -> Maybe{Vector3} .
+  op perpSpeed : AWState String -> Maybe{Float} .
+  op perpBoxShape : AWState String -> Maybe{Vector3} .
+  op best-IOU-ratio : AWState String -> Float .
+
+  op init : -> AWState .
+
+  --- eq startTime = timeStamp(init) .
+  eq timeStamp(T | GTEg | GTVes | POBJs | BBPOBJs) = T .
+  eq gtEgo(T | GTEg | GTVes | POBJs | BBPOBJs, STR) = GTEg .
+  ceq gtVehicle(T | GTEg | (GTVe, GTVes) | POBJs | BBPOBJs, STR) = GTVe
+    if name(GTVe) == STR .
+  eq gtVehicle(T | GTEg | GTVes | POBJs | BBPOBJs, STR) = nullGTVehicle [owise] .
+
+  eq gtPosition(T | GTEg | GTVes | POBJs | BBPOBJs, STR) = 
+    if STR == "ego"
+    then gtPosition(GTEg)
+    else gtPosition(gtVehicle(T | GTEg | GTVes | POBJs | BBPOBJs, STR))
+    fi .
+
+  ceq gtCenterPosition(T | GTEg | GTVes | POBJs | BBPOBJs, STR) = X Y z(P)
+    if P := gtPosition(T | GTEg | GTVes | POBJs | BBPOBJs, STR) /\
+       ANGLE := gtYawAngle(T | GTEg | GTVes | POBJs | BBPOBJs, STR) /\
+       V := gtCenters[STR] /\
+       vector2(X,Y) := centerPoint(P, ANGLE, V) .
+  eq gtCenterPosition(AWST, STR) = nullVector3 [owise] .
+
+  eq gtLinearVel(T | GTEg | GTVes | POBJs | BBPOBJs, STR) = 
+    if STR == "ego"
+    then gtLinearVel(GTEg)
+    else gtLinearVel(gtVehicle(T | GTEg | GTVes | POBJs | BBPOBJs, STR))
+    fi .
+
+  ceq gtSpeed(T | GTEg | GTVes | POBJs | BBPOBJs, STR) = magnitudeIgnoreZ(V) 
+    if V := gtLinearVel(T | GTEg | GTVes | POBJs | BBPOBJs, STR) .
+  eq gtSpeed(AWST, STR) = nullFloat [owise] .
+
+  eq gtRectOnCamera(T | GTEg | GTVes | POBJs | BBPOBJs, STR) = 
+    if STR == "ego"
+    then nullRect
+    else gtRectOnCamera(gtVehicle(T | GTEg | GTVes | POBJs | BBPOBJs, STR))
+    fi .
+
+  eq gtYawAngle(T | GTEg | GTVes | POBJs | BBPOBJs, STR) = 
+    if STR == "ego"
+    then gtYawAngle(GTEg)
+    else gtYawAngle(gtVehicle(T | GTEg | GTVes | POBJs | BBPOBJs, STR))
+    fi .
+
+  eq gtAccel(T | GTEg | GTVes | POBJs | BBPOBJs, STR) = 
+    if STR == "ego"
+    then gtAccel(GTEg)
+    else gtAccel(gtVehicle(T | GTEg | GTVes | POBJs | BBPOBJs, STR))
+    fi .
+  ceq gtAccelScalar(T | GTEg | GTVes | POBJs | BBPOBJs, STR) = 
+      dot(normalize(V), V2)
+    if V := gtLinearVel(T | GTEg | GTVes | POBJs | BBPOBJs, STR) /\
+      V2 := gtAccel(T | GTEg | GTVes | POBJs | BBPOBJs, STR) .
+  eq gtAccelScalar(AWST, STR) = nullFloat [owise] .
+
+  ceq closestDetectedObject(T | GTEg | GTVes | POBJs | BBPOBJs, STR) = POBJ
+    if P := gtCenterPosition(T | GTEg | GTVes | POBJs | BBPOBJs,  STR) /\
+      POBJ := closestDetectedVeh(P, POBJs) .
+  eq closestDetectedObject(AWST, STR) = nullPObject [owise] .
+
+  eq allNPCVehicles(T | GTEg | empty | POBJs | BBPOBJs) = empty .
+  eq allNPCVehicles(T | GTEg | (GTVe , GTVes) | POBJs | BBPOBJs) = 
+    name(GTVe) , allNPCVehicles(T | GTEg | GTVes | POBJs | BBPOBJs) .
+
+  --- perception-related
+  ceq perpPosition(AWST, STR) = position(POBJ)
+    if POBJ := closestDetectedObject(AWST, STR) .
+  ceq perpYawAngle(AWST, STR) = yawAngle(POBJ)
+    if POBJ := closestDetectedObject(AWST, STR) .
+  ceq perpLinearVel(AWST, STR) = linearVel(POBJ)
+    if POBJ := closestDetectedObject(AWST, STR) .
+  ceq perpSpeed(AWST, STR) = magnitude(V)
+    if V := perpLinearVel(AWST, STR) .
+  ceq perpBoxShape(AWST, STR) = V
+    if POBJ := closestDetectedObject(AWST, STR) /\
+       box-shape(V) := shape(POBJ) .
+  --- if the ground truth bounding box is not available, return 1.0 as best IOU ratio
+  ceq best-IOU-ratio(AWST, STR) = 1.0
+    if gtRectOnCamera(AWST, STR) == nullRect .
+  ceq best-IOU-ratio(AWST, STR) = 1.0
+    if gtRectOnCamera(AWST, STR) == 0.0 0.0 0.0 0.0 .
+  ceq best-IOU-ratio(T | GTEg | GTVes | POBJs | BBPOBJs, STR) = bestIOURatio(RECT, BBPOBJs)
+    if RECT := gtRectOnCamera(T | GTEg | GTVes | POBJs | BBPOBJs, STR) /\
+      RECT =/= 0.0 0.0 0.0 0.0 .
+
+--- PREDICATES and OP for PROPOSITIONS ---
+------------------------------------------
+  op collision : AWState String String -> Bool .
+  --- ground truth position difference
+  op pos-diff : AWState String String -> Maybe{Vector3} .
+  op center-pos-diff : AWState String String -> Maybe{Vector3} .
+  --- time to collision
+  op ttc : AWState String -> Float .
+  --- time headway
+  op thw : AWState String -> Float .
+
+  ceq collision(AWST, STR, STR2) =
+      collision(VERTICES, VERTICES2)
+    if P := gtPosition(AWST, STR) /\
+       ANGLE := gtYawAngle(AWST, STR) /\
+       V := gtCenters[STR] /\
+       V2 := gtSizes[STR] /\
+       VERTICES := 2DShapeRotatedVertices(P, ANGLE, V, V2) /\
+       P2 := gtPosition(AWST, STR2) /\
+       ANGLE2 := gtYawAngle(AWST, STR2) /\
+       V3 := gtCenters[STR2] /\
+       V4 := gtSizes[STR2] /\
+       VERTICES2 := 2DShapeRotatedVertices(P2, ANGLE2, V3, V4) .
+
+  ceq pos-diff(AWST, STR, STR2) = (P - P2)
+    if P  := gtPosition(AWST,STR) /\
+       P2 := gtPosition(AWST,STR2) .
+  ceq center-pos-diff(AWST, STR, STR2) = (P - P2)
+    if P  := gtCenterPosition(AWST,STR) /\
+       P2 := gtCenterPosition(AWST,STR2) .
+
+  ceq thw(AWST, STR) =
+      if X == 0.0
+      then infiniteF
+      else magnitude(P) / X 
+      fi
+    if P := pos-diff(AWST, STR, "ego") /\
+       X := gtSpeed(AWST, "ego") . 
+  
+  op TTC-BOUND : -> Float .
+  eq TTC-BOUND = 5.0 .
+  --- TTC calculation based on constant velocity model
+  --- Limitations:
+  --- + only consider 2D positions (ignore Z)
+  --- + non-lightweight calculation, and not precise
+  --- + either return a 1-precision float value less than TTC-BOUND or infiniteF; where infiniteF means no collision within TTC-BOUND
+  ceq ttc(AWST, STR) = estimate-ttc(VERTICES, vector3To2(V5), VERTICES2, vector3To2(V6))
+    if P := gtPosition(AWST, STR) /\
+       ANGLE := gtYawAngle(AWST, STR) /\
+       V := gtCenters[STR] /\
+       V2 := gtSizes[STR] /\
+       VERTICES := 2DShapeRotatedVertices(P, ANGLE, V, V2) /\
+       V5 := gtLinearVel(AWST, STR) /\
+       P2 := gtPosition(AWST, "ego") /\
+       ANGLE2 := gtYawAngle(AWST, "ego") /\
+       V3 := gtCenters["ego"] /\
+       V4 := gtSizes["ego"] /\
+       VERTICES2 := 2DShapeRotatedVertices(P2, ANGLE2, V3, V4) /\
+       V6 := gtLinearVel(AWST, "ego") .
+
+  eq collision(AWST, STR, STR2) = false [owise] .
+  eq pos-diff(AWST, STR, STR2) = nullVector3 [owise] .
+  eq center-pos-diff(AWST, STR, STR2) = nullVector3 [owise] .
+  eq ttc(AWST, STR) = infiniteF [owise] .
+  eq thw(AWST, STR) = infiniteF [owise] .
+
+  eq perpPosition(AWST, STR) = nullVector3 [owise] .
+  eq perpYawAngle(AWST, STR) = nullFloat [owise] .
+  eq perpLinearVel(AWST, STR) = nullVector3 [owise] .
+  eq perpSpeed(AWST, STR) = nullFloat [owise] .
+  eq perpBoxShape(AWST, STR) = nullVector3 [owise] .
+
+
+--- FOR PERCEPTION-BASED PROPOSITIONS ---
+----------------------------------------
+  op perp-pos-diff : AWState String -> Maybe{Vector3} .
+  --- rotation, yaw component
+  op perp-rota-diff : AWState String -> Maybe{Float} .
+  op perp-speed-diff : AWState String -> Maybe{Float} .
+  op perp-shapelength-diff : AWState String -> Maybe{Float} .
+  op perp-shapewidth-diff : AWState String -> Maybe{Float} .
+
+  ceq perp-pos-diff(AWST, STR) = (P - P2)
+    if P := gtCenterPosition(AWST, STR) /\
+      P2 := perpPosition(AWST, STR) .
+
+  ceq perp-rota-diff(AWST, STR) = abs(ANGLE - ANGLE2)
+    if POBJ := closestDetectedObject(AWST, STR) /\
+      ANGLE := gtYawAngle(AWST, STR) /\
+      ANGLE2 := yawAngle(POBJ) .
+
+  ceq perp-speed-diff(AWST, STR) = abs(X - X2)
+    if X := gtSpeed(AWST, STR) /\
+      X2 := perpSpeed(AWST, STR) .
+
+  ceq perp-shapelength-diff(AWST, STR) = abs(X - X2)
+    if X Y Z := gtSizes[STR] /\
+      X2 Y2 Z2 := perpBoxShape(AWST, STR) .
+
+  ceq perp-shapewidth-diff(AWST, STR) = abs(Y - Y2)
+    if X Y Z := gtSizes[STR] /\
+      X2 Y2 Z2 := perpBoxShape(AWST, STR) .
+
+  eq perp-pos-diff(AWST, STR) = nullVector3 [owise] .
+  eq perp-rota-diff(AWST, STR) = nullFloat [owise] .
+  eq perp-speed-diff(AWST, STR) = nullFloat [owise] .
+
+  --- HELPER FUNCTIONS ---
+  ------------------------
+  --- given a position, find nearest detected object
+  --- returns single object if it exists, otherwise, null
+  op closestDetectedVeh : Vector3 Set{PObject} -> Maybe{PObject} .
+  op closestDetectedVeh : Vector3 Set{PObject} Float PObject -> Maybe{PObject} .
+  ceq closestDetectedVeh(P,  (POBJ, POBJs)) =
+      closestDetectedVeh(P, POBJs, distance(P, position(POBJ)), POBJ) 
+    if isVehicleClass(class(POBJ)) .
+  eq closestDetectedVeh(P, POBJs) = nullPObject [owise] .
+
+  ceq closestDetectedVeh(P,  (POBJ2, POBJs),  F, POBJ) = 
+      if F2 < F and isVehicleClass(class(POBJ2))
+      then closestDetectedVeh(P, POBJs, F2, POBJ2)
+      else closestDetectedVeh(P, POBJs, F, POBJ)
+      fi 
+    if F2 := distance(P, position(POBJ2)) .
+  eq closestDetectedVeh(P, POBJs, F, POBJ) = POBJ [owise] .
+
+  --- given a rect and a set of 2D bounding box detected objects, find the best IOU ratio
+  op bestIOURatio : Rect Set{BBPObject} -> Float .
+  op bestIOURatio : Rect Set{BBPObject} Float -> Float .
+  eq bestIOURatio(RECT, BBPOBJs) = bestIOURatio(RECT, BBPOBJs, 0.0) .
+  ceq bestIOURatio(RECT,  (BBPOBJ2, BBPOBJs),  F) = 
+      if IOU > F and isVehicleClass(class(BBPOBJ2))
+      then bestIOURatio(RECT, BBPOBJs, IOU)
+      else bestIOURatio(RECT, BBPOBJs, F)
+      fi 
+    if IOU := IOURatio(RECT, bbRect(BBPOBJ2)) .
+  eq bestIOURatio(RECT, BBPOBJs, F) = F [owise] .
+
+  --- TTC estimation based on constant velocity model
+  ---               vertices_1     velocity_1  vertices_2     velocity_2
+  op estimate-ttc : List{Vector2}  Vector2     List{Vector2}  Vector2 -> Float .
+  op estimate-ttc : List{Vector2}  Vector2     List{Vector2}  Vector2 Float -> Float .
+  eq estimate-ttc(VERTICES, VEL, VERTICES2, VEL2) = 
+      estimate-ttc(VERTICES, VEL, VERTICES2, VEL2, 0.0) .
+  ceq estimate-ttc(VERTICES, VEL, VERTICES2, VEL2, F) = infiniteF
+    if F >= TTC-BOUND .
+  ceq estimate-ttc(VERTICES, VEL, VERTICES2, VEL2, F) =
+      if collision(VERTICES3, VERTICES4)
+      then F
+      else estimate-ttc(VERTICES, VEL, VERTICES2, VEL2, F + 0.1)
+      fi
+    if F < TTC-BOUND /\
+       VERTICES3 := moveVertices(VERTICES, VEL, F) /\
+       VERTICES4 := moveVertices(VERTICES2, VEL2, F) .
+
+  --- move vertices by velocity vector
+  op moveVertices : List{Vector2} Vector2 Float -> List{Vector2} .
+  eq moveVertices(nil, VEL, T) = nil .
+  eq moveVertices((VTX VERTICES), VEL, T) = (VTX + T * VEL) moveVertices(VERTICES, VEL, T) .
+
+  ---              root position  yaw angle   center offset
+  op centerPoint : Vector3        Float       Vector3      -> Vector2 .
+  eq centerPoint(P, ANGLE, V) = 
+      rotatePoint(vector2(0.0, 0.0),
+                  ANGLE,
+                  vector2(x(V), y(V))) +
+      vector2(x(P), y(P)) .
+
+  ---                   root position  yaw angle   center offset  size
+  op frontCenterPoint : Vector3        Float       Vector3        Vector3      -> Vector2 .
+  eq frontCenterPoint(P, ANGLE, V, V2) = 
+      rotatePoint(vector2(0.0, 0.0),
+                  ANGLE,
+                  vector2(x(V) + x(V2) / 2.0, y(V) + y(V2) / 2.0)) +
+      vector2(x(P), y(P)) .
+
+  ---                  root position  yaw angle   center offset  size
+  op frontLeftPoint  : Vector3        Float       Vector3        Vector3      -> Vector2 .
+  op frontRightPoint : Vector3        Float       Vector3        Vector3      -> Vector2 .
+  op backLeftPoint   : Vector3        Float       Vector3        Vector3      -> Vector2 .
+  op backRightPoint  : Vector3        Float       Vector3        Vector3      -> Vector2 .
+  eq frontLeftPoint(P, ANGLE, V, V2) = 
+      rotatePoint(vector2(0.0, 0.0),
+                  ANGLE,
+                  vector2(x(V) + x(V2) / 2.0, y(V) + y(V2) / 2.0)) +
+      vector2(x(P), y(P)) .
+  eq frontRightPoint(P, ANGLE, V, V2) = 
+      rotatePoint(vector2(0.0, 0.0),
+                  ANGLE,
+                  vector2(x(V) + x(V2) / 2.0, y(V) - y(V2) / 2.0)) +
+      vector2(x(P), y(P)) .
+  eq backLeftPoint(P, ANGLE, V, V2) = 
+      rotatePoint(vector2(0.0, 0.0),
+                  ANGLE,
+                  vector2(x(V) - x(V2) / 2.0, y(V) + y(V2) / 2.0)) +
+      vector2(x(P), y(P)) .
+  eq backRightPoint(P, ANGLE, V, V2) = 
+      rotatePoint(vector2(0.0, 0.0),
+                  ANGLE,
+                  vector2(x(V) - x(V2) / 2.0, y(V) - y(V2) / 2.0)) +
+      vector2(x(P), y(P)) .
+
+  ---                         root position  yaw angle  center offset  size
+  op 2DShapeRotatedVertices : Vector3        Float      Vector3        Vector3      -> List{Vector2} .
+  eq 2DShapeRotatedVertices(P, ANGLE, V, V2) =
+      backLeftPoint(P, ANGLE, V, V2)
+      backRightPoint(P, ANGLE, V, V2)
+      frontRightPoint(P, ANGLE, V, V2)
+      frontLeftPoint(P, ANGLE, V, V2) .
+
+
+  eq gtCenters = 
+    ("npc1" |-> 1.43 0.0 0.85 ) .
+  op test : -> AWState .
+  eq test = 0.0 | {pose: {posi: 0.0 0.1 0.2, rota: 1.0 1.1 1.2}, 
+                   twist: {lin: 0.0 0.3 0.0, ang: 0.0 0.0 0.0}, 
+                   accel: {lin: 0.0 0.0 0.0, ang: 0.0 0.0 0.0}} |
+                  {name: "npc1", 
+                   pose: {posi: 0.0 0.0 0.2, rota: 0.0 0.0 90.0}, 
+                   twist: {lin: 1.0 1.0 0.1, ang: 0.0 0.0 0.0}, 
+                   accel: 0.0, 
+                   gt-rect: 0.0 0.0 10.0 20.0 } |
+                  {id: "id 123 ", 
+                   epro: 0.101, 
+                   class: [1 -> 0.4], 
+                   pose: {posi: 0.0 0.1 0.2, rota: 1.0 1.1 1.2}, 
+                   twist: {lin: 0.0 0.0 0.0, ang: 0.0 0.0 0.0}, 
+                   accel: {lin: 0.0 0.0 0.0, ang: 0.0 0.0 0.0}, 
+                   shape: box-shape(1.2 2.0 2.3)} |
+                  {epro: 0.91,
+                   class: [1 -> 0.5],
+                   bb-rect: 0.0 0.0 8.0 20.0} .
+endm
+
+
+--- red gtSpeed(test, "npc1") .
+--- red gtPosition(test, "ego") .
+--- red gtLinearVel(test, "npc1") .
+--- red gtCenterPosition(test, "npc1") .
+--- red allNPCVehicles(test) .
+--- red best-IOU-ratio(test, "npc1") .

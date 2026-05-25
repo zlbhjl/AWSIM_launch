@@ -1,0 +1,123 @@
+load machine
+in model-checker .
+
+mod PROPOSITIONS is
+  pr AWSTATE .
+  inc SATISFACTION .
+  inc MODEL-CHECKER .
+  inc LTL-SIMPLIFIER .
+
+  subsort AWState < State .
+  sorts ComparisonOp ComparableExp .
+
+  vars GTVes : Set{GTVehicle} .
+  var POBJs : Set{PObject} .
+  var BBPOBJs : Set{BBPObject} .
+  vars GTVe : GTVehicle .
+  var GTEg : GTEgo .
+  vars POBJ POBJ2 : PObject .
+  vars POSE POSE2 : Pose .
+  vars TWIST ACCEL TWIST2 ACCEL2 : Twist .
+  vars X Y Z SPEED DIS X2 T T2 Y2 DELAY : Float .
+  vars V V2 V3 V4 P P2 : Vector3 .
+  vars STR STR2 : String .
+  vars AWST : AWState .
+  var PROP : Prop .
+  vars COP COP2 : ComparisonOp .
+
+  ops < > <= >= == : -> ComparisonOp [ctor] .
+  op ___ : ComparableExp ComparisonOp Float -> Formula .
+  op compare : Maybe{Float} ComparisonOp Float -> Bool .
+  eq compare(X, <, Y) = (X < Y) .
+  eq compare(X, >, Y) = (X > Y) .
+  eq compare(X, <=, Y) = (X <= Y) .
+  eq compare(X, >=, Y) = (X >= Y) .
+  eq compare(X, ==, Y) = (X == Y) .
+  eq compare(nullFloat, COP, Y) = false .
+
+  op timeStamp : -> ComparableExp .
+
+  --- STANDARD PROPOSITIONS ---
+  op collision : String String -> Prop .
+  op pos-diff : String String -> ComparableExp .
+  op center-pos-diff : String String -> ComparableExp .
+  op ttc : String -> ComparableExp .
+  op thw : String -> ComparableExp .
+  op speed : String -> ComparableExp .
+  op accelScalar : String -> ComparableExp .
+  --- op long-dis : String String -> ComparableExp .
+
+  --- PERCEPTION-BASED PROPOSITIONS ---
+  --- the parameter is NPC name
+  op perp-pos-diff : String -> ComparableExp .
+  op perp-rota-diff : String -> ComparableExp .
+  op perp-speed-diff : String -> ComparableExp .
+  op perp-shapelength-diff : String -> ComparableExp .
+  op perp-shapewidth-diff : String -> ComparableExp .
+  --- 2D bounding box detected by camera
+  op IOU-ratio : String -> ComparableExp .
+
+  ceq AWST |= timeStamp COP T = true
+    if compare(timeStamp(AWST), COP, T) .
+
+  ceq AWST |= collision(STR, STR2) = true
+    if collision(AWST, STR, STR2) .
+  
+  ceq AWST |= pos-diff(STR, STR2) COP X = true
+    if compare(magnitude(pos-diff(AWST, STR, STR2)), COP, X) .
+  ceq AWST |= center-pos-diff(STR, STR2) COP X = true
+    if compare(magnitude(center-pos-diff(AWST, STR, STR2)), COP, X) .
+
+  ceq AWST |= thw(STR) COP X = true
+    if compare(thw(AWST, STR), COP, X) .
+
+  ceq AWST |= ttc(STR) COP X = true
+    if compare(thw(AWST, STR), COP, X) .
+
+  ceq AWST |= speed(STR) COP X = true
+    if compare(gtSpeed(AWST, STR), COP, X) .
+
+  ceq AWST |= accelScalar(STR) COP X = true
+    if compare(gtAccelScalar(AWST, STR), COP, X) .
+  
+  --- ceq AWST |= long-dis(STR, STR2) COP X = true
+  ---   if compare(longDis(AWST, STR, STR2), COP, X) .
+
+  ceq AWST |= perp-pos-diff(STR) COP X = true
+    if compare(magnitude(perp-pos-diff(AWST, STR)), COP, X) .
+  
+  ceq AWST |= perp-rota-diff(STR) COP X = true
+    if compare(perp-rota-diff(AWST, STR), COP, X) .
+  
+  ceq AWST |= perp-speed-diff(STR) COP X = true
+    if compare(perp-speed-diff(AWST, STR), COP, X) .
+  
+  ceq AWST |= perp-shapelength-diff(STR) COP X = true
+    if compare(perp-shapelength-diff(AWST, STR), COP, X) .
+
+  ceq AWST |= perp-shapewidth-diff(STR) COP X = true
+    if compare(perp-shapewidth-diff(AWST, STR), COP, X) .
+  
+  ceq AWST |= IOU-ratio(STR) COP X = true
+    if compare(best-IOU-ratio(AWST, STR), COP, X) .
+
+  eq T | GTEg | GTVes | POBJs | BBPOBJs |= PROP = false [owise] .
+
+  op time-step : -> Nat . --- in milliseconds
+  op next : Formula Nat -> Formula .
+  op nextIterAux : Nat Formula -> Formula .
+  op _within_ms : Formula Nat -> Formula .
+  
+  vars N N2 : Nat .
+  var FO : Formula .
+
+  eq next(FO, 0) = FO .
+  eq next(FO, s(N)) = nextIterAux(s(N), FO) \/ next(FO, N) .
+
+  eq nextIterAux(s(N), FO) = O nextIterAux(N, FO) .
+  eq nextIterAux(0, FO) = FO .
+
+  ceq FO within N ms = next(FO,N2)
+    if N2 := N quo time-step .
+
+endm

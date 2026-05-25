@@ -13,7 +13,24 @@ import importlib
 import ray
 from datetime import datetime
 
+# --- 修正: モジュール検索パスの追加 ---
+LAUNCH_DIR = os.path.dirname(os.path.abspath(__file__))
+if LAUNCH_DIR not in sys.path:
+    sys.path.append(LAUNCH_DIR)
+
+# AW_Kinematics_Extractor 内部のモジュール(phase1_parserなど)を直接importできるようにパスを追加
+AW_EXTRACTOR_DIR = os.path.join(LAUNCH_DIR, "AW_Kinematics_Extractor")
+if AW_EXTRACTOR_DIR not in sys.path:
+    sys.path.append(AW_EXTRACTOR_DIR)
+
 from redis_cluster.cluster_config import MASTER_IP, RAY_PORT
+
+# --- 新規追加: 高速な運動学抽出器のインポート ---
+try:
+    from AW_Kinematics_Extractor.main import AWKinematicsPipeline
+except ImportError as e:
+    print(f"[Warning] AW_Kinematics_Extractor のインポートに失敗しました: {e}")
+    AWKinematicsPipeline = None
 
 def main():
     # ---------------------------------------------------------
@@ -83,7 +100,7 @@ def main():
         label = result_labels[i] if i < len(result_labels) else f"formula_{i+1}"
         metric_config.append({"formula": formula, "header": label})
 
-    all_headers = ["loop_num"] + [m["header"] for m in metric_config]
+    all_headers = ["loop_num", "min_ttc", "min_distance"] + [m["header"] for m in metric_config]
 
     # ---------------------------------------------------------
     # 2. CSVの読み込み・再開位置の特定 (旧バージョンの復元ロジック)
@@ -189,7 +206,7 @@ def main():
 
                 if not is_valid_json:
                     print(f"\n[エラー] {target_file} の書き込みが完了しませんでした（JSON破損）。")
-                    parsed_row = {"loop_num": current_loop}
+                    parsed_row = {"loop_num": current_loop, "min_ttc": -1, "min_distance": -1}
                     for item in metric_config:
                         parsed_row[item["header"]] = -1
                     stats["Error"] += 1
@@ -223,48 +240,80 @@ def main():
                 
                 print(" 完了！ 解析を開始します。")
 
-                # --- 修正の核心部：旧バージョンの実行ロジック ---
-                # main.py ではなく aw_checkerpy.py を1回だけ呼び出し、結果を一括で抽出する
-                command = ["python3", "aw_checkerpy.py", target_path]
-                result = subprocess.run(command, cwd=tool_dir, env=my_env, capture_output=True, text=True)
-                output_log = result.stdout
-                error_log = result.stderr
-
                 parsed_row = {"loop_num": current_loop}
                 is_any_fail = False
                 has_error = False
 
-                for item in metric_config:
-                    formula = item["formula"]
-                    header = item["header"]
+                # --- [高速化] AW-Kinematics-Extractor を用いた即時判定 ---
+                if AWKinematicsPipeline is not None:
+                    # 真の軌道予測に基づく CTRV (等旋回) モードを使用して判定・記録を行う
+                    pipeline = AWKinematicsPipeline(mode="ctrv")
+                    metrics = pipeline.get_metrics(target_path)
+                    min_ttc = metrics["min_ttc"]
+                    min_distance = metrics["min_distance"]
+                    print(f"  [高速抽出] 最小TTC: {min_ttc} 秒 | 最小距離: {min_distance:.4f} m")
+                    parsed_row["min_ttc"] = min_ttc
+                    parsed_row["min_distance"] = min_distance
                     
-                    # 旧バージョンの抽出ロジック（正規表現）
-                    pattern = re.escape(formula) + r".*?Model checking result: (True|False)"
-                    match = re.search(pattern, output_log, re.DOTALL)
-
-                    if match:
-                        val = 0 if match.group(1) == "True" else 1
+                    # --- [追加] 旧Maudeの重い処理を完全にバイパスし、min_ttcから直接ラベルを生成 ---
+                    for item in metric_config:
+                        header = item["header"]
+                        if header == "c_collision":
+                            val = 1 if min_ttc <= 0.0 else 0
+                            if val == 1:
+                                parsed_row["min_distance"] = 0.0
+                        elif header.startswith("c_ttc_"):
+                            try:
+                                threshold = float(header.split("_")[-1])
+                                val = 1 if min_ttc <= threshold else 0
+                            except ValueError:
+                                val = 0
+                        else:
+                            val = 0  # c_npc_stuck 等は除外
+                            
                         parsed_row[header] = val
                         if val == 1:
-                            # NPCスタック等の特定の検証項目が1(異常)になった場合は、システムエラーとして扱う
-                            if "stuck" in header:
-                                has_error = True
-                            else:
-                                is_any_fail = True
-                    else:
-                        parsed_row[header] = -1
-                        has_error = True
-                        # エラーログへの記録
-                        if shared_store:
-                            ray.get(shared_store.log_error_detail.remote(error_detail_log_path, target_file, header, output_log, error_log))
+                            is_any_fail = True
+                else:
+                    min_ttc = None
+                    parsed_row["min_ttc"] = ""
+                    parsed_row["min_distance"] = ""
+
+                    # --- 抽出器が見つからない場合のみ旧AWチェッカ(Maude)を実行 ---
+                    output_log, error_log = "", ""
+                    command = ["python3", "aw_checkerpy.py", target_path]
+                    result = subprocess.run(command, cwd=tool_dir, env=my_env, capture_output=True, text=True)
+                    output_log = result.stdout
+                    error_log = result.stderr
+
+                    for item in metric_config:
+                        formula = item["formula"]
+                        header = item["header"]
                         
-                        # [追加] コンテナローカルにもエラーログを常に保存
-                        try:
-                            with open(error_detail_log_path, "a", encoding="utf-8") as ef:
-                                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                                ef.write(f"[{timestamp}] {target_file} | {header}\nSTDOUT: {output_log}\nSTDERR: {error_log}\n{'-'*30}\n")
-                        except PermissionError:
-                            print(f"[Warning] エラー詳細を {error_detail_log_path} に書き込む権限がありません。")
+                        # 旧バージョンの抽出ロジック（正規表現 / Maude用）
+                        pattern = re.escape(formula) + r".*?Model checking result: (True|False)"
+                        match = re.search(pattern, output_log, re.DOTALL)
+
+                        if match:
+                            val = 0 if match.group(1) == "True" else 1
+                            parsed_row[header] = val
+                            if val == 1:
+                                if "stuck" in header:
+                                    has_error = True
+                                else:
+                                    is_any_fail = True
+                        else:
+                            parsed_row[header] = -1
+                            has_error = True
+                            if shared_store:
+                                ray.get(shared_store.log_error_detail.remote(error_detail_log_path, target_file, header, output_log, error_log))
+                            
+                            try:
+                                with open(error_detail_log_path, "a", encoding="utf-8") as ef:
+                                    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                                    ef.write(f"[{timestamp}] {target_file} | {header}\nSTDOUT: {output_log}\nSTDERR: {error_log}\n{'-'*30}\n")
+                            except PermissionError:
+                                print(f"[Warning] エラー詳細を {error_detail_log_path} に書き込む権限がありません。")
 
                 # --- [追加] 論理的矛盾（TTCのすり抜け）の自動補正 ---
                 # 衝突(c_collision=1)している場合、すべてのTTC指標は1(違反)にする

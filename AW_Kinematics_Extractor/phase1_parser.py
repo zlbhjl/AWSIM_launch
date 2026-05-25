@@ -3,7 +3,8 @@ import numpy as np
 import pandas as pd
 
 class AWKinematicsExtractorPhase1:
-    def __init__(self):
+    def __init__(self, mode="cvm"):
+        self.mode = mode
         # Maude (kinematic.maude / machine.maude) に準拠した定数
         self.VEHICLE_CLASS_MIN = 0
         self.VEHICLE_CLASS_MAX = 6
@@ -60,23 +61,35 @@ class AWKinematicsExtractorPhase1:
             twist = frame.get("groundtruth_ego", {}).get("twist", {})
             lin = twist.get("linear", {})
             
-            # 位置と角度
-            yaw_rad = np.radians(float(rot.get("z", 0.0)))
+            raw_z = float(rot.get("z", 0.0))
+            if self.mode == "maude":
+                # Maudeのバグ: ラジアンを度数と勘違いして再変換する
+                yaw_rad = np.radians(raw_z)
+            else:
+                yaw_rad = raw_z
             
-            # 【重要】速度がローカル座標系である場合を考慮し、グローバル座標系(Map)の速度に変換する
             v_local_x = float(lin.get("x", 0.0))
             v_local_y = float(lin.get("y", 0.0))
-            v_global_x = v_local_x * np.cos(yaw_rad) - v_local_y * np.sin(yaw_rad)
-            v_global_y = v_local_x * np.sin(yaw_rad) + v_local_y * np.cos(yaw_rad)
+            
+            yaw_rate = float(twist.get("angular", {}).get("z", 0.0))
+
+            if self.mode == "maude":
+                # Maudeのバグ再現: 速度を回転させずそのまま加算
+                v_global_x = v_local_x
+                v_global_y = v_local_y
+            else:
+                # 正しい物理演算: 前進速度をYaw角で回転させてMap上のベクトルにする
+                v_global_x = v_local_x * np.cos(yaw_rad) - v_local_y * np.sin(yaw_rad)
+                v_global_y = v_local_x * np.sin(yaw_rad) + v_local_y * np.cos(yaw_rad)
 
             records.append({
                 "timestamp": float(t),
                 "ego_x": float(pos.get("x", 0.0)),
                 "ego_y": float(pos.get("y", 0.0)),
-                # READMEの要件通り、度数法 (Degrees) から ラジアン (Radians) に変換
                 "ego_yaw": yaw_rad, 
                 "ego_vx": v_global_x,
                 "ego_vy": v_global_y,
+                "ego_yaw_rate": yaw_rate,
                 "ego_length": ego_length,
                 "ego_width": ego_width,
                 "ego_offset_x": ego_offset_x,
@@ -86,59 +99,55 @@ class AWKinematicsExtractorPhase1:
         df = pd.DataFrame(records)
         return df.sort_values("timestamp") if not df.empty else df
 
-    def extract_npc_data(self, json_data):
-        """他車(NPC)の認識データを抽出し、フィルタリングしてDataFrame化する"""
+    def extract_npc_data(self, json_data, size_info):
+        """他車(NPC)の真値(GroundTruth)データを抽出し、DataFrame化する"""
         records = []
-        # aw_checkerpy.py に合わせ perception_objects をベースにする
-        frames = json_data.get("perception_objects", [])
+        # Maudeの ttc() 判定に合わせて groundtruth_kinematic をベースにする
+        frames = json_data.get("groundtruth_kinematic", [])
         
         for frame in frames:
             t = frame.get("timestamp")
             if t is None: continue
             
-            objs = frame.get("objects", [])
-            for obj in objs:
-                prob = obj.get("existence_prob", 0.0)
-                
-                # classification がリストである可能性を考慮して先頭要素を取得
-                classes = obj.get("classification", [])
-                cls_id = 0
-                cls_prob = 0.0
-                if isinstance(classes, list) and len(classes) > 0:
-                    # "label"キーがあればそれを、なければ"id"を取得
-                    cls_id = classes[0].get("label", classes[0].get("id", 0))
-                    cls_prob = float(classes[0].get("probability", 0.0))
-                elif isinstance(classes, dict):
-                    cls_id = classes.get("label", classes.get("id", 0))
-                    cls_prob = float(classes.get("probability", 0.0))
-                
-                # サニティチェック: 車両クラス(1〜6) ＆ 確率閾値以上のみを通過
-                if not (self.VEHICLE_CLASS_MIN <= cls_id <= self.VEHICLE_CLASS_MAX):
-                    continue
-                if cls_prob < self.CLASSIFICATION_THRESHOLD:
-                    continue
-                    
-                obj_id = obj.get("id", "unknown")
-                pose = obj.get("pose", {})
+            npcs = frame.get("groundtruth_vehicles", [])
+            for npc in npcs:
+                obj_id = npc.get("name", "unknown")
+                pose = npc.get("pose", {})
                 pos = pose.get("position", {})
                 rot = pose.get("rotation", {})
-                lin = obj.get("twist", {}).get("linear", {})
-                dims = obj.get("shape", {}).get("size", {})
+                twist = npc.get("twist", {})
+                lin = twist.get("linear", {})
                 
-                # 寸法のサニティチェック（異常値はデフォルトで上書き）
-                length = float(dims.get("x", 0.0))
-                width = float(dims.get("y", 0.0))
+                # サイズとオフセットを取得（欠損時はデフォルト値）
+                npc_info = size_info.get(obj_id, {})
+                len_raw = npc_info.get("length", 0.0)
+                wid_raw = npc_info.get("width", 0.0)
+                length = len_raw if len_raw > 0.0 else self.DEFAULT_NPC_LENGTH
+                width = wid_raw if wid_raw > 0.0 else self.DEFAULT_NPC_WIDTH
+                offset_x = float(npc_info.get("offset_x", 0.0))
+                offset_y = float(npc_info.get("offset_y", 0.0))
+                
                 if length <= 0.0: length = self.DEFAULT_NPC_LENGTH
                 if width <= 0.0: width = self.DEFAULT_NPC_WIDTH
                 
-                # 位置と角度
-                yaw_rad = np.radians(float(rot.get("z", 0.0)))
+                raw_z = float(rot.get("z", 0.0))
+                if self.mode == "maude":
+                    yaw_rad = np.radians(raw_z)
+                else:
+                    yaw_rad = raw_z
                 
-                # NPC速度のグローバル座標系への変換
                 v_local_x = float(lin.get("x", 0.0))
                 v_local_y = float(lin.get("y", 0.0))
-                v_global_x = v_local_x * np.cos(yaw_rad) - v_local_y * np.sin(yaw_rad)
-                v_global_y = v_local_x * np.sin(yaw_rad) + v_local_y * np.cos(yaw_rad)
+                
+                yaw_rate = float(twist.get("angular", {}).get("z", 0.0))
+
+                if self.mode == "maude":
+                    # Maudeのバグ再現: 速度を回転させずそのまま加算
+                    v_global_x = v_local_x
+                    v_global_y = v_local_y
+                else:
+                    v_global_x = v_local_x * np.cos(yaw_rad) - v_local_y * np.sin(yaw_rad)
+                    v_global_y = v_local_x * np.sin(yaw_rad) + v_local_y * np.cos(yaw_rad)
 
                 records.append({
                     "timestamp": float(t),
@@ -148,10 +157,11 @@ class AWKinematicsExtractorPhase1:
                     "npc_yaw": yaw_rad,
                     "npc_vx": v_global_x,
                     "npc_vy": v_global_y,
+                    "npc_yaw_rate": yaw_rate,
                     "npc_length": length,
                     "npc_width": width,
-                    "npc_offset_x": 0.0, # 認識オブジェクトは通常バウンディングボックス中心
-                    "npc_offset_y": 0.0
+                    "npc_offset_x": offset_x,
+                    "npc_offset_y": offset_y
                 })
                 
         df = pd.DataFrame(records)
@@ -165,7 +175,7 @@ class AWKinematicsExtractorPhase1:
                 
             size_info = self._parse_sizes_and_offsets(data)
             df_ego = self.extract_ego_data(data, size_info)
-            df_npc = self.extract_npc_data(data)
+            df_npc = self.extract_npc_data(data, size_info)
             
             if df_ego.empty or df_npc.empty:
                 return pd.DataFrame() # 比較対象がいない場合は空を返す
@@ -183,11 +193,38 @@ class AWKinematicsExtractorPhase1:
             # Egoデータが紐付かなかった（許容時間を超えた）NPCの行を削除
             df_aligned = df_aligned.dropna(subset=["ego_x"]).reset_index(drop=True)
             
-            return df_aligned
+            if self.mode == "maude":
+                # Maude と同じ 0.1秒刻みのサンプリングを適用
+                return self._downsample_to_maude_rate(df_aligned)
+            else:
+                # デフォルト: サンプリングせず、全フレームの細かいログをそのまま検査
+                return df_aligned
             
         except Exception as e:
             print(f"[Error] Phase1 Failed on {filepath}: {e}")
             return pd.DataFrame()
+
+    def _downsample_to_maude_rate(self, df: pd.DataFrame, time_step=0.1) -> pd.DataFrame:
+        """Maude (aw_checkerpy.py) と同じ 0.1 秒刻みのサンプリングをエミュレートする"""
+        if df.empty:
+            return df
+            
+        # aw_checkerpy.py の start_time / end_time の計算ロジックを再現
+        start_time = round(df['timestamp'].iloc[0] + 0.05, 1)
+        end_time = round(df['timestamp'].iloc[-1] - 0.05, 1)
+        
+        target_timestamps = np.arange(start_time, end_time + 1e-5, time_step)
+        
+        sampled_indices = []
+        for t in target_timestamps:
+            diffs = np.abs(df['timestamp'] - t)
+            min_diff = diffs.min()
+            if min_diff <= (time_step / 2):
+                sampled_indices.append(diffs.idxmin())
+                
+        # 順番を保ちつつ重複を削除して間引かれた DataFrame を返す
+        sampled_indices = sorted(list(set(sampled_indices)))
+        return df.loc[sampled_indices].reset_index(drop=True)
 
 # 実行テスト用
 if __name__ == "__main__":

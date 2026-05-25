@@ -38,6 +38,37 @@ class ActiveLearningStrategist:
         self.FOCUS_POINTS = focus_points
         self.FOCUS_NOISE = getattr(self.config, 'FOCUS_NOISE', 0.05)
 
+        # --- [追加] JAMAエッジ探索モード: 過去のデータからエッジケースを自動抽出 ---
+        if self.run_mode == "jama_edge":
+            print("[Strategist] 🔍 JAMAエッジ探索モード: 過去のデータセットから人間の安全境界に近い事故を抽出します...")
+            df = self.estimator.load_dataset()
+            if df is not None and not df.empty and 'c_collision' in df.columns and 'theory_margin_a_human' in df.columns:
+                
+                # --- [追加] 可視化ツールに倣った安全なデータクリーニング ---
+                check_cols = ['c_collision', 'theory_margin_a_human'] + self.param_names
+                for col in check_cols:
+                    if col in df.columns:
+                        df[col] = pd.to_numeric(df[col], errors='coerce')
+                df = df.dropna(subset=check_cols)
+                
+                # 衝突の事実(1.0)があり、かつ人間ドライバーの限界マージンが -1.0m 以上 (安全〜境界ギリギリ) のデータを抽出
+                edge_df = df[(df['c_collision'] == 1) & (df['theory_margin_a_human'] > -1.0)]
+                
+                if not edge_df.empty:
+                    extracted_points = []
+                    for _, row in edge_df.iterrows():
+                        point = {name: float(row[name]) for name in self.param_names if name in row}
+                        if len(point) == self.dim and point not in extracted_points:
+                            extracted_points.append(point)
+                    
+                    if extracted_points:
+                        self.FOCUS_POINTS = extracted_points
+                        print(f"[Strategist] 🎯 {len(self.FOCUS_POINTS)} 件のJAMAエッジケースを抽出し、ターゲットに設定しました。")
+                else:
+                    print("[Strategist] ⚠️ 条件に合致するエッジケースはありませんでした。")
+            else:
+                print("[Strategist] ⚠️ データセットが存在しないか、必要な列 (c_collision, theory_margin_a_human) がありません。")
+
         # 状態管理変数
         self.reference_points = self.generate_candidate_points(num=self.STABILITY_REFERENCE_POINTS)
         self.stability_history = []
@@ -48,7 +79,7 @@ class ActiveLearningStrategist:
         
         # [追加] AIの重い処理を減らすためのタスクキャッシュ機構
         self.task_cache = []
-        self.CACHE_SIZE = 5
+        self.CACHE_SIZE = 6
 
     def get_sobol_point(self, index):
         sampler = qmc.Sobol(d=self.dim, scramble=True, seed=42)
@@ -195,7 +226,18 @@ class ActiveLearningStrategist:
                 
                 # [修正] 最大不確実性を持つ上位のインデックスを複数取得してキャッシュ用にする
                 sorted_idx = np.argsort(std[safe_idx])[::-1]
-                best_indices = safe_idx[sorted_idx[:self.CACHE_SIZE]]
+                best_indices = safe_idx[sorted_idx[:self.CACHE_SIZE]].tolist()
+                
+                # [追加] もし安全領域の候補がCACHE_SIZE(6個)に満たない場合、司令塔の推論ループによる詰まりを防ぐため、
+                # 足りない分を全体の不確実性が高い場所から補充して確実に6個確保する。
+                if len(best_indices) < self.CACHE_SIZE:
+                    all_sorted_idx = np.argsort(std)[::-1]
+                    for idx in all_sorted_idx:
+                        if idx not in best_indices:
+                            best_indices.append(idx)
+                        if len(best_indices) >= self.CACHE_SIZE:
+                            break
+                            
                 reason = f"STEP3: Safe Area Cleanup (σ={max_std:.4f})"
             else:
                 print(f"[Strategist] STEP3 | 安全と予測される領域がありません。バックアップ探索を実施します。")

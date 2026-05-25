@@ -93,6 +93,7 @@ python3 awchecker.py --type uturn
 ## 出力データ (Traces)
 テストの実行結果とログは `~/simulation_traces` ディレクトリに出力されます。
 - `{scenario}_dataset.csv`: 共有金庫によって結合された、AIの学習に直結する完全なデータセット (パラメータ + 評価結果 + 理由)。
+  - ※ **最小接近距離 (`min_distance`)**: 事実として車同士が何メートルまで接近したかの最短距離。TTCの予測誤差を排除した物理的なニアミス指標として記録されます。
   - ※ JAMA物理モデルに基づく理論値（`theory_margin_*`, `theory_zone_*` 等）も記録され、シミュレータの実挙動と物理限界の乖離分析に活用できます。アプローチA（壁想定）とアプローチB（NPC前進考慮）の両方が保存されます。
 - `checker_errors_detail.log`: 解析ツールで異常が発生した際の詳細なエラーログ (STDOUT/STDERR)。
 - `{scenario}_test_sim{N}.json`: 各ループのRuntime Monitorの詳細トレースデータ。
@@ -151,14 +152,41 @@ python3 archive_results.py
 ```
 
 ### 実行結果の3D可視化
-実験完了後、生成されたデータセットを3Dグラフで可視化し、安全境界を直感的に確認します。
-```bash
 # 最新の実験結果を可視化する場合
 python3 visualize_traces.py ~/simulation_traces
 
 # 過去に退避させた特定のデータを可視化する場合
 python3 visualize_traces.py ~/simulation_traces_shared_20260512_144346
-```
++```
++
++#### 2. ワーカー別の3Dグラフの生成
++ホスト環境（21号機）とコンテナ環境（22, 23号機）の実行結果を別々の3Dグラフに分割して出力し、環境による結果の偏りがないか確認します。
++```bash
++python3 visualize_traces_split.py ~/simulation_traces
++```
++
++#### 3. ワーカー別の違反確率比較グラフの生成
++ホスト環境とコンテナ環境で、衝突や各TTC違反の発生確率に統計的な差がないかを棒グラフで比較します。
++```bash
++python3 visualize_worker_stats.py ~/simulation_traces
++```
++
++#### 4. JAMA物理モデル理論領域の3D可視化
++JAMA理論に基づく理論的安全領域(Zone)の分布をグラフ化して可視化・分析します。
++```bash
++python3 visualize_jama_zones.py ~/simulation_traces
+
+MIN_TTCの可視化
+python3 visualize_min_ttc.py ~/simulation_traces
+
+# 対象のフォルダ（ディレクトリ）を指定する場合
+python3 compare_ttc_modes.py --dir ~/simulation_traces_shared_20260512_144346
+
+# 出力されるCSVファイルの名前を指定する場合
+python3 compare_ttc_modes.py --output custom_comparison_result.csv
+
+# 両方を指定する場合
+python3 compare_ttc_modes.py --dir ~/my_test_data --output my_test_diff.csv
 
 ### システムの停止・強制終了
 ```bash
@@ -201,3 +229,16 @@ cd /home/passd/autoware && source install/setup.bash && ros2 launch autoware_lau
 
 ## 今後の拡張性
 新しくワーカーPC（例：24号機）を追加したい場合は、`redis_cluster/cluster_config.py` に新しいIPアドレスやコンテナ名、`ROS_DOMAIN_ID` を追記するだけで、システムが全自動でコンテナを構築し、クラスターの計算力（スループット）を向上させます。
+
+
++# 最新のシミュレーションデータで各モデルのTTCを計算し、差分をCSVに出力する場合
++python3 compare_ttc_modes.py
++
+# 対象のフォルダ（ディレクトリ）を指定する場合
+python3 compare_ttc_modes.py --dir ~/simulation_traces_shared_20260512_144346
+
+@@ -143,6 +155,7 @@
+python3 compare_ttc_modes.py --output custom_comparison_result.csv
+
+# 両方を指定する場合
+python3 compare_ttc_modes.py --dir ~/my_test_data --output my_test_diff.csv

@@ -52,11 +52,22 @@ class SharedStoreActor:
         try:
             file_exists = os.path.exists(dataset_file)
             
-            # ヘッダーの順番を一定に保つためソートする
             fieldnames = sorted(full_row.keys())
+            
+            # --- [修正] CSVの列ズレ（文字列の乱れ）を完全に防止する堅牢化処理 ---
+            if file_exists and os.path.getsize(dataset_file) > 0:
+                with open(dataset_file, "r", encoding="utf-8") as f:
+                    reader = csv.reader(f)
+                    try:
+                        existing_headers = next(reader)
+                        # 既存の列順を維持しつつ、新しいキーがあれば末尾に追加
+                        new_keys = [k for k in fieldnames if k not in existing_headers]
+                        fieldnames = existing_headers + new_keys
+                    except StopIteration:
+                        pass
 
             with open(dataset_file, "a", newline="", encoding="utf-8") as f:
-                writer = csv.DictWriter(f, fieldnames=fieldnames)
+                writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction='ignore', restval='')
                 if not file_exists or os.path.getsize(dataset_file) == 0:
                     writer.writeheader()
                 writer.writerow(full_row)
@@ -93,7 +104,7 @@ class SharedStoreActor:
     def flush_timeout_task(self, scenario_name: str, loop_num: int, params_dict: dict, reason: str, result_headers: list):
         """タイムアウトしたタスクをエラーとして記録する"""
         # 結果部分を-1で埋める
-        result_row = {"loop_num": loop_num}
+        result_row = {"loop_num": loop_num, "min_ttc": -1, "min_distance": -1}
         for header in result_headers:
             if header != "loop_num":
                 result_row[header] = -1

@@ -2,11 +2,8 @@ import numpy as np
 import pandas as pd
 
 class GeometryBuilder:
-    def __init__(self):
-        # このクラスは状態を持たなくなりました。
-        # オフセットとサイズは、Phase 1でDataFrameに列として追加されることを前提とします。
-        # これにより、このクラスはステートレスな計算ヘルパーとして機能します。
-        pass
+    def __init__(self, mode="cvm"):
+        self.mode = mode
 
     def calculate_bounding_boxes(self, df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -56,10 +53,6 @@ class GeometryBuilder:
         ベクトル化された回転矩形の計算ロジック (forループなしで全行を瞬時に計算)
         戻り値: shape(N, 4, 2) の三次元NumPy配列 [データ数, 4つの角, X/Y座標]
         """
-        # JSONから抽出された角度は度数法(Degree)のため、ラジアンに変換する
-        yaw = np.deg2rad(yaw)
-
-        # Maudeの `frontLeftPoint`, `backRightPoint` 等のロジックの完全再現
         
         # 車両の中心座標を計算 (オフセットを足す)
         cx = x + offset_x * np.cos(yaw) - offset_y * np.sin(yaw)
@@ -97,3 +90,37 @@ class GeometryBuilder:
         final_boxes = rotated_corners + centers
 
         return final_boxes
+
+    def calculate_distances(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        毎フレームの自車(Ego)と他車(NPC)の厳密なポリゴン間距離(最短距離)をNumPyで計算する
+        """
+        if df.empty or 'ego_box' not in df.columns or 'npc_box' not in df.columns:
+            return df
+            
+        df = df.copy()
+        ego_boxes = np.stack(df['ego_box'].values)
+        npc_boxes = np.stack(df['npc_box'].values)
+        
+        # 各ポリゴンの辺（線分）を構成する始点Aと終点Bを取得
+        ego_A, ego_B = ego_boxes, np.roll(ego_boxes, -1, axis=1)
+        npc_A, npc_B = npc_boxes, np.roll(npc_boxes, -1, axis=1)
+        
+        def point_to_segments_dist(p, a, b):
+            """点pから線分abへの最短距離を計算するベクトル化関数"""
+            p_exp = p[:, :, np.newaxis, :]  # (N, 4, 1, 2)
+            a_exp = a[:, np.newaxis, :, :]  # (N, 1, 4, 2)
+            b_exp = b[:, np.newaxis, :, :]  # (N, 1, 4, 2)
+            
+            ab = b_exp - a_exp
+            ap = p_exp - a_exp
+            
+            t = np.clip(np.sum(ap * ab, axis=-1) / np.maximum(np.sum(ab * ab, axis=-1), 1e-8), 0.0, 1.0)
+            proj = a_exp + t[..., np.newaxis] * ab
+            
+            return np.min(np.linalg.norm(p_exp - proj, axis=-1), axis=(1, 2))
+            
+        # お互いの「角から辺」への最短距離を計算し、その最小値を採用
+        df['distance'] = np.minimum(point_to_segments_dist(ego_boxes, npc_A, npc_B), 
+                                    point_to_segments_dist(npc_boxes, ego_A, ego_B))
+        return df

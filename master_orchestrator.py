@@ -70,7 +70,7 @@ class TaskQueueActor:
 def load_config():
     parser = argparse.ArgumentParser(description="Multi-Scenario Autonomous Driving Test Master Orchestrator")
     parser.add_argument("--type", type=str, default="uturn", help="Scenario type (e.g., uturn, cutin)")
-    parser.add_argument("--mode", type=str, choices=["explore", "focus", "margin"], default="explore", help="Search mode")
+    parser.add_argument("--mode", type=str, choices=["explore", "focus", "margin", "jama_edge"], default="explore", help="Search mode")
     parser.add_argument("--focus_points", type=str, default=None, help="JSON string for focus points")
     parser.add_argument("--with_host_worker", action="store_true", help="Run a local worker on the host machine (ROS_DOMAIN_ID=21, EXEC_MODE=host)")
     parser.add_argument("--headless_host", action="store_true", help="Run the host worker with Xvfb (No GUI)")
@@ -133,7 +133,16 @@ def main():
     
     # 3. 司令塔 (TaskQueueActor) の作成
     try:
-        task_queue = TaskQueueActor.options(name="TaskQueueActor", lifetime="detached", num_cpus=0).remote()
+        # [修正] 司令塔を確実にマスター機(21号機)のローカルで起動させる制約を追加
+        # これにより、ワーカーノード(22, 23号機)がダウンしても司令塔は生き残り、システム全体のクラッシュを防ぎます。
+        task_queue = TaskQueueActor.options(
+            name="TaskQueueActor",
+            lifetime="detached",
+            num_cpus=0,
+            scheduling_strategy=ray.util.scheduling_strategies.NodeAffinitySchedulingStrategy(
+                node_id=ray.get_runtime_context().get_node_id(),
+                soft=False
+            )).remote()
         print("[Orchestrator] 司令塔 (TaskQueueActor) を新しく作成しました。")
         
         # [追加] 過去のデータセットから再開位置を復元
@@ -163,10 +172,11 @@ def main():
         print("[Orchestrator] 既存の共有金庫 (SharedStoreActor) に再接続しました。")
 
     # 5. AI (Strategist) の初期化
-    strategist = ActiveLearningStrategist(scenario_name, cfg, num_candidates=10000, focus_points=focus_points, run_mode=run_mode)
+    # [修正] 候補数(num_candidates)を10000から2000に減らし、AI予測の計算量を削減
+    strategist = ActiveLearningStrategist(scenario_name, cfg, num_candidates=2000, focus_points=focus_points, run_mode=run_mode)
     
     REPEAT_COUNT = getattr(cfg, 'REPEAT_COUNT', 3000)
-    MAX_QUEUE_SIZE = 15  # ワーカーが即座に仕事を取れるよう、常にキューにタスクを蓄えておく
+    MAX_QUEUE_SIZE = 6   # ワーカー(最大3台)が遊ばない最低限のタスクを維持し、AIの更新頻度を高く保つ
 
     # 6. ホストワーカーの直接起動
     host_worker_proc = None
