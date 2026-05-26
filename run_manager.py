@@ -21,7 +21,7 @@ from typing import List, Tuple, Optional
 def load_config():
     parser = argparse.ArgumentParser(description="Multi-Scenario Autonomous Driving Test Manager")
     parser.add_argument("--type", type=str, default="uturn", help="Scenario type (e.g., uturn, cutin)")
-    parser.add_argument("--mode", type=str, choices=["explore", "focus", "margin", "jama_edge"], default="explore", help="Search mode: explore (default), focus, margin, or jama_edge")
+    parser.add_argument("--mode", type=str, choices=["explore", "focus", "margin", "jama_edge", "ttc_edge"], default="explore", help="Search mode: explore (default), focus, margin, jama_edge, or ttc_edge")
     parser.add_argument("--focus_points", type=str, default=None, help="JSON string for focus points (e.g., '[{\"dx0\": 15.0}]')")
     parser.add_argument("--headless", action="store_true", help="Run with Xvfb (No GUI)")
     args = parser.parse_args()

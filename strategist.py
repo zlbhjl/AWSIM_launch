@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 from scipy.stats import qmc  # Sobol配列生成用
 from estimator import SafetyEstimator
+from redis_cluster import cluster_config
 
 class ActiveLearningStrategist:
     def __init__(self, scenario_name, config, num_candidates=10000, focus_points=None, run_mode="explore"):
@@ -69,6 +70,37 @@ class ActiveLearningStrategist:
             else:
                 print("[Strategist] ⚠️ データセットが存在しないか、必要な列 (c_collision, theory_margin_a_human) がありません。")
 
+        # --- [追加] TTCエッジ探索モード: 偶然のニアミスか真の危険境界かを分別 ---
+        elif self.run_mode == "ttc_edge":
+            ttc_threshold = getattr(self.config, 'TTC_EDGE_THRESHOLD', 1.5)
+            print(f"[Strategist] 🔍 TTCエッジ探索モード: 過去のデータから、人間なら安全領域でTTC {ttc_threshold}秒以下のニアミスを抽出します...")
+            df = self.estimator.load_dataset()
+            if df is not None and not df.empty and 'c_collision' in df.columns and 'min_ttc' in df.columns and 'theory_margin_a_human' in df.columns:
+                
+                check_cols = ['c_collision', 'min_ttc', 'theory_margin_a_human'] + self.param_names
+                for col in check_cols:
+                    if col in df.columns:
+                        df[col] = pd.to_numeric(df[col], errors='coerce')
+                df = df.dropna(subset=check_cols)
+                
+                # 衝突していない(0) かつ TTCが閾値以下 かつ 人間なら安全(-1.0m以上)
+                edge_df = df[(df['c_collision'] == 0) & (df['min_ttc'] <= ttc_threshold) & (df['theory_margin_a_human'] > -1.0)]
+                
+                if not edge_df.empty:
+                    extracted_points = []
+                    for _, row in edge_df.iterrows():
+                        point = {name: float(row[name]) for name in self.param_names if name in row}
+                        if len(point) == self.dim and point not in extracted_points:
+                            extracted_points.append(point)
+                    
+                    if extracted_points:
+                        self.FOCUS_POINTS = extracted_points
+                        print(f"[Strategist] 🎯 {len(self.FOCUS_POINTS)} 件のTTCエッジケース(ニアミス)を抽出し、ターゲットに設定しました。")
+                else:
+                    print("[Strategist] ⚠️ 条件に合致するニアミスケースはありませんでした。")
+            else:
+                print("[Strategist] ⚠️ データセットが存在しないか、必要な列 (c_collision, min_ttc, theory_margin_a_human) がありません。")
+
         # 状態管理変数
         self.reference_points = self.generate_candidate_points(num=self.STABILITY_REFERENCE_POINTS)
         self.stability_history = []
@@ -79,7 +111,15 @@ class ActiveLearningStrategist:
         
         # [追加] AIの重い処理を減らすためのタスクキャッシュ機構
         self.task_cache = []
-        self.CACHE_SIZE = 6
+        # 稼働中のマシン(ワーカー)数を動的にカウントし、その2倍を1回の推論で作るバッチサイズ(補充量)とする
+        self.worker_count = sum(1 for node in cluster_config.CLUSTER_NODES.values() if node.get("enabled", True))
+        self.CACHE_SIZE = self.worker_count * 2
+        
+        # フォーカスモードの反復テスト用独立カウンタ（過去のループ数に依存しないようにする）
+        self.focus_exact_test_count = 0
+        
+        # [追加] エラーの無限リカバリー(再試行ループ)を防ぐための記録
+        self.last_recovered_loop = 0
 
     def get_sobol_point(self, index):
         sampler = qmc.Sobol(d=self.dim, scramble=True, seed=42)
@@ -130,9 +170,44 @@ class ActiveLearningStrategist:
         if self.task_cache:
             self.dispatched_task_count += 1
             return self.task_cache.pop(0)
+
+        # [追加] ログ出力用のプレフィックス
+        log_prefix = "[FOCUS] " if self.FOCUS_POINTS else ""
             
         df_dataset = self.estimator.load_dataset()
         
+        # --- [追加] エラーの崖っぷち探索: 新しいエラーが発生していたら少しずらしてリカバリー検証する ---
+        if df_dataset is not None and 'loop_num' in df_dataset.columns:
+            # 文字列混入によるエラーを防ぎつつ、-1 (タイムアウトや異常) のデータを安全に探す
+            min_ttc_numeric = pd.to_numeric(df_dataset['min_ttc'], errors='coerce')
+            c_collision_numeric = pd.to_numeric(df_dataset.get('c_collision', pd.Series(dtype=float)), errors='coerce')
+            
+            error_mask = (min_ttc_numeric == -1) | (c_collision_numeric == -1)
+            new_errors = df_dataset[error_mask & (df_dataset['loop_num'] > self.last_recovered_loop)]
+            
+            if not new_errors.empty:
+                recovery_points = []
+                for _, err_row in new_errors.iterrows():
+                    shifted_point = {}
+                    for name in self.param_names:
+                        rng = self.config.PARAM_RANGES[name][1] - self.config.PARAM_RANGES[name][0]
+                        # 3%の微小ノイズを加えて少しずらす (シミュレータのクラッシュ回避)
+                        noise = np.random.normal(0, rng * 0.03) 
+                        val = float(err_row[name]) + noise
+                        val = np.clip(val, self.config.PARAM_RANGES[name][0], self.config.PARAM_RANGES[name][1])
+                        shifted_point[name] = val
+                    shifted_point["reason"] = f"{log_prefix}Error Recovery (Shifted from Loop {int(err_row['loop_num'])})"
+                    recovery_points.append(shifted_point)
+                
+                # リカバリー済みの最大ループ番号を更新し、同じエラーを何度も再試行するのを防ぐ
+                self.last_recovered_loop = int(new_errors['loop_num'].max())
+                
+                # リカバリーポイントをキャッシュの先頭に追加して優先実行させる
+                self.task_cache.extend(recovery_points)
+                self.dispatched_task_count += 1
+                return self.task_cache.pop(0)
+        # --------------------------------------------------------------------------------------
+
         # [修正] 行数ではなく、CSVに記録されている最大のループ番号と同期させる（データ欠損対策）
         if df_dataset is not None and 'loop_num' in df_dataset.columns:
             max_loop = int(df_dataset['loop_num'].max())
@@ -147,17 +222,20 @@ class ActiveLearningStrategist:
 
         # --- 【STEP 0】フォーカスモードのピンポイント検証 ---
         if self.FOCUS_POINTS:
-            exact_repeats = getattr(self.config, 'FOCUS_EXACT_REPEATS', 20)
+            # [修正] 設定がない場合は、各ワーカーが1回ずつ担当するように「ワーカー数」を反復回数とする
+            exact_repeats = getattr(self.config, 'FOCUS_EXACT_REPEATS', self.worker_count)
             total_exact_samples = len(self.FOCUS_POINTS) * exact_repeats
             
-            if current_idx < total_exact_samples:
-                # どのポイントを何回目のリピートで実行するか計算
-                point_idx = (current_idx // exact_repeats) % len(self.FOCUS_POINTS)
-                repeat_idx = (current_idx % exact_repeats) + 1
+            # [修正] 過去のループ数(current_idx)に依存せず、起動ごとの独立したカウンタで判定する
+            if self.focus_exact_test_count < total_exact_samples:
+                point_idx = (self.focus_exact_test_count // exact_repeats) % len(self.FOCUS_POINTS)
+                repeat_idx = (self.focus_exact_test_count % exact_repeats) + 1
                 
                 exact_point = self.FOCUS_POINTS[point_idx]
                 result = {name: exact_point.get(name, sum(self.config.PARAM_RANGES[name])/2.0) for name in self.param_names}
                 result["reason"] = f"[FOCUS] Exact Point {point_idx+1}/{len(self.FOCUS_POINTS)} (Repeat {repeat_idx}/{exact_repeats})"
+                
+                self.focus_exact_test_count += 1
                 self.dispatched_task_count += 1
                 return result
 
@@ -201,12 +279,12 @@ class ActiveLearningStrategist:
             is_stable, shift_rate = self._evaluate_boundary_stability()
             
             if len(self.stability_history) >= self.STABILITY_HISTORY_LENGTH:
-                print(f"[Strategist] STEP2 | 探索回数: {self.step2_exploration_count}/{self.STEP2_MAX_EXPLORATION} | 境界反転率: {shift_rate*100:.2f}% (安定条件: {self.stability_streak}/{self.STABILITY_REQUIRED_STREAK})")
+                print(f"[Strategist] {log_prefix}STEP2 | 探索回数: {self.step2_exploration_count}/{self.STEP2_MAX_EXPLORATION} | 境界反転率: {shift_rate*100:.2f}% (安定条件: {self.stability_streak}/{self.STABILITY_REQUIRED_STREAK})")
             else:
-                print(f"[Strategist] STEP2 | 探索回数: {self.step2_exploration_count}/{self.STEP2_MAX_EXPLORATION} | 定点観測データ収集中 ({len(self.stability_history)}/{self.STABILITY_HISTORY_LENGTH})")
+                print(f"[Strategist] {log_prefix}STEP2 | 探索回数: {self.step2_exploration_count}/{self.STEP2_MAX_EXPLORATION} | 定点観測データ収集中 ({len(self.stability_history)}/{self.STABILITY_HISTORY_LENGTH})")
             
             if is_stable or self.step2_exploration_count >= self.STEP2_MAX_EXPLORATION:
-                print("\n[Strategist] ✨ STEP3へ移行完了。マージンの不確実性潰しを開始します。✨\n")
+                print(f"\n[Strategist] ✨ {log_prefix}STEP3へ移行完了。マージンの不確実性潰しを開始します。✨\n")
                 self.current_phase = "STEP3"
 
         # --- 次のターゲットの選択 ---
@@ -218,7 +296,7 @@ class ActiveLearningStrategist:
         if self.current_phase == "STEP3":
             if len(safe_idx) > 0:
                 max_std = np.max(std[safe_idx])
-                print(f"[Strategist] STEP3 | 安全領域(mean<=0.5)候補数: {len(safe_idx)} | 最大不確実性 σ = {max_std:.4f} (目標 < {self.MARGIN_MAX_UNCERTAINTY})")
+                print(f"[Strategist] {log_prefix}STEP3 | 安全領域(mean<=0.5)候補数: {len(safe_idx)} | 最大不確実性 σ = {max_std:.4f} (目標 < {self.MARGIN_MAX_UNCERTAINTY})")
                 
                 if max_std < self.MARGIN_MAX_UNCERTAINTY:
                     self._print_final_report(current_idx, best_target, "安全領域の死角(不確実性)を完全に排除しました")
@@ -240,7 +318,7 @@ class ActiveLearningStrategist:
                             
                 reason = f"STEP3: Safe Area Cleanup (σ={max_std:.4f})"
             else:
-                print(f"[Strategist] STEP3 | 安全と予測される領域がありません。バックアップ探索を実施します。")
+                print(f"[Strategist] {log_prefix}STEP3 | 安全と予測される領域がありません。バックアップ探索を実施します。")
                 sorted_idx = np.argsort(std)[::-1]
                 best_indices = sorted_idx[:self.CACHE_SIZE]
                 reason = f"STEP3: Backup Search (M:{mean[best_indices[0]]:.2f})"

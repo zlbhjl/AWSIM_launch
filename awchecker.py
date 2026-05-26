@@ -52,6 +52,7 @@ def main():
     traces_dir = os.environ.get("AW_OUTPUT_DIR", "/home/passd/simulation_traces")
     formulas_path = os.path.join(tool_dir, "formulas.txt")
     dataset_csv_path = os.path.join(traces_dir, f"{args.type}_dataset.csv")
+    base_dataset_csv_path = os.path.join(traces_dir, f"{args.type}_dataset_base.csv")
     error_detail_log_path = os.path.join(traces_dir, "checker_errors_detail.log")
     local_history_path = os.path.join(traces_dir, "processed_loops_history.csv")
 
@@ -108,46 +109,45 @@ def main():
     stats = {"Safe": 0, "Unsafe": 0, "Error": 0, "Total": 0}
     processed_loops = set()
 
-    if os.path.exists(dataset_csv_path):
-        print(f"[Info] 既存のCSVから履歴を復元します。")
-        try:
-            with open(dataset_csv_path, "r", encoding="utf-8") as f:
-                reader = csv.DictReader(f)
-                for row in reader:
-                    try:
-                        loop_num = int(row["loop_num"])
-                        processed_loops.add(loop_num)
-                        stats["Total"] += 1
-                        
-                        # 統計の復元 (result_labels に基づく)
-                        has_error = any(str(row.get(label)) == "-1" for label in result_labels)
-                        is_unsafe = any(str(row.get(label)) == "1" for label in result_labels)
+    for csv_path in [base_dataset_csv_path, dataset_csv_path]:
+        if os.path.exists(csv_path):
+            print(f"[Info] 既存のCSV ({os.path.basename(csv_path)}) から履歴を復元します。")
+            try:
+                with open(csv_path, "r", encoding="utf-8") as f:
+                    reader = csv.DictReader(f)
+                    for row in reader:
+                        try:
+                            loop_num = int(row["loop_num"])
+                            processed_loops.add(loop_num)
+                            stats["Total"] += 1
+                            
+                            # 統計の復元 (result_labels に基づく)
+                            has_error = any(str(row.get(label)) == "-1" for label in result_labels)
+                            is_unsafe = any(str(row.get(label)) == "1" for label in result_labels)
 
-                        if has_error:
-                            stats["Error"] +=1
-                        elif is_unsafe:
-                            stats["Unsafe"] += 1
-                        else:
-                            stats["Safe"] +=1
-                    except ValueError:
-                        pass
-            print(f"[Info] 復元完了 - 統計: Safe={stats['Safe']}, Unsafe={stats['Unsafe']}, Error={stats['Error']}")
-        except Exception as e:
-            print(f"[Warning] 復元失敗: {e}")
+                            if has_error:
+                                stats["Error"] += 1
+                            elif is_unsafe:
+                                stats["Unsafe"] += 1
+                            else:
+                                stats["Safe"] += 1
+                        except ValueError:
+                            pass
+                print(f"[Info] 復元完了 - 統計: Safe={stats['Safe']}, Unsafe={stats['Unsafe']}, Error={stats['Error']}")
+            except Exception as e:
+                print(f"[Warning] {os.path.basename(csv_path)} の復元失敗: {e}")
 
     # 分散対応: ローカル履歴ファイルからの復元
     if os.path.exists(local_history_path):
-        print(f"[Info] ローカル履歴ファイルから処理済みループを復元します。")
         try:
             with open(local_history_path, "r", encoding="utf-8") as f:
                 for line in f:
-                    if line.strip().isdigit():
-                        processed_loops.add(int(line.strip()))
-            print(f"[Info] 復元完了 - ローカル履歴から {len(processed_loops)} 件のループ番号を復元しました。")
+                    line = line.strip()
+                    if line.isdigit():
+                        processed_loops.add(int(line))
         except Exception as e:
-            print(f"[Warning] ローカル履歴の復元失敗: {e}")
+            print(f"[Warning] ローカル履歴の読み込み失敗: {e}")
 
-    print(f"--- 監視開始: {traces_dir} ---")
 
     # ---------------------------------------------------------
     # 3. 監視ループ
@@ -177,204 +177,212 @@ def main():
                 target_path = os.path.join(traces_dir, target_file)
                 print(f"\n\nDetected: {target_file}")
 
-                # --- 旧バージョンの安全性：JSONパースによる書き込み完了待機 ---
-                print("  [待機] JSONデータの書き込み完了を待っています...", end="", flush=True)
-                is_valid_json = False
-                is_timeout_dummy = False
-                for _ in range(15):
-                    time.sleep(1)
-                    try:
-                        with open(target_path, 'r', encoding='utf-8') as f:
-                            content = f.read().strip()
-                            if content == "TIMEOUT":
-                                is_timeout_dummy = True
-                                is_valid_json = False
-                                break # タイムアウト用ダミーファイルなら待たずに即エラー判定
-                            json.loads(content)
-                        is_valid_json = True
-                        break
-                    except (json.JSONDecodeError, ValueError):
-                        print(".", end="", flush=True)
+                try:
+                    # --- 旧バージョンの安全性：JSONパースによる書き込み完了待機 ---
+                    print("  [待機] JSONデータの書き込み完了を待っています...", end="", flush=True)
+                    is_valid_json = False
+                    is_timeout_dummy = False
+                    for _ in range(15):
+                        time.sleep(1)
+                        try:
+                            with open(target_path, 'r', encoding='utf-8') as f:
+                                content = f.read().strip()
+                                if content == "TIMEOUT":
+                                    is_timeout_dummy = True
+                                    is_valid_json = False
+                                    break # タイムアウト用ダミーファイルなら待たずに即エラー判定
+                                json.loads(content)
+                            is_valid_json = True
+                            break
+                        except (json.JSONDecodeError, ValueError):
+                            print(".", end="", flush=True)
 
-                if is_timeout_dummy:
-                    print(f"\n[スキップ] {target_file} はタイムアウトによりManagerで記録済みです。")
+                    if is_timeout_dummy:
+                        print(f"\n[スキップ] {target_file} はタイムアウトによりManagerで記録済みです。")
+                        processed_loops.add(current_loop)
+                        # ローカルの処理済み履歴に記録して次回以降は無視する
+                        with open(local_history_path, "a", encoding="utf-8") as f:
+                            f.write(f"{current_loop}\n")
+                        continue
+
+                    if not is_valid_json:
+                        print(f"\n[エラー] {target_file} の書き込みが完了しませんでした（JSON破損）。")
+                        parsed_row = {"loop_num": current_loop, "min_ttc": -1, "min_distance": -1}
+                        for item in metric_config:
+                            parsed_row[item["header"]] = -1
+                        stats["Error"] += 1
+                        stats["Total"] += 1
+                        
+                        # CSV保存処理
+                        if shared_store:
+                            ray.get(shared_store.log_and_merge_result.remote(args.type, parsed_row))
+                        else:
+                            try:
+                                file_exists = os.path.exists(dataset_csv_path)
+                                with open(dataset_csv_path, "a", newline="", encoding="utf-8") as f:
+                                    writer = csv.DictWriter(f, fieldnames=all_headers)
+                                    if not file_exists or os.path.getsize(dataset_csv_path) == 0:
+                                        writer.writeheader()
+                                    writer.writerow({k: parsed_row.get(k, "") for k in all_headers})
+                            except PermissionError:
+                                print(f"[Warning] ローカルの {dataset_csv_path} に書き込む権限がありません。")
+                        
+                        processed_loops.add(current_loop)
+                        try:
+                            with open(local_history_path, "a", encoding="utf-8") as f:
+                                f.write(f"{current_loop}\n")
+                        except PermissionError:
+                            pass
+                        continue
+                    
+                    print(" 完了！ 解析を開始します。")
+
+                    parsed_row = {"loop_num": current_loop}
+                    is_any_fail = False
+                    has_error = False
+
+                    if AWKinematicsPipeline is not None:
+                        try:
+                            pipeline = AWKinematicsPipeline(mode="ctrv")
+                            metrics = pipeline.get_metrics(target_path)
+                            min_ttc = metrics["min_ttc"]
+                            min_distance = metrics["min_distance"]
+                            print(f"  [高速抽出] 最小TTC: {min_ttc} 秒 | 最小距離: {min_distance:.4f} m")
+                        except Exception as e:
+                            print(f"  [エラー] AWKinematicsPipelineでの抽出に失敗しました: {e}")
+                            min_ttc = -1.0
+                            min_distance = -1.0
+                            
+                        parsed_row["min_ttc"] = min_ttc
+                        parsed_row["min_distance"] = min_distance
+                        
+                        for item in metric_config:
+                            header = item["header"]
+                            if header == "c_collision":
+                                val = 1 if min_ttc <= 0.0 else 0
+                                if val == 1:
+                                    parsed_row["min_distance"] = 0.0
+                            elif header.startswith("c_ttc_"):
+                                try:
+                                    threshold = float(header.split("_")[-1])
+                                    val = 1 if min_ttc <= threshold else 0
+                                except ValueError:
+                                    val = 0
+                            else:
+                                val = 0
+                                
+                            parsed_row[header] = val
+                            if val == 1:
+                                is_any_fail = True
+                    else:
+                        min_ttc = None
+                        parsed_row["min_ttc"] = ""
+                        parsed_row["min_distance"] = ""
+
+                        output_log, error_log = "", ""
+                        command = ["python3", "aw_checkerpy.py", target_path]
+                        result = subprocess.run(command, cwd=tool_dir, env=my_env, capture_output=True, text=True)
+                        output_log = result.stdout
+                        error_log = result.stderr
+
+                        for item in metric_config:
+                            formula = item["formula"]
+                            header = item["header"]
+                            
+                            pattern = re.escape(formula) + r".*?Model checking result: (True|False)"
+                            match = re.search(pattern, output_log, re.DOTALL)
+
+                            if match:
+                                val = 0 if match.group(1) == "True" else 1
+                                parsed_row[header] = val
+                                if val == 1:
+                                    if "stuck" in header:
+                                        has_error = True
+                                    else:
+                                        is_any_fail = True
+                            else:
+                                parsed_row[header] = -1
+                                has_error = True
+                                if shared_store:
+                                    ray.get(shared_store.log_error_detail.remote(error_detail_log_path, target_file, header, output_log, error_log))
+
+                    if parsed_row.get("c_collision") == 1:
+                        for key in list(parsed_row.keys()):
+                            if key.startswith("c_ttc_"):
+                                parsed_row[key] = 1
+                                is_any_fail = True
+                                
+                    ttc_keys = [k for k in parsed_row.keys() if k.startswith("c_ttc_")]
+                    ttc_keys.sort(key=lambda x: float(x.split("_")[-1]))
+                    is_violated = False
+                    for k in ttc_keys:
+                        if parsed_row[k] == 1:
+                            is_violated = True
+                        elif is_violated:
+                            parsed_row[k] = 1
+
+                    if has_error:
+                        stats["Error"] += 1
+                        res_str = "ERROR ⚠️ (異常/解析エラー検出)"
+                    else:
+                        if is_any_fail:
+                            stats["Unsafe"] += 1
+                            res_str = "UNSAFE ❌"
+                        else:
+                            stats["Safe"] += 1
+                            res_str = "SAFE ✅"
+                    stats["Total"] += 1
+
+                    if shared_store:
+                        ray.get(shared_store.log_and_merge_result.remote(args.type, parsed_row))
+                    else:
+                        try:
+                            file_exists = os.path.exists(dataset_csv_path)
+                            with open(dataset_csv_path, "a", newline="", encoding="utf-8") as f:
+                                writer = csv.DictWriter(f, fieldnames=all_headers)
+                                if not file_exists or os.path.getsize(dataset_csv_path) == 0:
+                                    writer.writeheader()
+                                writer.writerow({k: parsed_row.get(k, "") for k in all_headers})
+                        except PermissionError:
+                            pass
+                    
                     processed_loops.add(current_loop)
-                    # ローカルの処理済み履歴に記録して次回以降は無視する
-                    with open(local_history_path, "a", encoding="utf-8") as f:
-                        f.write(f"{current_loop}\n")
-                    continue
+                    try:
+                        with open(local_history_path, "a", encoding="utf-8") as f:
+                            f.write(f"{current_loop}\n")
+                    except PermissionError:
+                        pass
 
-                if not is_valid_json:
-                    print(f"\n[エラー] {target_file} の書き込みが完了しませんでした（JSON破損）。")
+                    print(f">>> 結果: {res_str}")
+                    print(f"====== 統計 (Total: {stats['Total']}) ======")
+                    print(f"  衝突なし: {stats['Safe']} | 衝突あり: {stats['Unsafe']} | エラー: {stats['Error']}")
+                    print(f"===================================")
+                    
+                except Exception as e:
+                    import traceback
+                    print(f"\n[Fatal Error] {target_file} の処理中に予期せぬエラーが発生しクラッシュを回避しました: {e}")
+                    traceback.print_exc()
+                    
+                    # エラーで落ちた場合も、後続が止まらないようにエラー結果として記録・バッファ削除を行う
                     parsed_row = {"loop_num": current_loop, "min_ttc": -1, "min_distance": -1}
                     for item in metric_config:
                         parsed_row[item["header"]] = -1
                     stats["Error"] += 1
                     stats["Total"] += 1
                     
-                    # CSV保存処理（continueでスキップされる前に書き込む）
-                    # [修正] 共有金庫に結果をマージさせる
                     if shared_store:
-                        ray.get(shared_store.log_and_merge_result.remote(args.type, parsed_row))
-                    
-                    # [追加] コンテナローカルにも結果を保存
-                    try:
-                        file_exists = os.path.exists(dataset_csv_path)
-                        with open(dataset_csv_path, "a", newline="", encoding="utf-8") as f:
-                            writer = csv.DictWriter(f, fieldnames=all_headers)
-                            if not file_exists or os.path.getsize(dataset_csv_path) == 0:
-                                writer.writeheader()
-                            writer.writerow({k: parsed_row.get(k, "") for k in all_headers})
-                    except PermissionError:
-                        print(f"[Warning] ローカルの {dataset_csv_path} に書き込む権限がありません。")
-                    
+                        try:
+                            ray.get(shared_store.log_and_merge_result.remote(args.type, parsed_row))
+                        except Exception:
+                            pass
+                            
                     processed_loops.add(current_loop)
-                    # ローカルの処理済み履歴に記録
                     try:
                         with open(local_history_path, "a", encoding="utf-8") as f:
                             f.write(f"{current_loop}\n")
                     except PermissionError:
-                        print(f"[Warning] ローカル履歴 {local_history_path} に書き込む権限がありません。")
-                        
+                        pass
                     continue
-                
-                print(" 完了！ 解析を開始します。")
-
-                parsed_row = {"loop_num": current_loop}
-                is_any_fail = False
-                has_error = False
-
-                # --- [高速化] AW-Kinematics-Extractor を用いた即時判定 ---
-                if AWKinematicsPipeline is not None:
-                    # 真の軌道予測に基づく CTRV (等旋回) モードを使用して判定・記録を行う
-                    pipeline = AWKinematicsPipeline(mode="ctrv")
-                    metrics = pipeline.get_metrics(target_path)
-                    min_ttc = metrics["min_ttc"]
-                    min_distance = metrics["min_distance"]
-                    print(f"  [高速抽出] 最小TTC: {min_ttc} 秒 | 最小距離: {min_distance:.4f} m")
-                    parsed_row["min_ttc"] = min_ttc
-                    parsed_row["min_distance"] = min_distance
-                    
-                    # --- [追加] 旧Maudeの重い処理を完全にバイパスし、min_ttcから直接ラベルを生成 ---
-                    for item in metric_config:
-                        header = item["header"]
-                        if header == "c_collision":
-                            val = 1 if min_ttc <= 0.0 else 0
-                            if val == 1:
-                                parsed_row["min_distance"] = 0.0
-                        elif header.startswith("c_ttc_"):
-                            try:
-                                threshold = float(header.split("_")[-1])
-                                val = 1 if min_ttc <= threshold else 0
-                            except ValueError:
-                                val = 0
-                        else:
-                            val = 0  # c_npc_stuck 等は除外
-                            
-                        parsed_row[header] = val
-                        if val == 1:
-                            is_any_fail = True
-                else:
-                    min_ttc = None
-                    parsed_row["min_ttc"] = ""
-                    parsed_row["min_distance"] = ""
-
-                    # --- 抽出器が見つからない場合のみ旧AWチェッカ(Maude)を実行 ---
-                    output_log, error_log = "", ""
-                    command = ["python3", "aw_checkerpy.py", target_path]
-                    result = subprocess.run(command, cwd=tool_dir, env=my_env, capture_output=True, text=True)
-                    output_log = result.stdout
-                    error_log = result.stderr
-
-                    for item in metric_config:
-                        formula = item["formula"]
-                        header = item["header"]
-                        
-                        # 旧バージョンの抽出ロジック（正規表現 / Maude用）
-                        pattern = re.escape(formula) + r".*?Model checking result: (True|False)"
-                        match = re.search(pattern, output_log, re.DOTALL)
-
-                        if match:
-                            val = 0 if match.group(1) == "True" else 1
-                            parsed_row[header] = val
-                            if val == 1:
-                                if "stuck" in header:
-                                    has_error = True
-                                else:
-                                    is_any_fail = True
-                        else:
-                            parsed_row[header] = -1
-                            has_error = True
-                            if shared_store:
-                                ray.get(shared_store.log_error_detail.remote(error_detail_log_path, target_file, header, output_log, error_log))
-                            
-                            try:
-                                with open(error_detail_log_path, "a", encoding="utf-8") as ef:
-                                    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                                    ef.write(f"[{timestamp}] {target_file} | {header}\nSTDOUT: {output_log}\nSTDERR: {error_log}\n{'-'*30}\n")
-                            except PermissionError:
-                                print(f"[Warning] エラー詳細を {error_detail_log_path} に書き込む権限がありません。")
-
-                # --- [追加] 論理的矛盾（TTCのすり抜け）の自動補正 ---
-                # 衝突(c_collision=1)している場合、すべてのTTC指標は1(違反)にする
-                if parsed_row.get("c_collision") == 1:
-                    for key in list(parsed_row.keys()):
-                        if key.startswith("c_ttc_"):
-                            parsed_row[key] = 1
-                            is_any_fail = True
-                            
-                # さらに、厳しいTTC(例: 0.3)が1なら、緩いTTC(例: 1.5)も1に補正する
-                ttc_keys = [k for k in parsed_row.keys() if k.startswith("c_ttc_")]
-                ttc_keys.sort(key=lambda x: float(x.split("_")[-1]))
-                is_violated = False
-                for k in ttc_keys:
-                    if parsed_row[k] == 1:
-                        is_violated = True
-                    elif is_violated:
-                        parsed_row[k] = 1
-
-                # 統計の更新
-                if has_error:
-                    stats["Error"] += 1
-                    res_str = "ERROR ⚠️ (異常/解析エラー検出)"
-                else:
-                    if is_any_fail:
-                        stats["Unsafe"] += 1
-                        res_str = "UNSAFE ❌"
-                    else:
-                        stats["Safe"] += 1
-                        res_str = "SAFE ✅"
-                stats["Total"] += 1
-
-                # CSV保存
-                # [修正] 共有金庫に結果をマージさせる
-                if shared_store:
-                    ray.get(shared_store.log_and_merge_result.remote(args.type, parsed_row))
-                
-                # [追加] コンテナローカルにも結果を保存
-                try:
-                    file_exists = os.path.exists(dataset_csv_path)
-                    with open(dataset_csv_path, "a", newline="", encoding="utf-8") as f:
-                        writer = csv.DictWriter(f, fieldnames=all_headers)
-                        if not file_exists or os.path.getsize(dataset_csv_path) == 0:
-                            writer.writeheader()
-                        writer.writerow({k: parsed_row.get(k, "") for k in all_headers})
-                except PermissionError:
-                    print(f"[Warning] ローカルの {dataset_csv_path} に書き込む権限がありません。")
-                
-                processed_loops.add(current_loop)
-                # ローカルの処理済み履歴に記録
-                try:
-                    with open(local_history_path, "a", encoding="utf-8") as f:
-                        f.write(f"{current_loop}\n")
-                except PermissionError:
-                    print(f"[Warning] ローカル履歴 {local_history_path} に書き込む権限がありません。")
-
-                # --- 旧バージョンのUI ---
-                print(f">>> 結果: {res_str}")
-                print(f"====== 統計 (Total: {stats['Total']}) ======")
-                print(f"  衝突なし: {stats['Safe']} | 衝突あり: {stats['Unsafe']} | エラー: {stats['Error']}")
-                print(f"===================================")
 
     except KeyboardInterrupt:
         print("\n監視を終了します。")

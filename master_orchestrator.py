@@ -10,6 +10,7 @@ import time
 import ray
 import csv
 import subprocess
+import shutil
 
 # パスの追加
 LAUNCH_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -18,6 +19,7 @@ if LAUNCH_DIR not in sys.path:
 
 from redis_cluster.cluster_manager import ClusterManager
 from redis_cluster.shared_store import SharedStoreActor
+from redis_cluster import cluster_config
 from strategist import ActiveLearningStrategist
 
 # ==============================================================================
@@ -70,10 +72,11 @@ class TaskQueueActor:
 def load_config():
     parser = argparse.ArgumentParser(description="Multi-Scenario Autonomous Driving Test Master Orchestrator")
     parser.add_argument("--type", type=str, default="uturn", help="Scenario type (e.g., uturn, cutin)")
-    parser.add_argument("--mode", type=str, choices=["explore", "focus", "margin", "jama_edge"], default="explore", help="Search mode")
+    parser.add_argument("--mode", type=str, choices=["explore", "focus", "margin", "jama_edge", "ttc_edge"], default="explore", help="Search mode")
     parser.add_argument("--focus_points", type=str, default=None, help="JSON string for focus points")
     parser.add_argument("--with_host_worker", action="store_true", help="Run a local worker on the host machine (ROS_DOMAIN_ID=21, EXEC_MODE=host)")
     parser.add_argument("--headless_host", action="store_true", help="Run the host worker with Xvfb (No GUI)")
+    parser.add_argument("--resume_from", type=str, default=None, help="Directory to restore dataset from (e.g., ~/simulation_traces_shared_...)")
     args = parser.parse_args()
 
     try:
@@ -93,28 +96,46 @@ def load_config():
                 print("[Fatal] --mode focus が指定されましたが FOCUS_POINTS が設定されていません。")
                 sys.exit(1)
 
+    # --- [追加] 退避した過去のデータセットを現在の作業フォルダに復元 ---
+    if args.resume_from:
+        src_csv = os.path.expanduser(f"{args.resume_from}/{args.type}_dataset.csv")
+        dest_dir = os.path.expanduser("~/simulation_traces")
+        dest_base_csv = os.path.join(dest_dir, f"{args.type}_dataset_base.csv")
+        
+        if os.path.exists(src_csv):
+            os.makedirs(dest_dir, exist_ok=True)
+            shutil.copy2(src_csv, dest_base_csv)
+            print(f"[System] 📂 過去の退避データ ({src_csv}) を読み込み専用(base)としてセットしました。新しい結果は新しいCSVに書き出されます。")
+        else:
+            print(f"[Fatal] 復元元のデータセットが見つかりません: {src_csv}")
+            sys.exit(1)
+
     return args.type, config_module, args.mode, focus_points, args.with_host_worker, args.headless_host
 
 # ==============================================================================
 # [追加] 過去のデータセットから最大ループ番号を取得
 # ==============================================================================
 def get_last_processed_loop(scenario_name):
-    csv_path = os.path.expanduser(f"~/simulation_traces/{scenario_name}_dataset.csv")
-    if not os.path.exists(csv_path):
-        return 0
+    csv_paths = [
+        os.path.expanduser(f"~/simulation_traces/{scenario_name}_dataset_base.csv"),
+        os.path.expanduser(f"~/simulation_traces/{scenario_name}_dataset.csv")
+    ]
     last_loop = 0
-    try:
-        with open(csv_path, "r", encoding="utf-8") as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                try:
-                    loop_num = int(row["loop_num"])
-                    if loop_num > last_loop:
-                        last_loop = loop_num
-                except (ValueError, KeyError):
-                    pass
-    except Exception:
-        pass
+    for csv_path in csv_paths:
+        if not os.path.exists(csv_path):
+            continue
+        try:
+            with open(csv_path, "r", encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    try:
+                        loop_num = int(row["loop_num"])
+                        if loop_num > last_loop:
+                            last_loop = loop_num
+                    except (ValueError, KeyError):
+                        pass
+        except Exception:
+            pass
     return last_loop
 
 # ==============================================================================
@@ -176,7 +197,11 @@ def main():
     strategist = ActiveLearningStrategist(scenario_name, cfg, num_candidates=2000, focus_points=focus_points, run_mode=run_mode)
     
     REPEAT_COUNT = getattr(cfg, 'REPEAT_COUNT', 3000)
-    MAX_QUEUE_SIZE = 6   # ワーカー(最大3台)が遊ばない最低限のタスクを維持し、AIの更新頻度を高く保つ
+    
+    # 稼働中のマシン(ワーカー)数を動的にカウントし、キューのサイズを自動調整
+    worker_count = sum(1 for node in cluster_config.CLUSTER_NODES.values() if node.get("enabled", True))
+    MAX_QUEUE_SIZE = worker_count * 4    # ワーカー数の4倍を上限(High-Water Mark)とする
+    REFILL_THRESHOLD = worker_count * 2  # ワーカー数の2倍まで減ったら補充を開始(枯渇防止の強力なバッファ)
 
     # 6. ホストワーカーの直接起動
     host_worker_proc = None
@@ -217,10 +242,11 @@ def main():
                 break
                 
             # キューが減ってきたら AI に次のパラメータを相談して補充
-            while q_len < MAX_QUEUE_SIZE:
-                next_target = strategist.decide_next_target()
-                ray.get(task_queue.add_task.remote(next_target))
-                q_len += 1
+            if q_len <= REFILL_THRESHOLD:
+                while q_len < MAX_QUEUE_SIZE:
+                    next_target = strategist.decide_next_target()
+                    ray.get(task_queue.add_task.remote(next_target))
+                    q_len += 1
 
             time.sleep(2)
     except KeyboardInterrupt:

@@ -16,6 +16,7 @@ class SafetyEstimator:
         """
         self.traces_dir = os.path.expanduser(traces_dir)
         self.dataset_file = os.path.join(self.traces_dir, f"{scenario_name}_dataset.csv")
+        self.base_dataset_file = os.path.join(self.traces_dir, f"{scenario_name}_dataset_base.csv")
         
         self.config = config
         self.scaler = StandardScaler()
@@ -37,14 +38,28 @@ class SafetyEstimator:
     def load_dataset(self):
         """
         統合されたデータセットCSVを読み込む。
+        過去のベースデータ(_base.csv)が存在する場合は結合して返す。
         """
-        if not os.path.exists(self.dataset_file):
+        df_list = []
+        if os.path.exists(self.base_dataset_file):
+            try:
+                df_list.append(pd.read_csv(self.base_dataset_file, engine='python', on_bad_lines='skip'))
+            except Exception as e:
+                print(f"[Estimator] ❌ ベースデータセットCSVの読み込み失敗: {e}")
+                
+        if os.path.exists(self.dataset_file):
+            try:
+                df_list.append(pd.read_csv(self.dataset_file, engine='python', on_bad_lines='skip'))
+            except Exception as e:
+                print(f"[Estimator] ❌ データセットCSVの読み込み失敗: {e}")
+
+        if not df_list:
             return None
-        try:
-            return pd.read_csv(self.dataset_file)
-        except Exception as e:
-            print(f"[Estimator] ❌ データセットCSVの読み込み失敗: {e}")
-            return None
+            
+        if len(df_list) == 1:
+            return df_list[0]
+            
+        return pd.concat(df_list, ignore_index=True)
 
     def load_training_data(self, target_column):
         """
@@ -90,6 +105,31 @@ class SafetyEstimator:
         # 学習には「安全(0)」と「危険(1)」の両方のサンプルが必要
         if len(df_valid) < 2 or df_valid[target_column].nunique() < 2:
             return None
+
+        # --- [追加] GPの計算爆発(O(N^3))を防ぐためのスマートなデータ間引き (Active Data Pruning) ---
+        MAX_TRAIN_SAMPLES = 1500
+        if len(df_valid) > MAX_TRAIN_SAMPLES:
+            # 1. 絶対に残す「重要なエッジケース」の条件
+            # 衝突した、またはニアミス(TTCが1.5s未満、または接近距離が2.0m未満)だったデータ
+            is_critical = (df_valid.get('c_collision', 0) == 1) | \
+                          (df_valid.get('min_ttc', 999.0) < 1.5) | \
+                          (df_valid.get('min_distance', 999.0) < 2.0)
+            
+            # 2. 直近のデータ(最新の境界探索トレンド)も一定数残す
+            recent_threshold = df_valid['loop_num'].max() - 500
+            is_recent = df_valid['loop_num'] > recent_threshold
+            
+            must_keep_mask = is_critical | is_recent
+            df_must_keep = df_valid[must_keep_mask]
+            df_others = df_valid[~must_keep_mask]
+            
+            # 3. 安全で古いデータ(others)から、上限に収まるようにランダムサンプリング
+            remain_count = MAX_TRAIN_SAMPLES - len(df_must_keep)
+            if remain_count > 0 and len(df_others) > remain_count:
+                df_others_sampled = df_others.sample(n=remain_count, random_state=42)
+                df_valid = pd.concat([df_must_keep, df_others_sampled])
+            else:
+                df_valid = df_must_keep
             
         return df_valid
 

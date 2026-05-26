@@ -60,9 +60,8 @@ class SharedStoreActor:
                     reader = csv.reader(f)
                     try:
                         existing_headers = next(reader)
-                        # 既存の列順を維持しつつ、新しいキーがあれば末尾に追加
-                        new_keys = [k for k in fieldnames if k not in existing_headers]
-                        fieldnames = existing_headers + new_keys
+                        # [修正] 新しいキーの追加を許可せず、既存のヘッダーに完全に従う (カラム増殖による破損防止)
+                        fieldnames = existing_headers
                     except StopIteration:
                         pass
 
