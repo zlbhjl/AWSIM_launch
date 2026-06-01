@@ -3,8 +3,9 @@ import numpy as np
 import pandas as pd
 
 class AWKinematicsExtractorPhase1:
-    def __init__(self, mode="cvm"):
+    def __init__(self, mode="cvm", target_npcs=None):
         self.mode = mode
+        self.target_npcs = [npc.lower() for npc in target_npcs] if target_npcs else ["npc1"]
         # Maude (kinematic.maude / machine.maude) に準拠した定数
         self.VEHICLE_CLASS_MIN = 0
         self.VEHICLE_CLASS_MAX = 6
@@ -40,9 +41,10 @@ class AWKinematicsExtractorPhase1:
         # aw_checkerpy.py の構造に合わせてキーを groundtruth_kinematic に変更
         frames = json_data.get("groundtruth_kinematic", [])
         
-        # Egoのサイズとオフセットを取得（欠損時はデフォルト値）
-        # .get() でキーが完全に存在しない場合の None 対策を強化
+        # Egoのサイズとオフセットを取得（Maudeの仕様再現のため "ego" キーに完全決め打ち）
+        # ※ AWSIMの出力名が "ego" 以外の場合、オフセットは適用されません。詳細はREADMEを参照。
         ego_info = size_info.get("ego", {})
+            
         len_raw = ego_info.get("length", 0.0)
         wid_raw = ego_info.get("width", 0.0)
         ego_length = len_raw if len_raw > 0.0 else self.DEFAULT_EGO_LENGTH
@@ -62,23 +64,23 @@ class AWKinematicsExtractorPhase1:
             lin = twist.get("linear", {})
             
             raw_z = float(rot.get("z", 0.0))
-            if self.mode == "maude":
-                # Maudeのバグ: ラジアンを度数と勘違いして再変換する
-                yaw_rad = np.radians(raw_z)
-            else:
-                yaw_rad = raw_z
+            # 開発者の回答により、JSONの角度は Degrees(度数) であることが確定。
+            # NumPyの三角関数で扱うため、モードに関わらず常にラジアンに変換する。
+            yaw_rad = np.radians(raw_z)
             
             v_local_x = float(lin.get("x", 0.0))
             v_local_y = float(lin.get("y", 0.0))
             
-            yaw_rate = float(twist.get("angular", {}).get("z", 0.0))
+            # 角速度(yaw_rate)もDegrees(度/秒)で記録されているため、
+            # CTRVモードでの計算(yaw + omega * t)が破綻しないようラジアン/秒に変換する
+            yaw_rate = np.radians(float(twist.get("angular", {}).get("z", 0.0)))
 
             if self.mode == "maude":
-                # Maudeのバグ再現: 速度を回転させずそのまま加算
+                # 旧Maudeの仕様再現: 開発者の回答の通り、意図的な1D簡略化(X軸スライド)を再現
                 v_global_x = v_local_x
                 v_global_y = v_local_y
             else:
-                # 正しい物理演算: 前進速度をYaw角で回転させてMap上のベクトルにする
+                # cvm/ctrvモード: Uターン等に対応するため、正確な2Dグローバルベクトルに変換
                 v_global_x = v_local_x * np.cos(yaw_rad) - v_local_y * np.sin(yaw_rad)
                 v_global_y = v_local_x * np.sin(yaw_rad) + v_local_y * np.cos(yaw_rad)
 
@@ -112,6 +114,11 @@ class AWKinematicsExtractorPhase1:
             npcs = frame.get("groundtruth_vehicles", [])
             for npc in npcs:
                 obj_id = npc.get("name", "unknown")
+                
+                # Configで指定された評価対象のNPCのみを抽出し、それ以外（混入したego等）は除外する
+                if obj_id.lower() not in self.target_npcs:
+                    continue
+                    
                 pose = npc.get("pose", {})
                 pos = pose.get("position", {})
                 rot = pose.get("rotation", {})
@@ -131,18 +138,16 @@ class AWKinematicsExtractorPhase1:
                 if width <= 0.0: width = self.DEFAULT_NPC_WIDTH
                 
                 raw_z = float(rot.get("z", 0.0))
-                if self.mode == "maude":
-                    yaw_rad = np.radians(raw_z)
-                else:
-                    yaw_rad = raw_z
+                yaw_rad = np.radians(raw_z)
                 
                 v_local_x = float(lin.get("x", 0.0))
                 v_local_y = float(lin.get("y", 0.0))
                 
-                yaw_rate = float(twist.get("angular", {}).get("z", 0.0))
+                # こちらも同様にラジアン/秒に変換
+                yaw_rate = np.radians(float(twist.get("angular", {}).get("z", 0.0)))
 
                 if self.mode == "maude":
-                    # Maudeのバグ再現: 速度を回転させずそのまま加算
+                    # 旧Maudeの仕様再現: 意図的な1D簡略化(X軸スライド)を再現
                     v_global_x = v_local_x
                     v_global_y = v_local_y
                 else:

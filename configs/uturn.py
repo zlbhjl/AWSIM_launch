@@ -43,6 +43,11 @@ FORMULAS = [
     '<> speed("npc1") >= 0.1'  # 変更: より確実にスタックだけを検知するため 0.1 m/s まで低下
 ]
 
+# AW_Kinematics_Extractor がTTCや距離を計算する対象のNPCの名前を指定します。
+# これにより、誤って混入した自車(ego)や無関係な車両との誤検知(自己衝突など)を防ぎ、
+# 将来的に複数台(npc1, npc2)を評価する際もここに追加するだけで対応可能になります。
+TARGET_NPCS = ["npc1"]
+
 # AIが重点的に検証し、境界線を引くターゲットの優先順位
 TARGET_PRIORITIES = [
     "c_collision",

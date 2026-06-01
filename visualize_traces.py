@@ -15,10 +15,18 @@ except ImportError:
 # 1. 対象ディレクトリとファイルの指定
 # コマンドライン引数でディレクトリを指定できるようにする（デフォルトは質問のパス）
 target_dir = sys.argv[1] if len(sys.argv) > 1 else os.path.expanduser('~/simulation_traces_shared_20260512_144346')
-csv_file = os.path.join(target_dir, 'uturn_dataset.csv')
 
-if not os.path.exists(csv_file):
-    print(f"[Error] データセットが見つかりません: {csv_file}")
+# 修復済み(_fixed)のデータセットがあれば優先的に読み込む
+csv_file_fixed = os.path.join(target_dir, 'uturn_dataset_fixed.csv')
+csv_file_normal = os.path.join(target_dir, 'uturn_dataset.csv')
+
+if os.path.exists(csv_file_fixed):
+    csv_file = csv_file_fixed
+    print(f"[Info] 修復済みのデータセットを検知しました。優先して使用します。")
+elif os.path.exists(csv_file_normal):
+    csv_file = csv_file_normal
+else:
+    print(f"[Error] データセットが見つかりません: {csv_file_normal} (または _fixed.csv)")
     sys.exit(1)
 
 print(f"[{csv_file}] を読み込み中...")

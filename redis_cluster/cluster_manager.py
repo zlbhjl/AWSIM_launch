@@ -12,7 +12,7 @@ class ClusterManager:
         self.master_ip = cluster_config.MASTER_IP
         self.ray_port = cluster_config.RAY_PORT
 
-    def start_cluster(self, scenario_type="uturn", run_mode="explore", with_host_worker=False):
+    def start_cluster(self, scenario_type="uturn", run_mode="explore", with_host_worker=False, ext_mode="cvm"):
         """
         Ray/Redis クラスターを起動し、ワーカーを参加させます。
         """
@@ -141,7 +141,7 @@ class ClusterManager:
                     f"bash -i -c '{{ export HOME={c_home} && {xvfb_setup}"
                     f"python3 -m pip install --user --no-cache-dir ray==2.55.0 && {c_home}/.local/bin/ray start --address=\"{head_address}\" --node-ip-address=\"{info['ip']}\" && "
                     f"mkdir -p {c_home}/simulation_traces && cd {c_home}/AWSIM_launch && "
-                    f"python3 -u run_manager.py --type {scenario_type} --mode {run_mode}; }} > {c_home}/simulation_traces/worker_log_{c_name}.txt 2>&1 || sleep infinity'"
+                    f"python3 -u run_manager.py --type {scenario_type} --mode {run_mode} --ext_mode {ext_mode}; }} > {c_home}/simulation_traces/worker_log_{c_name}.txt 2>&1 || sleep infinity'"
                 )
                 
                 full_cmd = remote_setup_cmd

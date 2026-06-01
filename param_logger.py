@@ -68,15 +68,24 @@ def log_parameters(output_dir: str, file_name: str, loop_num: int, params_dict: 
     # --- [修正箇所] ヘッダーの重複エラー防止 ---
     # params_dict 内に万が一 'reason' というキーが残っていても除外します
     clean_keys = [k for k in log_dict.keys() if k != "reason"]
-    
-    # loop_num, (設定値各種...), reason の順番でヘッダーを作成
     fieldnames = ["loop_num"] + clean_keys + ["reason"]
+    
+    # 既存のファイルがある場合、ヘッダーの順序を優先する (ズレの根本原因防止)
+    if file_exists and os.path.getsize(log_file) > 0:
+        try:
+            with open(log_file, "r", encoding="utf-8") as f:
+                existing_headers = next(csv.reader(f))
+                if existing_headers:
+                    fieldnames = existing_headers
+        except Exception:
+            pass
     # -------------------------------------------
     
     # 追記モード ("a") でファイルを開く
     try:
         with open(log_file, "a", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            # extrasaction="ignore": 未知の列は捨てる, restval="": 足りない列は空欄にする
+            writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore", restval="")
             
             # 新規ファイルまたは空ファイルならヘッダーを書き込む
             if not file_exists or os.path.getsize(log_file) == 0:

@@ -32,10 +32,12 @@ AWSIM_launch/
 ├── awchecker.py        # シミュレーション結果(JSON)を解析し、安全性を判定。判定結果を共有金庫へ送信。
 ├── param_logger.py     # テスト実行時のパラメータを一時的に共有金庫のバッファへ送信。
 ├── theoretical_calculator.py # JAMA物理モデルに基づく理論的安全領域(Zone)とマージンを計算するモジュール。
+├── fix_dataset_labels.py # 過去のデータセットを最新の抽出ロジックで全号機から並列再解析し、安全に修復(更新)するスクリプト。
 ├── visualize_traces.py # 実行結果のCSVデータを読み込み、3Dグラフとして可視化するスクリプト。
 ├── visualize_traces_split.py # ホスト(21号機)とコンテナ(22・23号機)の実行結果を分割し、それぞれ独立した3Dグラフとして可視化するスクリプト。
 ├── visualize_worker_stats.py # ワーカー別（ホスト vs コンテナ）の衝突やTTC違反の発生確率を棒グラフで比較・可視化するスクリプト。
 ├── visualize_jama_zones.py # JAMA物理モデルに基づく理論的な安全領域(Zone)の分布をグラフ化して可視化・分析するスクリプト。
+├── visualize_risk_matrix.py  # 衝突、最小TTC、最小接近距離を組み合わせて、安全性を4段階のリスクレベルで総合的に評価・可視化するスクリプト。
 ├── redis_cluster/      # 分散クラスター管理モジュール
 │   ├── cluster_config.py  # ワーカーPCのIPやコンテナ名、通信割り当て設定などを一元管理。
 │   ├── cluster_manager.py # 各PCにSSH接続し、Dockerコンテナを自動起動・同期するクラスター構築スクリプト。
@@ -62,6 +64,9 @@ AWSIM_launch/
 ```bash
 # 【探索モード】空間全体から危険な境界線を自動探索させる場合（すべてコンテナで実行）
 python3 master_orchestrator.py --type uturn --mode explore
+
+# 【検証】CTRVモード(高精度なカーブ予測)を指定してAI探索を開始する場合
+python3 master_orchestrator.py --type uturn --mode explore --ext_mode ctrv
 
 # 【ホスト併用モード】21号機のみ画面を表示して直接検証し、他のワーカーはコンテナで実行する場合
 python3 master_orchestrator.py --type uturn --mode explore --with_host_worker
@@ -188,6 +193,9 @@ python3 visualize_traces.py ~/simulation_traces_shared_20260512_144346
 
 MIN_TTCの可視化
 python3 visualize_min_ttc.py ~/simulation_traces
+
+リスク評価マトリックスの3D可視化
+python3 visualize_risk_matrix.py ~/simulation_traces
 
 # 対象のフォルダ（ディレクトリ）を指定する場合
 python3 compare_ttc_modes.py --dir ~/simulation_traces_shared_20260512_144346

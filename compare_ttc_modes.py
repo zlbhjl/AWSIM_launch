@@ -6,6 +6,7 @@ import re
 import csv
 import argparse
 import sys
+import importlib
 
 # AW_Kinematics_Extractor のパスを通す
 LAUNCH_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -23,6 +24,7 @@ def main():
     parser = argparse.ArgumentParser(description="Compare min_ttc among maude, cvm, and ctrv modes")
     parser.add_argument("--dir", type=str, default="~/simulation_traces", help="Directory containing JSON logs")
     parser.add_argument("--output", type=str, default="ttc_mode_comparison.csv", help="Output CSV file name")
+    parser.add_argument("--type", type=str, default="uturn", help="Scenario type (default: uturn)")
     args = parser.parse_args()
 
     target_dir = os.path.expanduser(args.dir)
@@ -31,6 +33,14 @@ def main():
     if not os.path.exists(target_dir):
         print(f"[Error] Directory not found: {target_dir}")
         sys.exit(1)
+
+    # 設定ファイルから対象NPCを動的に読み込む (将来の複数NPC対応)
+    try:
+        cfg = importlib.import_module(f"configs.{args.type}")
+        target_npcs = getattr(cfg, 'TARGET_NPCS', ["npc1"])
+    except ImportError:
+        print(f"[Warning] configs/{args.type}.py が見つかりません。デフォルトの target_npcs=['npc1'] を使用します。")
+        target_npcs = ["npc1"]
 
     # '_eval_sim' が含まれるJSONファイルを探す ('footage'や無関係なファイルを除外)
     json_files = []
@@ -52,9 +62,9 @@ def main():
     print("Starting TTC extraction for 'maude', 'cvm', and 'ctrv' modes...\n")
 
     # すべてのモードのパイプラインを初期化
-    pipeline_maude = AWKinematicsPipeline(mode="maude")
-    pipeline_cvm = AWKinematicsPipeline(mode="cvm")
-    pipeline_ctrv = AWKinematicsPipeline(mode="ctrv")
+    pipeline_maude = AWKinematicsPipeline(mode="maude", target_npcs=target_npcs)
+    pipeline_cvm = AWKinematicsPipeline(mode="cvm", target_npcs=target_npcs)
+    pipeline_ctrv = AWKinematicsPipeline(mode="ctrv", target_npcs=target_npcs)
 
     results = []
     
@@ -62,9 +72,9 @@ def main():
         filename = os.path.basename(filepath)
         print(f"Processing Sim {loop_num} ({filename})...")
         
-        min_ttc_maude = pipeline_maude.get_min_ttc(filepath)
-        min_ttc_cvm = pipeline_cvm.get_min_ttc(filepath)
-        min_ttc_ctrv = pipeline_ctrv.get_min_ttc(filepath)
+        min_ttc_maude = pipeline_maude.get_metrics(filepath).get("min_ttc", float('inf'))
+        min_ttc_cvm = pipeline_cvm.get_metrics(filepath).get("min_ttc", float('inf'))
+        min_ttc_ctrv = pipeline_ctrv.get_metrics(filepath).get("min_ttc", float('inf'))
 
         # CVM と CTRV の差分を計算 (直進予測がいかに過剰だったかを見るため)
         diff_cvm_ctrv = ""

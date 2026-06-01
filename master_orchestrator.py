@@ -77,6 +77,7 @@ def load_config():
     parser.add_argument("--with_host_worker", action="store_true", help="Run a local worker on the host machine (ROS_DOMAIN_ID=21, EXEC_MODE=host)")
     parser.add_argument("--headless_host", action="store_true", help="Run the host worker with Xvfb (No GUI)")
     parser.add_argument("--resume_from", type=str, default=None, help="Directory to restore dataset from (e.g., ~/simulation_traces_shared_...)")
+    parser.add_argument("--ext_mode", type=str, choices=["maude", "cvm", "ctrv"], default="cvm", help="Kinematics extractor mode for evaluating simulation logs")
     args = parser.parse_args()
 
     try:
@@ -110,7 +111,7 @@ def load_config():
             print(f"[Fatal] 復元元のデータセットが見つかりません: {src_csv}")
             sys.exit(1)
 
-    return args.type, config_module, args.mode, focus_points, args.with_host_worker, args.headless_host
+    return args.type, config_module, args.mode, focus_points, args.with_host_worker, args.headless_host, args.ext_mode
 
 # ==============================================================================
 # [追加] 過去のデータセットから最大ループ番号を取得
@@ -142,11 +143,11 @@ def get_last_processed_loop(scenario_name):
 # メインオーケストレーター処理
 # ==============================================================================
 def main():
-    scenario_name, cfg, run_mode, focus_points, with_host_worker, headless_host = load_config()
+    scenario_name, cfg, run_mode, focus_points, with_host_worker, headless_host, ext_mode = load_config()
 
     # 1. クラスターの一斉起動 (21〜23号機のコンテナを自動で立ち上げる)
     cluster_manager = ClusterManager()
-    cluster_manager.start_cluster(scenario_name, run_mode, with_host_worker)
+    cluster_manager.start_cluster(scenario_name, run_mode, with_host_worker, ext_mode)
     
     # 2. Rayクラスターに接続 (namespaceを指定し、ワーカーから発見可能にする)
     head_address = f"{cluster_manager.master_ip}:{cluster_manager.ray_port}"
@@ -216,7 +217,7 @@ def main():
         log_path = os.path.join(log_dir, "host_worker_console.log")
         host_worker_log = open(log_path, "w")
         
-        cmd = ["python3", "-u", "run_manager.py", "--type", scenario_name, "--mode", run_mode]
+        cmd = ["python3", "-u", "run_manager.py", "--type", scenario_name, "--mode", run_mode, "--ext_mode", ext_mode]
         if focus_points:
             cmd.extend(["--focus_points", json.dumps(focus_points)])
         if headless_host:

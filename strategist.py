@@ -52,8 +52,8 @@ class ActiveLearningStrategist:
                         df[col] = pd.to_numeric(df[col], errors='coerce')
                 df = df.dropna(subset=check_cols)
                 
-                # 衝突の事実(1.0)があり、かつ人間ドライバーの限界マージンが -1.0m 以上 (安全〜境界ギリギリ) のデータを抽出
-                edge_df = df[(df['c_collision'] == 1) & (df['theory_margin_a_human'] > -1.0)]
+                # 衝突の事実(1.0)があり、かつ人間なら確実に安全な領域 (マージン > 0.0m) のデータを抽出
+                edge_df = df[(df['c_collision'] == 1) & (df['theory_margin_a_human'] > 0.0)]
                 
                 if not edge_df.empty:
                     extracted_points = []
@@ -83,8 +83,8 @@ class ActiveLearningStrategist:
                         df[col] = pd.to_numeric(df[col], errors='coerce')
                 df = df.dropna(subset=check_cols)
                 
-                # 衝突していない(0) かつ TTCが閾値以下 かつ 人間なら安全(-1.0m以上)
-                edge_df = df[(df['c_collision'] == 0) & (df['min_ttc'] <= ttc_threshold) & (df['theory_margin_a_human'] > -1.0)]
+                # 衝突していない(0) かつ TTCが閾値以下 かつ 人間なら確実に安全 (マージン > 0.0m)
+                edge_df = df[(df['c_collision'] == 0) & (df['min_ttc'] <= ttc_threshold) & (df['theory_margin_a_human'] > 0.0)]
                 
                 if not edge_df.empty:
                     extracted_points = []
@@ -193,7 +193,11 @@ class ActiveLearningStrategist:
                         rng = self.config.PARAM_RANGES[name][1] - self.config.PARAM_RANGES[name][0]
                         # 3%の微小ノイズを加えて少しずらす (シミュレータのクラッシュ回避)
                         noise = np.random.normal(0, rng * 0.03) 
-                        val = float(err_row[name]) + noise
+                        try:
+                            val = float(err_row[name]) + noise
+                        except (ValueError, TypeError, KeyError):
+                            # CSVのズレ等で文字列が入っている場合は安全な中央値を使用する
+                            val = (self.config.PARAM_RANGES[name][0] + self.config.PARAM_RANGES[name][1]) / 2.0 + noise
                         val = np.clip(val, self.config.PARAM_RANGES[name][0], self.config.PARAM_RANGES[name][1])
                         shifted_point[name] = val
                     shifted_point["reason"] = f"{log_prefix}Error Recovery (Shifted from Loop {int(err_row['loop_num'])})"

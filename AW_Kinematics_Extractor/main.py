@@ -12,9 +12,10 @@ class AWKinematicsPipeline:
     AW-Kinematics-Extractor全体の処理をカプセル化するインターフェース。
     ファイル出力を介さずに、計算結果を直接メモリ上で取得・受け渡しするためのクラスです。
     """
-    def __init__(self, mode="cvm"):
+    def __init__(self, mode="cvm", target_npcs=None):
         self.mode = mode
-        self.parser = AWKinematicsExtractorPhase1(mode=mode)
+        self.target_npcs = target_npcs or ["npc1"]
+        self.parser = AWKinematicsExtractorPhase1(mode=mode, target_npcs=self.target_npcs)
         self.geom_builder = GeometryBuilder(mode=mode)
         self.ttc_sim = TTCSimulator(mode=mode)
 
@@ -33,11 +34,35 @@ class AWKinematicsPipeline:
 
     def get_metrics(self, filepath: str) -> dict:
         """ファイル出力を行わず、最小TTCと最小接近距離を直接計算して返す高速モード"""
-        df_result = self.run_extraction(filepath)
-        return {
-            "min_ttc": float(df_result['ttc'].min()) if not df_result.empty and 'ttc' in df_result.columns else float('inf'),
-            "min_distance": float(df_result['distance'].min()) if not df_result.empty and 'distance' in df_result.columns else float('inf')
-        }
+        try:
+            df_result = self.run_extraction(filepath)
+            
+            if df_result.empty:
+                # Maudeの [owise] ルールを踏襲: 計算不可時は常に安全(TTC=inf, 衝突=0)とする
+                return {
+                    "min_ttc": float('inf'),
+                    "min_distance": float('inf'),
+                    "c_collision": 0
+                }
+                
+            min_ttc = float(df_result['ttc'].min()) if 'ttc' in df_result.columns else float('inf')
+            min_distance = float(df_result['distance'].min()) if 'distance' in df_result.columns else float('inf')
+            
+            c_collision = 1 if (min_ttc <= 0.01 or min_distance <= 0.05) else 0
+            
+            return {
+                "min_ttc": min_ttc,
+                "min_distance": min_distance,
+                "c_collision": c_collision
+            }
+        except Exception as e:
+            # 予期せぬパースエラー発生時もフェイルセーフとして [owise] の結果を返す
+            print(f"[Warning] Extraction failed for {filepath}: {e}")
+            return {
+                "min_ttc": float('inf'),
+                "min_distance": float('inf'),
+                "c_collision": 0
+            }
 
 def process_single_log(filepath: str, output_dir: str, mode="cvm"):
     print(f"[{os.path.basename(filepath)}] Processing started...")
@@ -87,7 +112,7 @@ if __name__ == "__main__":
             # 余分な引数を除外してファイル名だけを取得
             target_file = [arg for arg in argv_copy if arg not in ["--min-ttc-only", argv_copy[0]]][0]
             pipeline = AWKinematicsPipeline(mode=run_mode)
-            print(pipeline.get_min_ttc(target_file))
+            print(pipeline.get_metrics(target_file).get("min_ttc", float('inf')))
         else:
             target_file = argv_copy[1]
             process_single_log(target_file, OUTPUT_DIRECTORY, mode=run_mode)

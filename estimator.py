@@ -97,6 +97,10 @@ class SafetyEstimator:
         for i in range(len(ttc_cols) - 1):
             df_dataset.loc[df_dataset[ttc_cols[i]].isin([1, "1", 1.0]), ttc_cols[i+1]] = 1
 
+        # --- [追加] 特徴量の列に文字列（ズレ等）が混入しているとScikit-Learnがクラッシュするため、強制的に数値に変換 ---
+        for col in self.feature_names:
+            df_dataset[col] = pd.to_numeric(df_dataset[col], errors='coerce')
+
         # 欠損値の除去と、0/1 (Boolean) データへの絞り込み
         essential_cols = ["loop_num", target_column] + self.feature_names
         df_dataset = df_dataset.dropna(subset=essential_cols)

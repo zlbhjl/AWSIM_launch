@@ -24,6 +24,7 @@ def load_config():
     parser.add_argument("--mode", type=str, choices=["explore", "focus", "margin", "jama_edge", "ttc_edge"], default="explore", help="Search mode: explore (default), focus, margin, jama_edge, or ttc_edge")
     parser.add_argument("--focus_points", type=str, default=None, help="JSON string for focus points (e.g., '[{\"dx0\": 15.0}]')")
     parser.add_argument("--headless", action="store_true", help="Run with Xvfb (No GUI)")
+    parser.add_argument("--ext_mode", type=str, default="cvm", help="Kinematics Extractor Mode for Checker (cvm/ctrv/maude)")
     args = parser.parse_args()
 
     try:
@@ -52,9 +53,9 @@ def load_config():
                 # 分散ワーカーとしてはマスターの指示（タスク）に従うだけなので、ここでプロセスを落とさない
                 print("[System] ConfigにFOCUS_POINTSがありませんが、マスターからの指示に従って動作します。")
 
-    return args.type, config_module, args.mode, focus_points, args.headless
+    return args.type, config_module, args.mode, focus_points, args.headless, args.ext_mode
 
-SCENARIO_NAME, cfg, RUN_MODE, FOCUS_POINTS, HEADLESS_MODE = load_config()
+SCENARIO_NAME, cfg, RUN_MODE, FOCUS_POINTS, HEADLESS_MODE, EXT_MODE = load_config()
 
 LAUNCH_DIR = os.path.dirname(os.path.abspath(__file__))
 if LAUNCH_DIR not in sys.path:
@@ -149,7 +150,7 @@ INFRA_TASKS = [
     Task(
         name="AW Checker (Safety Evaluator)",
         work_dir=LAUNCH_DIR,
-        command=f"python3 awchecker.py --type {SCENARIO_NAME}",
+        command=f"python3 awchecker.py --type {SCENARIO_NAME} --ext_mode {EXT_MODE}",
         delay=2,
         source_setup=False,
         resident=True

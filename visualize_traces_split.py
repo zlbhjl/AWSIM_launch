@@ -14,10 +14,17 @@ except ImportError:
 
 # 1. 対象ディレクトリとファイルの指定
 target_dir = sys.argv[1] if len(sys.argv) > 1 else os.path.expanduser('~/simulation_traces')
-csv_file = os.path.join(target_dir, 'uturn_dataset.csv')
 
-if not os.path.exists(csv_file):
-    print(f"[Error] データセットが見つかりません: {csv_file}")
+# 修復済み(_fixed)のデータセットがあれば優先的に読み込む
+csv_file_fixed = os.path.join(target_dir, 'uturn_dataset_fixed.csv')
+csv_file_normal = os.path.join(target_dir, 'uturn_dataset.csv')
+
+if os.path.exists(csv_file_fixed):
+    csv_file = csv_file_fixed
+elif os.path.exists(csv_file_normal):
+    csv_file = csv_file_normal
+else:
+    print(f"[Error] データセットが見つかりません: {csv_file_normal} (または _fixed.csv)")
     sys.exit(1)
 
 print(f"[{csv_file}] を読み込み中...")
@@ -34,6 +41,13 @@ valid_df = df.copy()
 for col in target_columns:
     if col in valid_df.columns:
         valid_df = valid_df[valid_df[col].isin([0, 1])]
+
+# --- [追加] プロット用の座標データを確実に数値化 (文字列混入によるクラッシュ防止) ---
+plot_cols = ['dx0', 'npc_speed', 'ego_speed']
+for col in plot_cols:
+    if col in valid_df.columns:
+        valid_df[col] = pd.to_numeric(valid_df[col], errors='coerce')
+valid_df = valid_df.dropna(subset=plot_cols)
 
 if 'c_collision' in valid_df.columns:
     collision_mask = valid_df['c_collision'] == 1

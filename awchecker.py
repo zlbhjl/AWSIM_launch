@@ -38,12 +38,14 @@ def main():
     # ---------------------------------------------------------
     parser = argparse.ArgumentParser()
     parser.add_argument("--type", type=str, default="uturn", help="Scenario type")
+    parser.add_argument("--ext_mode", type=str, default="cvm", help="Kinematics Extractor Mode (cvm/ctrv/maude)")
     args, unknown = parser.parse_known_args()
 
     try:
         cfg = importlib.import_module(f"configs.{args.type}")
         result_labels = getattr(cfg, 'RESULT_LABELS', [])
         formulas_config = getattr(cfg, 'FORMULAS', [])
+        target_npcs = getattr(cfg, 'TARGET_NPCS', ["npc1"])
     except ImportError:
         print(f"[Error] configs/{args.type}.py が見つかりません。")
         sys.exit(1)
@@ -219,11 +221,17 @@ def main():
                         else:
                             try:
                                 file_exists = os.path.exists(dataset_csv_path)
+                                headers = all_headers
+                                if file_exists and os.path.getsize(dataset_csv_path) > 0:
+                                    with open(dataset_csv_path, "r", encoding="utf-8") as f:
+                                        existing_headers = next(csv.reader(f), None)
+                                        if existing_headers: headers = existing_headers
+                                        
                                 with open(dataset_csv_path, "a", newline="", encoding="utf-8") as f:
-                                    writer = csv.DictWriter(f, fieldnames=all_headers)
+                                    writer = csv.DictWriter(f, fieldnames=headers, extrasaction="ignore", restval="")
                                     if not file_exists or os.path.getsize(dataset_csv_path) == 0:
                                         writer.writeheader()
-                                    writer.writerow({k: parsed_row.get(k, "") for k in all_headers})
+                                    writer.writerow(parsed_row)
                             except PermissionError:
                                 print(f"[Warning] ローカルの {dataset_csv_path} に書き込む権限がありません。")
                         
@@ -241,70 +249,60 @@ def main():
                     is_any_fail = False
                     has_error = False
 
+                    metrics = {}
+                    min_ttc = -1.0
+                    min_distance = -1.0
+                    
+                    # 1. AWKinematicsPipeline で最小TTCと最小距離のみを抽出する
                     if AWKinematicsPipeline is not None:
                         try:
-                            pipeline = AWKinematicsPipeline(mode="ctrv")
-                            metrics = pipeline.get_metrics(target_path)
-                            min_ttc = metrics["min_ttc"]
-                            min_distance = metrics["min_distance"]
+                            pipeline = AWKinematicsPipeline(mode=args.ext_mode, target_npcs=target_npcs)
+                            kinematics_metrics = pipeline.get_metrics(target_path)
+                            min_ttc = kinematics_metrics.get("min_ttc", -1.0)
+                            min_distance = kinematics_metrics.get("min_distance", -1.0)
                             print(f"  [高速抽出] 最小TTC: {min_ttc} 秒 | 最小距離: {min_distance:.4f} m")
                         except Exception as e:
                             print(f"  [エラー] AWKinematicsPipelineでの抽出に失敗しました: {e}")
-                            min_ttc = -1.0
-                            min_distance = -1.0
-                            
-                        parsed_row["min_ttc"] = min_ttc
-                        parsed_row["min_distance"] = min_distance
+
+                    parsed_row["min_ttc"] = min_ttc if min_ttc != -1.0 else ""
+                    parsed_row["min_distance"] = min_distance if min_distance != -1.0 else ""
+
+                    # 2. すべての指標について Maude (aw_checkerpy.py) を呼び出して厳密な論理検証を行う
+                    print(f"  [Maude検証] すべての指標({len(metric_config)}件)を厳密に論理検証します...")
+                    command = ["python3", "aw_checkerpy.py", target_path]
+                    result = subprocess.run(command, cwd=tool_dir, env=my_env, capture_output=True, text=True)
+                    output_log = result.stdout
+                    error_log = result.stderr
+
+                    for item in metric_config:
+                        formula = item["formula"]
+                        header = item["header"]
+                        pattern = re.escape(formula) + r".*?Model checking result: (True|False)"
+                        match = re.search(pattern, output_log, re.DOTALL)
+
+                        if match:
+                            metrics[header] = 0 if match.group(1) == "True" else 1
+                        else:
+                            metrics[header] = -1
+                            has_error = True
+                            if shared_store:
+                                ray.get(shared_store.log_error_detail.remote(error_detail_log_path, target_file, header, output_log, error_log))
+
+                    # 4. 最終的な結果の統合と判定
+                    for item in metric_config:
+                        header = item["header"]
+                        # Maudeが計算できたものはその値を、失敗したものは -1 を記録する
+                        val = int(metrics.get(header, -1))
                         
-                        for item in metric_config:
-                            header = item["header"]
-                            if header == "c_collision":
-                                val = 1 if min_ttc <= 0.0 else 0
-                                if val == 1:
-                                    parsed_row["min_distance"] = 0.0
-                            elif header.startswith("c_ttc_"):
-                                try:
-                                    threshold = float(header.split("_")[-1])
-                                    val = 1 if min_ttc <= threshold else 0
-                                except ValueError:
-                                    val = 0
-                            else:
-                                val = 0
-                                
-                            parsed_row[header] = val
-                            if val == 1:
-                                is_any_fail = True
-                    else:
-                        min_ttc = None
-                        parsed_row["min_ttc"] = ""
-                        parsed_row["min_distance"] = ""
-
-                        output_log, error_log = "", ""
-                        command = ["python3", "aw_checkerpy.py", target_path]
-                        result = subprocess.run(command, cwd=tool_dir, env=my_env, capture_output=True, text=True)
-                        output_log = result.stdout
-                        error_log = result.stderr
-
-                        for item in metric_config:
-                            formula = item["formula"]
-                            header = item["header"]
+                        if header == "c_collision" and val == 1:
+                            parsed_row["min_distance"] = 0.0
                             
-                            pattern = re.escape(formula) + r".*?Model checking result: (True|False)"
-                            match = re.search(pattern, output_log, re.DOTALL)
-
-                            if match:
-                                val = 0 if match.group(1) == "True" else 1
-                                parsed_row[header] = val
-                                if val == 1:
-                                    if "stuck" in header:
-                                        has_error = True
-                                    else:
-                                        is_any_fail = True
-                            else:
-                                parsed_row[header] = -1
+                        parsed_row[header] = val
+                        if val == 1:
+                            if "stuck" in header:
                                 has_error = True
-                                if shared_store:
-                                    ray.get(shared_store.log_error_detail.remote(error_detail_log_path, target_file, header, output_log, error_log))
+                            else:
+                                is_any_fail = True
 
                     if parsed_row.get("c_collision") == 1:
                         for key in list(parsed_row.keys()):
@@ -338,11 +336,17 @@ def main():
                     else:
                         try:
                             file_exists = os.path.exists(dataset_csv_path)
+                            headers = all_headers
+                            if file_exists and os.path.getsize(dataset_csv_path) > 0:
+                                with open(dataset_csv_path, "r", encoding="utf-8") as f:
+                                    existing_headers = next(csv.reader(f), None)
+                                    if existing_headers: headers = existing_headers
+                                    
                             with open(dataset_csv_path, "a", newline="", encoding="utf-8") as f:
-                                writer = csv.DictWriter(f, fieldnames=all_headers)
+                                writer = csv.DictWriter(f, fieldnames=headers, extrasaction="ignore", restval="")
                                 if not file_exists or os.path.getsize(dataset_csv_path) == 0:
                                     writer.writeheader()
-                                writer.writerow({k: parsed_row.get(k, "") for k in all_headers})
+                                writer.writerow(parsed_row)
                         except PermissionError:
                             pass
                     

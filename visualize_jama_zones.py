@@ -8,10 +8,17 @@ import sys
 
 # 1. 対象ディレクトリとファイルの指定
 target_dir = sys.argv[1] if len(sys.argv) > 1 else os.path.expanduser('~/simulation_traces')
-csv_file = os.path.join(target_dir, 'uturn_dataset.csv')
 
-if not os.path.exists(csv_file):
-    print(f"[Error] データセットが見つかりません: {csv_file}")
+# 修復済み(_fixed)のデータセットがあれば優先的に読み込む
+csv_file_fixed = os.path.join(target_dir, 'uturn_dataset_fixed.csv')
+csv_file_normal = os.path.join(target_dir, 'uturn_dataset.csv')
+
+if os.path.exists(csv_file_fixed):
+    csv_file = csv_file_fixed
+elif os.path.exists(csv_file_normal):
+    csv_file = csv_file_normal
+else:
+    print(f"[Error] データセットが見つかりません: {csv_file_normal} (または _fixed.csv)")
     sys.exit(1)
 
 print(f"[{csv_file}] を読み込み中...")
@@ -24,6 +31,10 @@ if missing_cols:
     print(f"[Error] データセットに必要な列が見つかりません: {missing_cols}")
     print("JAMA理論値が記録されているデータセットを使用してください。")
     sys.exit(1)
+
+# --- [追加] プロット用の座標データを確実に数値化 (文字列混入によるクラッシュ防止) ---
+for col in ['dx0', 'npc_speed', 'ego_speed']:
+    df[col] = pd.to_numeric(df[col], errors='coerce')
 
 # 欠損値を含む行を念のため除外
 valid_df = df.dropna(subset=required_cols).copy()

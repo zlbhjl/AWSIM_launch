@@ -14,10 +14,18 @@ except ImportError:
 
 # 1. 対象ディレクトリとファイルの指定
 target_dir = sys.argv[1] if len(sys.argv) > 1 else os.path.expanduser('~/simulation_traces')
-csv_file = os.path.join(target_dir, 'uturn_dataset.csv')
 
-if not os.path.exists(csv_file):
-    print(f"[Error] データセットが見つかりません: {csv_file}")
+# 修復済み(_fixed)のデータセットがあれば優先的に読み込む
+csv_file_fixed = os.path.join(target_dir, 'uturn_dataset_fixed.csv')
+csv_file_normal = os.path.join(target_dir, 'uturn_dataset.csv')
+
+if os.path.exists(csv_file_fixed):
+    csv_file = csv_file_fixed
+    print(f"[Info] 修復済みのデータセットを検知しました。優先して使用します。")
+elif os.path.exists(csv_file_normal):
+    csv_file = csv_file_normal
+else:
+    print(f"[Error] データセットが見つかりません: {csv_file_normal} (または _fixed.csv)")
     sys.exit(1)
 
 print(f"[{csv_file}] を読み込み中...")
@@ -89,6 +97,34 @@ for s in sorted(valid_df['risk_level'].unique()):
         alpha=0.9 if s > 1 else 0.15,  # ニアミス以上は目立たせ、安全領域は透明に
         s=60 if s > 1 else 15
     )
+
+# --- [追加] JAMA理論の領域(Zone)を算出して境界壁として描画 ---
+if TheoreticalSafetyCalculator is not None:
+    calc = TheoreticalSafetyCalculator()
+    jama_color_map = {'B': '#f39c12', 'C': '#e74c3c'}
+
+    ego_min, ego_max = valid_df['ego_speed'].min(), valid_df['ego_speed'].max()
+    npc_min, npc_max = valid_df['npc_speed'].min(), valid_df['npc_speed'].max()
+    if ego_min == ego_max: ego_max = ego_min + 10
+    if npc_min == npc_max: npc_max = npc_min + 10
+    
+    ego_grid = np.linspace(ego_min, ego_max, 30)
+    npc_grid = np.linspace(npc_min, npc_max, 30)
+    Y_npc, Z_ego = np.meshgrid(npc_grid, ego_grid)
+    X_dx0_human = np.zeros_like(Z_ego)
+    X_dx0_ai = np.zeros_like(Z_ego)
+    
+    for i in range(Z_ego.shape[0]):
+        for j in range(Z_ego.shape[1]):
+            res = calc.evaluate(0.0, Z_ego[i, j], Y_npc[i, j])
+            X_dx0_human[i, j] = res["theory_d_total_human"]
+            X_dx0_ai[i, j] = res["theory_d_total_ai"]
+            
+    ax.plot_surface(X_dx0_ai, Y_npc, Z_ego, color=jama_color_map['C'], alpha=0.15, shade=False)
+    ax.plot_surface(X_dx0_human, Y_npc, Z_ego, color=jama_color_map['B'], alpha=0.15, shade=False)
+    
+    ax.plot([], [], [], color=jama_color_map['B'], alpha=0.3, linewidth=5, label='Theory Zone B (AI Safe, Human Danger)')
+    ax.plot([], [], [], color=jama_color_map['C'], alpha=0.3, linewidth=5, label='Theory Zone C (Both Danger)')
 
 ax.set_xlabel('dx0 (Initial Distance [m])', fontsize=12)
 ax.set_ylabel('npc_speed (NPC Speed [km/h])', fontsize=12)
