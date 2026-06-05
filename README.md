@@ -15,6 +15,8 @@ AI (ガウス過程回帰モデル) を用いた **アクティブラーニン�
 - **堅牢な自動リカバリ**: タイムアウトや解析エラー発生時でもシステム全体がフリーズすることなく、異常データを安全に弾いてテストを継続します。
 - **過去データからの自動復元と再開 (`--resume_from`)**: 退避させた過去のデータセットを現在の作業ディレクトリに復元し、シームレスに検証を再開・追記できます。
 - **エッジケース自動抽出・集中検証 (`jama_edge`, `ttc_edge`)**: 過去のデータから「人間なら安全な領域での事故」や「ギリギリのニアミス」などの弱点をAIが自動抽出し、偶然か真の危険かを反復検証します。
+- **最悪TTC探索 (`worst_ttc`)**: 今までの検証データから衝突しなかった「安全領域」を特定し、その中で最もTTCが小さかった（最悪の）ケースの下位N件を自動抽出し集中検証します。
+- **SMC (DKW) 検証モード**: Sequential-DKW不等式を用いて、システムの安全性を数学的に証明します。手動での領域指定 (`--dkw_bounds`) に加え、過去のデータから「経験的安全領域」や「JAMA理論安全領域」を自動算出して証明対象とする (`--dkw_region`) ことも可能です。
 - **Config-Driven アーキテクチャ**: シナリオ (Uターン、割り込み等) のパラメータやAIの探索範囲、タイムアウト時間を単一の設定ファイルで柔軟に定義可能 (`configs/`)。
 - **フォーカス (集中) モード**: 特定のパラメータの周辺に絞ってテストを反復するピンポイント検証機能。
 - **リアルタイム進捗監視**: 司令塔の画面で、各ワーカーが「待機中」「実行中」「タイムアウト」など、何をしているかをリアルタイムで1行にまとめて表示します。
@@ -24,19 +26,23 @@ AI (ガウス過程回帰モデル) を用いた **アクティブラーニン�
 
 ```text
 AWSIM_launch/
-├── master_orchestrator.py # 【司令塔】システム全体の起動、クラスター構築、AIタスクのキュー管理を行うマスタープロセス。
-├── run_manager.py      # 【ワーカー】各ノードのメインプロセス。インフラの起動、司令塔からのタスク受信、テスト実行を管理。
-├── run_scenario.py     # 単一のシミュレーションを実行するスクリプト。動的パラメータを受け取りシナリオを構築。
-├── strategist.py       # AIの探索戦略を司る頭脳。現在のフェーズを判断し、次に検証すべきパラメータを決定。
-├── estimator.py        # 過去のデータセットを学習し、予測値と不確実性(標準偏差)を算出するガウス過程回帰モデル。
-├── awchecker.py        # シミュレーション結果(JSON)を解析し、安全性を判定。判定結果を共有金庫へ送信。
-├── param_logger.py     # テスト実行時のパラメータを一時的に共有金庫のバッファへ送信。
+├── master_orchestrator.py    # 【司令塔】システム全体の起動、クラスター構築、AIタスクのキュー管理を行うマスタープロセス。
+├── run_manager.py            # 【ワーカー】各ノードのメインプロセス。インフラの起動、司令塔からのタスク受信、テスト実行を管理。
+├── run_scenario.py           # 単一のシミュレーションを実行するスクリプト。動的パラメータを受け取りシナリオを構築。
+├── strategist.py             # AIの探索戦略を司る頭脳。現在のフェーズを判断し、次に検証すべきパラメータを決定。
+├── estimator.py              # 【内部モジュール】ガウス過程回帰やDKW不等式など、統計的な評価・計算を行う数学エンジン。
+├── awchecker.py              # シミュレーション結果(JSON)を解析し、安全性を判定。判定結果を共有金庫へ送信。
+├── param_logger.py           # テスト実行時のパラメータを一時的に共有金庫のバッファへ送信。
 ├── theoretical_calculator.py # JAMA物理モデルに基づく理論的安全領域(Zone)とマージンを計算するモジュール。
-├── fix_dataset_labels.py # 過去のデータセットを最新の抽出ロジックで全号機から並列再解析し、安全に修復(更新)するスクリプト。
-├── visualize_traces.py # 実行結果のCSVデータを読み込み、3Dグラフとして可視化するスクリプト。
+├── point_extractors.py       # 【内部モジュール】データセットから探索候補点(JAMAエッジ等)を抽出・分類する共通アルゴリズム群。
+├── extract_region_data.py    # 【CLIツール】コマンドで抽出条件を指定し、結果をCSVとして出力させるためのユーザー操作用スクリプト。
+├── analyze_ttc_consistency.py # 【CLIツール】反復テストデータからTTCのばらつきを分析し、確実/偶然リスクに分類してDKW評価を出力するスクリプト。
+├── fix_dataset_labels.py     # 過去のデータセットを最新の抽出ロジックで全号機から並列再解析し、安全に修復(更新)するスクリプト。
+├── visualize_traces.py       # 実行結果のCSVデータを読み込み、3Dグラフとして可視化するスクリプト。
 ├── visualize_traces_split.py # ホスト(21号機)とコンテナ(22・23号機)の実行結果を分割し、それぞれ独立した3Dグラフとして可視化するスクリプト。
 ├── visualize_worker_stats.py # ワーカー別（ホスト vs コンテナ）の衝突やTTC違反の発生確率を棒グラフで比較・可視化するスクリプト。
-├── visualize_jama_zones.py # JAMA物理モデルに基づく理論的な安全領域(Zone)の分布をグラフ化して可視化・分析するスクリプト。
+├── visualize_min_ttc_3d.py   # Maudeの論理フラグではなく、AW_Kinematics_Extractorが計算した連続値のmin_ttcを基準に危険度を色分けして3D可視化するスクリプト。
+├── visualize_jama_zones.py   # JAMA物理モデルに基づく理論的な安全領域(Zone)の分布をグラフ化して可視化・分析するスクリプト。
 ├── visualize_risk_matrix.py  # 衝突、最小TTC、最小接近距離を組み合わせて、安全性を4段階のリスクレベルで総合的に評価・可視化するスクリプト。
 ├── redis_cluster/      # 分散クラスター管理モジュール
 │   ├── cluster_config.py  # ワーカーPCのIPやコンテナ名、通信割り当て設定などを一元管理。
@@ -65,8 +71,17 @@ AWSIM_launch/
 # 【探索モード】空間全体から危険な境界線を自動探索させる場合（すべてコンテナで実行）
 python3 master_orchestrator.py --type uturn --mode explore
 
-# 【検証】CTRVモード(高精度なカーブ予測)を指定してAI探索を開始する場合
-python3 master_orchestrator.py --type uturn --mode explore --ext_mode ctrv
+# 【検証】デフォルト(CVM)でAI探索を開始する場合
+python3 master_orchestrator.py
+
+# 【検証】CTRVモードを指定してAI探索を開始する場合
+python3 master_orchestrator.py --ext_mode ctrv
+
+# 【修復】デフォルト(CVM)で過去データを再解析する場合
+python3 fix_dataset_labels.py
+
+# 【修復】CTRVモードを指定して過去データを再解析する場合
+python3 fix_dataset_labels.py --mode ctrv
 
 # 【ホスト併用モード】21号機のみ画面を表示して直接検証し、他のワーカーはコンテナで実行する場合
 python3 master_orchestrator.py --type uturn --mode explore --with_host_worker
@@ -93,6 +108,26 @@ python3 master_orchestrator.py --type uturn --mode jama_edge
 
 # 【TTCエッジ探索モード】過去のデータからTTCが1.5秒以下のニアミスを自動抽出し、それが処理落ち等の偶然か真の危険かを分別・探索する場合
 python3 master_orchestrator.py --type uturn --mode ttc_edge
+
+# 【最悪TTC探索モード】これまでの検証データから衝突しなかった安全領域内の「TTC最悪ケース（下位10件）」を抽出し、本当に安全か周辺を集中検証する場合
+python3 master_orchestrator.py --type uturn --mode worst_ttc
+
+# 【DKW証明モード】統計的モデル検査(SMC)で安全性を証明する
+# 1. 手動で指定した領域の安全性を証明する場合
+python3 master_orchestrator.py --type uturn --mode dkw --dkw_bounds '{"dx0": [20.0, 25.0], "ego_speed": [30.0, 35.0]}'
+
+# 2. 過去のデータから自動で領域を算出して安全性を証明する場合
+#  emp_safe: 過去のデータで「衝突しなかった（経験的安全）」領域。
+python3 master_orchestrator.py --type uturn --mode dkw --dkw_region emp_safe
+
+#  jama_safe: JAMA物理モデルで「人間なら安全」とされた領域。
+python3 master_orchestrator.py --type uturn --mode dkw --dkw_region jama_safe
+
+#  intersect_safe: 上記2つの両方を満たす（AND）、確実な安全領域。
+python3 master_orchestrator.py --type uturn --mode dkw --dkw_region intersect_safe
+
+#  union_safe: 上記2つのどちらかを満たす（OR）、少し広めの安全領域。
+python3 master_orchestrator.py --type uturn --mode dkw --dkw_region union_safe
 
 # 過去に退避させた特定のデータ(例: ~/simulation_traces_shared_...)を復元して、そこから探索を再開する場合
 python3 master_orchestrator.py --type uturn --mode ttc_edge --resume_from ~/simulation_traces_shared_20260525_184326
@@ -191,8 +226,8 @@ python3 visualize_traces.py ~/simulation_traces_shared_20260512_144346
 +```bash
 +python3 visualize_jama_zones.py ~/simulation_traces
 
-MIN_TTCの可視化
-python3 visualize_min_ttc.py ~/simulation_traces
+# MIN_TTCの連続値に基づく深刻度の3D可視化 (Maudeのフラグではなく抽出器の数値を優先)
+python3 visualize_min_ttc_3d.py ~/simulation_traces
 
 リスク評価マトリックスの3D可視化
 python3 visualize_risk_matrix.py ~/simulation_traces

@@ -72,12 +72,14 @@ class TaskQueueActor:
 def load_config():
     parser = argparse.ArgumentParser(description="Multi-Scenario Autonomous Driving Test Master Orchestrator")
     parser.add_argument("--type", type=str, default="uturn", help="Scenario type (e.g., uturn, cutin)")
-    parser.add_argument("--mode", type=str, choices=["explore", "focus", "margin", "jama_edge", "ttc_edge"], default="explore", help="Search mode")
+    parser.add_argument("--mode", type=str, choices=["explore", "focus", "margin", "jama_edge", "ttc_edge", "worst_ttc", "dkw", "verify_consistency"], default="explore", help="Search mode")
     parser.add_argument("--focus_points", type=str, default=None, help="JSON string for focus points")
     parser.add_argument("--with_host_worker", action="store_true", help="Run a local worker on the host machine (ROS_DOMAIN_ID=21, EXEC_MODE=host)")
     parser.add_argument("--headless_host", action="store_true", help="Run the host worker with Xvfb (No GUI)")
     parser.add_argument("--resume_from", type=str, default=None, help="Directory to restore dataset from (e.g., ~/simulation_traces_shared_...)")
     parser.add_argument("--ext_mode", type=str, choices=["maude", "cvm", "ctrv"], default="cvm", help="Kinematics extractor mode for evaluating simulation logs")
+    parser.add_argument("--dkw_bounds", type=str, default=None, help="JSON string defining the specific region for DKW (e.g., '{\"dx0\": [15.0, 20.0]}')")
+    parser.add_argument("--dkw_region", type=str, default="custom", help="Extraction condition string (e.g. 'emp_safe and jama_safe')")
     args = parser.parse_args()
 
     try:
@@ -111,7 +113,15 @@ def load_config():
             print(f"[Fatal] 復元元のデータセットが見つかりません: {src_csv}")
             sys.exit(1)
 
-    return args.type, config_module, args.mode, focus_points, args.with_host_worker, args.headless_host, args.ext_mode
+    dkw_bounds = None
+    if args.dkw_bounds:
+        try:
+            dkw_bounds = json.loads(args.dkw_bounds)
+        except json.JSONDecodeError as e:
+            print(f"[Fatal] --dkw_bounds 引数のJSONパースに失敗しました: {e}")
+            sys.exit(1)
+
+    return args.type, config_module, args.mode, focus_points, args.with_host_worker, args.headless_host, args.ext_mode, args.resume_from, dkw_bounds, args.dkw_region
 
 # ==============================================================================
 # [追加] 過去のデータセットから最大ループ番号を取得
@@ -143,7 +153,7 @@ def get_last_processed_loop(scenario_name):
 # メインオーケストレーター処理
 # ==============================================================================
 def main():
-    scenario_name, cfg, run_mode, focus_points, with_host_worker, headless_host, ext_mode = load_config()
+    scenario_name, cfg, run_mode, focus_points, with_host_worker, headless_host, ext_mode, resume_from, dkw_bounds, dkw_region = load_config()
 
     # 1. クラスターの一斉起動 (21〜23号機のコンテナを自動で立ち上げる)
     cluster_manager = ClusterManager()
@@ -195,7 +205,7 @@ def main():
 
     # 5. AI (Strategist) の初期化
     # [修正] 候補数(num_candidates)を10000から2000に減らし、AI予測の計算量を削減
-    strategist = ActiveLearningStrategist(scenario_name, cfg, num_candidates=2000, focus_points=focus_points, run_mode=run_mode)
+    strategist = ActiveLearningStrategist(scenario_name, cfg, num_candidates=2000, focus_points=focus_points, run_mode=run_mode, dkw_bounds=dkw_bounds, dkw_region=dkw_region)
     
     REPEAT_COUNT = getattr(cfg, 'REPEAT_COUNT', 3000)
     
@@ -217,9 +227,11 @@ def main():
         log_path = os.path.join(log_dir, "host_worker_console.log")
         host_worker_log = open(log_path, "w")
         
-        cmd = ["python3", "-u", "run_manager.py", "--type", scenario_name, "--mode", run_mode, "--ext_mode", ext_mode]
+        cmd = ["python3", "-u", "run_manager.py", "--type", scenario_name, "--mode", run_mode, "--ext_mode", ext_mode, "--dkw_region", dkw_region]
         if focus_points:
             cmd.extend(["--focus_points", json.dumps(focus_points)])
+        if dkw_bounds:
+            cmd.extend(["--dkw_bounds", json.dumps(dkw_bounds)])
         if headless_host:
             cmd.append("--headless")
             

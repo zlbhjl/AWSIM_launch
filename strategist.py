@@ -7,13 +7,21 @@ import pandas as pd
 from scipy.stats import qmc  # Sobol配列生成用
 from estimator import SafetyEstimator
 from redis_cluster import cluster_config
+import point_extractors
+
+try:
+    from theoretical_calculator import TheoreticalSafetyCalculator
+except ImportError:
+    TheoreticalSafetyCalculator = None
 
 class ActiveLearningStrategist:
-    def __init__(self, scenario_name, config, num_candidates=10000, focus_points=None, run_mode="explore"):
+    def __init__(self, scenario_name, config, num_candidates=10000, focus_points=None, run_mode="explore", dkw_bounds=None, dkw_region="custom"):
         self.scenario_name = scenario_name
         self.config = config
         self.num_candidates = num_candidates
         self.run_mode = run_mode
+        self.dkw_bounds = dkw_bounds
+        self.dkw_region = dkw_region
         
         self.estimator = SafetyEstimator(scenario_name, config)
         self.param_names = list(self.config.PARAM_RANGES.keys())
@@ -39,67 +47,55 @@ class ActiveLearningStrategist:
         self.FOCUS_POINTS = focus_points
         self.FOCUS_NOISE = getattr(self.config, 'FOCUS_NOISE', 0.05)
 
-        # --- [追加] JAMAエッジ探索モード: 過去のデータからエッジケースを自動抽出 ---
-        if self.run_mode == "jama_edge":
-            print("[Strategist] 🔍 JAMAエッジ探索モード: 過去のデータセットから人間の安全境界に近い事故を抽出します...")
+        # --- [変更] 抽出ロジックを外部モジュールに委譲 ---
+        if self.run_mode in point_extractors.EXTRACTORS:
+            extractor_func = point_extractors.EXTRACTORS[self.run_mode]
             df = self.estimator.load_dataset()
-            if df is not None and not df.empty and 'c_collision' in df.columns and 'theory_margin_a_human' in df.columns:
-                
-                # --- [追加] 可視化ツールに倣った安全なデータクリーニング ---
-                check_cols = ['c_collision', 'theory_margin_a_human'] + self.param_names
-                for col in check_cols:
-                    if col in df.columns:
-                        df[col] = pd.to_numeric(df[col], errors='coerce')
-                df = df.dropna(subset=check_cols)
-                
-                # 衝突の事実(1.0)があり、かつ人間なら確実に安全な領域 (マージン > 0.0m) のデータを抽出
-                edge_df = df[(df['c_collision'] == 1) & (df['theory_margin_a_human'] > 0.0)]
-                
-                if not edge_df.empty:
-                    extracted_points = []
-                    for _, row in edge_df.iterrows():
-                        point = {name: float(row[name]) for name in self.param_names if name in row}
-                        if len(point) == self.dim and point not in extracted_points:
-                            extracted_points.append(point)
-                    
-                    if extracted_points:
-                        self.FOCUS_POINTS = extracted_points
-                        print(f"[Strategist] 🎯 {len(self.FOCUS_POINTS)} 件のJAMAエッジケースを抽出し、ターゲットに設定しました。")
-                else:
-                    print("[Strategist] ⚠️ 条件に合致するエッジケースはありませんでした。")
+            extracted_points = extractor_func(df, self.param_names, self.config)
+            if extracted_points:
+                self.FOCUS_POINTS = extracted_points
+                print(f"[Strategist] 🎯 {len(self.FOCUS_POINTS)} 件のターゲットポイントを自動設定しました。")
             else:
-                print("[Strategist] ⚠️ データセットが存在しないか、必要な列 (c_collision, theory_margin_a_human) がありません。")
+                print(f"[Strategist] ⚠️ 条件に合致するポイントはありませんでした。")
 
-        # --- [追加] TTCエッジ探索モード: 偶然のニアミスか真の危険境界かを分別 ---
-        elif self.run_mode == "ttc_edge":
-            ttc_threshold = getattr(self.config, 'TTC_EDGE_THRESHOLD', 1.5)
-            print(f"[Strategist] 🔍 TTCエッジ探索モード: 過去のデータから、人間なら安全領域でTTC {ttc_threshold}秒以下のニアミスを抽出します...")
-            df = self.estimator.load_dataset()
-            if df is not None and not df.empty and 'c_collision' in df.columns and 'min_ttc' in df.columns and 'theory_margin_a_human' in df.columns:
-                
-                check_cols = ['c_collision', 'min_ttc', 'theory_margin_a_human'] + self.param_names
-                for col in check_cols:
-                    if col in df.columns:
-                        df[col] = pd.to_numeric(df[col], errors='coerce')
-                df = df.dropna(subset=check_cols)
-                
-                # 衝突していない(0) かつ TTCが閾値以下 かつ 人間なら確実に安全 (マージン > 0.0m)
-                edge_df = df[(df['c_collision'] == 0) & (df['min_ttc'] <= ttc_threshold) & (df['theory_margin_a_human'] > 0.0)]
-                
-                if not edge_df.empty:
-                    extracted_points = []
-                    for _, row in edge_df.iterrows():
-                        point = {name: float(row[name]) for name in self.param_names if name in row}
-                        if len(point) == self.dim and point not in extracted_points:
-                            extracted_points.append(point)
-                    
-                    if extracted_points:
-                        self.FOCUS_POINTS = extracted_points
-                        print(f"[Strategist] 🎯 {len(self.FOCUS_POINTS)} 件のTTCエッジケース(ニアミス)を抽出し、ターゲットに設定しました。")
+        # --- [追加] Sequential-DKW (SMC) 単独証明モード用のパラメータ ---
+        if self.run_mode == "dkw":
+            self.dkw_stage = 1
+            self.dkw_sobol_index = 0  # [修正] DKW専用の乱数インデックスを新設し、歯抜けを防ぐ
+            self.dkw_base_samples = getattr(self.config, 'DKW_BASE_SAMPLES', 50)     # 基本サンプル数 n
+            self.dkw_total_delta = getattr(self.config, 'DKW_TOTAL_DELTA', 0.05)       # 最終的な信頼水準 (例: 95%)
+            self.dkw_target_epsilon = getattr(self.config, 'DKW_TARGET_EPSILON', 0.15) # 求める精度 (信頼区間の幅)
+            self.dkw_target_metric = getattr(self.config, 'DKW_TARGET_METRIC', 'min_ttc')
+            
+            # --- [追加] 過去データから安全領域(Bounds)を自動計算 ---
+            if self.dkw_region != "custom":
+                df = self.estimator.load_dataset()
+                if df is not None and not df.empty:
+                    try:
+                        f_df = point_extractors.filter_by_region_and_bounds(df, region=self.dkw_region)
+                        if not f_df.empty:
+                            self.dkw_bounds = {col: [float(f_df[col].min()), float(f_df[col].max())] for col in self.param_names if col in f_df.columns}
+                            print(f"[Strategist] 📊 DKW証明モード: 抽出条件 '{self.dkw_region}' に基づきサンプリング領域を自動算出しました -> {self.dkw_bounds}")
+                        else:
+                            print(f"[Strategist] ⚠️ 指定された条件('{self.dkw_region}')に該当するデータがありません。")
+                    except Exception as e:
+                        print(f"[Strategist] ⚠️ 領域計算に失敗しました: {e}")
                 else:
-                    print("[Strategist] ⚠️ 条件に合致するニアミスケースはありませんでした。")
+                    print(f"[Strategist] ⚠️ データセットが存在しないため、領域の自動算出ができません。")
+            # --------------------------------------------------------
+
+            if self.dkw_region == "custom" and self.dkw_bounds:
+                print(f"[Strategist] 📊 DKW証明モード: 手動で領域を限定して評価します {self.dkw_bounds}")
+            elif not self.dkw_bounds:
+                print(f"[Strategist] 📊 DKW証明モード: 空間全体の一様サンプリングによる厳密な統計的保証を行います。")
+
+        # アクティブなサンプリング範囲を決定 (DKWモードでの範囲指定があれば上書き)
+        self.active_bounds = {}
+        for name in self.param_names:
+            if self.run_mode == "dkw" and self.dkw_bounds and name in self.dkw_bounds:
+                self.active_bounds[name] = self.dkw_bounds[name]
             else:
-                print("[Strategist] ⚠️ データセットが存在しないか、必要な列 (c_collision, min_ttc, theory_margin_a_human) がありません。")
+                self.active_bounds[name] = self.config.PARAM_RANGES[name]
 
         # 状態管理変数
         self.reference_points = self.generate_candidate_points(num=self.STABILITY_REFERENCE_POINTS)
@@ -123,8 +119,11 @@ class ActiveLearningStrategist:
 
     def get_sobol_point(self, index):
         sampler = qmc.Sobol(d=self.dim, scramble=True, seed=42)
-        sample = sampler.random(n=index + 1)[-1] 
-        point_dict = {name: self.config.PARAM_RANGES[name][0] + sample[i] * (self.config.PARAM_RANGES[name][1] - self.config.PARAM_RANGES[name][0]) 
+        # [修正] 毎回巨大な配列を生成する計算爆発を防ぎ、O(1) で高速に指定インデックスの点を取得する
+        sampler.fast_forward(int(index))
+        sample = sampler.random(n=1)[0]
+        
+        point_dict = {name: self.active_bounds[name][0] + sample[i] * (self.active_bounds[name][1] - self.active_bounds[name][0]) 
                       for i, name in enumerate(self.param_names)}
         return point_dict
 
@@ -166,6 +165,11 @@ class ActiveLearningStrategist:
         return is_stable, shift_rate
 
     def decide_next_target(self):
+        # --- [追加] 抽出モードで対象が見つからなかった場合、探索をせずに即時終了する ---
+        if self.run_mode in point_extractors.EXTRACTORS and not self.FOCUS_POINTS:
+            self._print_final_report(self.dispatched_task_count, self.run_mode, f"抽出対象のポイントが見つからなかったため、処理を終了します。")
+            return {"system_command": "stop", "reason": f"No target points found for mode '{self.run_mode}'"}
+
         # キャッシュされたタスクがあればAIの重い計算をスキップして即座に返す
         if self.task_cache:
             self.dispatched_task_count += 1
@@ -179,8 +183,10 @@ class ActiveLearningStrategist:
         # --- [追加] エラーの崖っぷち探索: 新しいエラーが発生していたら少しずらしてリカバリー検証する ---
         if df_dataset is not None and 'loop_num' in df_dataset.columns:
             # 文字列混入によるエラーを防ぎつつ、-1 (タイムアウトや異常) のデータを安全に探す
-            min_ttc_numeric = pd.to_numeric(df_dataset['min_ttc'], errors='coerce')
-            c_collision_numeric = pd.to_numeric(df_dataset.get('c_collision', pd.Series(dtype=float)), errors='coerce')
+            # [修正] min_ttc列がまだ存在しない初期段階の KeyError を防ぐ
+            min_ttc_numeric = pd.to_numeric(df_dataset.get('min_ttc', pd.Series(np.nan, index=df_dataset.index)), errors='coerce')
+            # [修正] 列が存在しない場合のフェイルセーフで、元のdfと同じ長さの空Seriesを生成してクラッシュを防ぐ
+            c_collision_numeric = pd.to_numeric(df_dataset.get('c_collision', pd.Series(np.nan, index=df_dataset.index)), errors='coerce')
             
             error_mask = (min_ttc_numeric == -1) | (c_collision_numeric == -1)
             new_errors = df_dataset[error_mask & (df_dataset['loop_num'] > self.last_recovered_loop)]
@@ -214,9 +220,12 @@ class ActiveLearningStrategist:
 
         # [修正] 行数ではなく、CSVに記録されている最大のループ番号と同期させる（データ欠損対策）
         if df_dataset is not None and 'loop_num' in df_dataset.columns:
-            max_loop = int(df_dataset['loop_num'].max())
-            if self.dispatched_task_count < max_loop:
-                self.dispatched_task_count = max_loop
+            max_loop_val = df_dataset['loop_num'].max()
+            # [修正] データが空で NaN が返ってきた場合の ValueError を防ぐ
+            if pd.notna(max_loop_val):
+                max_loop = int(max_loop_val)
+                if self.dispatched_task_count < max_loop:
+                    self.dispatched_task_count = max_loop
             
         best_target = self.get_best_target(df_dataset)
         num_violations = (df_dataset[best_target] == 1).sum() if (df_dataset is not None and best_target) else 0
@@ -224,24 +233,163 @@ class ActiveLearningStrategist:
         # CSV完了数ではなく、タスク生成回数を基準にして決定論的な重複を防ぐ
         current_idx = self.dispatched_task_count
 
-        # --- 【STEP 0】フォーカスモードのピンポイント検証 ---
+        # --- 【STEP 0】フォーカスモード / 一貫性検証モード のピンポイント検証 ---
         if self.FOCUS_POINTS:
-            # [修正] 設定がない場合は、各ワーカーが1回ずつ担当するように「ワーカー数」を反復回数とする
-            exact_repeats = getattr(self.config, 'FOCUS_EXACT_REPEATS', self.worker_count)
+            # configになければデフォルト10回とする
+            exact_repeats = getattr(self.config, 'FOCUS_EXACT_REPEATS', 10)
             total_exact_samples = len(self.FOCUS_POINTS) * exact_repeats
             
-            # [修正] 過去のループ数(current_idx)に依存せず、起動ごとの独立したカウンタで判定する
             if self.focus_exact_test_count < total_exact_samples:
                 point_idx = (self.focus_exact_test_count // exact_repeats) % len(self.FOCUS_POINTS)
                 repeat_idx = (self.focus_exact_test_count % exact_repeats) + 1
                 
                 exact_point = self.FOCUS_POINTS[point_idx]
                 result = {name: exact_point.get(name, sum(self.config.PARAM_RANGES[name])/2.0) for name in self.param_names}
-                result["reason"] = f"[FOCUS] Exact Point {point_idx+1}/{len(self.FOCUS_POINTS)} (Repeat {repeat_idx}/{exact_repeats})"
+                
+                mode_label = "CONSISTENCY" if self.run_mode == "verify_consistency" else "FOCUS"
+                result["reason"] = f"[{mode_label}] Exact Point {point_idx+1}/{len(self.FOCUS_POINTS)} (Repeat {repeat_idx}/{exact_repeats})"
                 
                 self.focus_exact_test_count += 1
                 self.dispatched_task_count += 1
                 return result
+            elif self.run_mode == "verify_consistency":
+                # --- 全反復テスト完了時の自動分類とDKW評価 ---
+                print("\n[Strategist] 📊 全反復テスト完了。TTCの安定性を評価し、分類ごとのDKW証明を行います...")
+                df = self.estimator.load_dataset()
+                if df is not None and not df.empty:
+                    # [修正] 全データではなく、この検証モードで実行されたデータのみを分析対象とする
+                    consistency_df = df[df['reason'].str.contains('\\[CONSISTENCY\\]', na=False)]
+                    if consistency_df.empty:
+                        print("[Strategist] ⚠️ 一貫性検証モードで実行されたデータが見つかりませんでした。")
+                        return {"system_command": "stop", "reason": "No consistency data found"}
+
+                    threshold = getattr(self.config, 'CONSISTENCY_THRESHOLD', 0.2)
+                    df_consistent, df_stochastic = point_extractors.classify_consistency(consistency_df, self.param_names, threshold=threshold, min_repeats=2)
+                    
+                    # --- [追加] 分類されたデータを個別のCSVとして保存 ---
+                    traces_dir = os.path.expanduser(f"~/simulation_traces")
+                    out_path_consistent = os.path.join(traces_dir, f"{self.scenario_name}_consistent_risk.csv")
+                    point_extractors.save_dataframe_to_csv(df_consistent, out_path_consistent, f"[Strategist] 💾 確実なリスク領域のデータを保存しました: {out_path_consistent}")
+                    out_path_stochastic = os.path.join(traces_dir, f"{self.scenario_name}_stochastic_risk.csv")
+                    point_extractors.save_dataframe_to_csv(df_stochastic, out_path_stochastic, f"[Strategist] 💾 偶然のリスク領域のデータを保存しました: {out_path_stochastic}")
+                    # --------------------------------------------------
+                    
+                    def print_dkw_result(title, target_df):
+                        print(f"\n--- {title} (データ件数: {len(target_df)}) ---")
+                        summary = self.estimator.evaluate_and_summarize_dkw(
+                            target_column=getattr(self.config, 'DKW_TARGET_METRIC', 'min_ttc'),
+                            df=target_df,
+                            q=0.05,
+                            delta=getattr(self.config, 'DKW_TOTAL_DELTA', 0.05),
+                            epsilon=getattr(self.config, 'DKW_TARGET_EPSILON', 0.15)
+                        )
+                        if summary["status"] == "error":
+                            print(f"  -> {summary['message']}")
+                        else:
+                            print(f"  - ワースト5%の推定値: {summary['estimate']:.3f} | 信頼区間: [{summary['lower_bound']:.3f}, {summary['upper_bound']:.3f}] (幅: {summary['interval_width']:.3f})")
+
+                    print_dkw_result("確実なリスク領域 (Consistent Risk)", df_consistent)
+                    print_dkw_result("偶然のリスク領域 (Stochastic Risk)", df_stochastic)
+
+                self._print_final_report(current_idx, "一貫性検証 (Verify Consistency)", "分類ごとのDKW証明完了")
+                return {"system_command": "stop", "reason": "Consistency Verification Complete"}
+
+        # --- [追加] 単独モード: Sequential-DKW (SMC) による指定データの統計的検証 ---
+        if self.run_mode == "dkw":
+            delta_i = self.dkw_total_delta / (2 ** self.dkw_stage)
+            bounds_result = self.estimator.calculate_quantile_with_dkw(
+                target_column=self.dkw_target_metric,
+                q=0.05,
+                delta=delta_i,
+                bounds=self.dkw_bounds,
+                region=self.dkw_region
+            )
+            
+            if bounds_result:
+                current_samples = bounds_result["sample_size"]
+                target_n_i = self.dkw_base_samples * (self.dkw_stage ** 2)
+                
+                interval_width = bounds_result["upper_bound"] - bounds_result["lower_bound"]
+                is_converged = interval_width <= self.dkw_target_epsilon
+                
+                # --- 具体的な数値を抽出 ---
+                lower = bounds_result["lower_bound"]
+                upper = bounds_result["upper_bound"]
+                estimate = bounds_result["estimate"]
+
+                # --- [追加] 計算に使用されたサンプルデータを専用ファイルとして保存 ---
+                filtered_df = bounds_result.get("filtered_df")
+                out_csv = os.path.expanduser(f"~/simulation_traces/{self.scenario_name}_dkw_samples.csv")
+                point_extractors.save_dataframe_to_csv(filtered_df, out_csv)
+                # -------------------------------------------------------------
+
+                print(f"[Strategist] 📊 DKW評価中 (Stage {self.dkw_stage}): 有効サンプル数 {current_samples}/{target_n_i}, 信頼区間幅 {interval_width:.3f} (目標 <= {self.dkw_target_epsilon})")
+                print(f"             ↳ ワースト5%の推定値: {estimate:.3f} | 信頼区間: [{lower:.3f}, {upper:.3f}]")
+                if is_converged:
+                    msg = (f"SMC証明完了 (Stage {self.dkw_stage}): 信頼水準 {100*(1-self.dkw_total_delta):.1f}% で精度 {self.dkw_target_epsilon} を満たしました。\n"
+                           f"👉 指定領域におけるワースト5%の {self.dkw_target_metric} は [{lower:.3f}, {upper:.3f}] の間に存在します。")
+                    self._print_final_report(current_idx, "SMC (DKW)", msg)
+                    return {"system_command": "stop", "reason": msg}
+            else:
+                current_samples = 0
+                target_n_i = self.dkw_base_samples * (self.dkw_stage ** 2)
+
+            if current_samples >= target_n_i:
+                self.dkw_stage += 1
+                print(f"[Strategist] 📊 精度未達。Stage {self.dkw_stage} (目標サンプル: {self.dkw_base_samples * (self.dkw_stage ** 2)}) へ移行し、追加サンプリングを行います。")
+
+            reason = f"SMC: Sequential-DKW Sampling (Stage {self.dkw_stage})"
+            
+            # --- [追加] 非矩形領域からの棄却サンプリング (Rejection Sampling) ---
+            import re
+            MACROS = {
+                "emp_safe": "(c_collision == 0)",
+                "jama_safe": "(theory_margin_a_human >= 0.0)",
+                "intersect_safe": "((c_collision == 0) and (theory_margin_a_human >= 0.0))",
+                "union_safe": "((c_collision == 0) or (theory_margin_a_human >= 0.0))"
+            }
+            query_str = self.dkw_region
+            if query_str != "custom":
+                for key, val in MACROS.items():
+                    query_str = re.sub(rf'\b{key}\b', val, query_str)
+                    
+            calc = TheoreticalSafetyCalculator(self.config) if TheoreticalSafetyCalculator else None
+            
+            # [最適化] ループ内で毎回計算しないよう、過去データの最大ループ番号を事前に算出しておく
+            max_loop_num = 0
+            if df_dataset is not None and 'loop_num' in df_dataset.columns:
+                max_loop_val = df_dataset['loop_num'].max()
+                if pd.notna(max_loop_val):
+                    max_loop_num = int(max_loop_val)
+
+            while len(self.task_cache) < self.CACHE_SIZE:
+                # [修正] 専用のインデックスを使って順番通りにSobol列を取得し、統計の一様性を維持
+                # [修正] 過去データと重複しないように、過去データの最大ループ番号をオフセットとして加算
+                pt = self.get_sobol_point(max_loop_num + self.dkw_sobol_index)
+                self.dkw_sobol_index += 1
+                
+                # 事前条件チェック
+                if query_str != "custom":
+                    check_pt = pt.copy()
+                    # 理論値の事前計算 (JAMA理論の領域などを判定可能にする)
+                    if calc:
+                        theory_res = calc.evaluate(pt.get("dx0", 0), pt.get("ego_speed", 0), pt.get("npc_speed", 0))
+                        check_pt.update(theory_res)
+                    # シミュレーション結果依存の変数は、結果が出る前に棄却されないよう安全なダミー値をセット
+                    check_pt["c_collision"] = 0
+                    check_pt["min_ttc"] = 99.9
+                    try:
+                        if pd.DataFrame([check_pt]).query(query_str).empty:
+                            continue # 領域条件を満たさないため棄却して次の点を生成
+                    except Exception:
+                        pass # 評価エラーの場合は安全のためそのまま通す
+                
+                pt["reason"] = reason
+                self.task_cache.append(pt)
+            
+            # [修正] ここでattemptsを足すと二重加算になるため、通常のタスク発行と同様に +1 だけ行う
+            self.dispatched_task_count += 1
+            return self.task_cache.pop(0)
 
         # --- STEP 1: 初期探索 ---
         if self.current_phase == "STEP1" and (current_idx < self.INITIAL_EXPLORATION_LIMIT or num_violations == 0):
@@ -307,8 +455,10 @@ class ActiveLearningStrategist:
                     return {"system_command": "stop", "reason": "Safe Area Verification Complete"}
                 
                 # [修正] 最大不確実性を持つ上位のインデックスを複数取得してキャッシュ用にする
+                # 分散ワーカーが同じ局所領域ばかり探索しないよう、上位プールからランダム抽出して多様性を確保
                 sorted_idx = np.argsort(std[safe_idx])[::-1]
-                best_indices = safe_idx[sorted_idx[:self.CACHE_SIZE]].tolist()
+                top_candidates = safe_idx[sorted_idx[:self.CACHE_SIZE * 5]]
+                best_indices = np.random.choice(top_candidates, size=min(len(top_candidates), self.CACHE_SIZE), replace=False).tolist()
                 
                 # [追加] もし安全領域の候補がCACHE_SIZE(6個)に満たない場合、司令塔の推論ループによる詰まりを防ぐため、
                 # 足りない分を全体の不確実性が高い場所から補充して確実に6個確保する。
@@ -324,17 +474,20 @@ class ActiveLearningStrategist:
             else:
                 print(f"[Strategist] {log_prefix}STEP3 | 安全と予測される領域がありません。バックアップ探索を実施します。")
                 sorted_idx = np.argsort(std)[::-1]
-                best_indices = sorted_idx[:self.CACHE_SIZE]
-                reason = f"STEP3: Backup Search (M:{mean[best_indices[0]]:.2f})"
+                top_candidates = sorted_idx[:self.CACHE_SIZE * 5]
+                best_indices = np.random.choice(top_candidates, size=min(len(top_candidates), self.CACHE_SIZE), replace=False).tolist()
+                reason = f"STEP3: Backup Search (M:{mean[best_indices[0]] if len(best_indices)>0 else 0:.2f})"
         else:
             dice = np.random.rand()
             if dice < 0.3:
                 sorted_idx = np.argsort(std)[::-1]
-                best_indices = sorted_idx[:self.CACHE_SIZE]
+                top_candidates = sorted_idx[:self.CACHE_SIZE * 5]
+                best_indices = np.random.choice(top_candidates, size=min(len(top_candidates), self.CACHE_SIZE), replace=False).tolist()
                 reason = "STEP2: Exploration (Max σ)"
             else:
                 sorted_idx = np.argsort(np.abs(mean - 0.5))
-                best_indices = sorted_idx[:self.CACHE_SIZE]
+                top_candidates = sorted_idx[:self.CACHE_SIZE * 5]
+                best_indices = np.random.choice(top_candidates, size=min(len(top_candidates), self.CACHE_SIZE), replace=False).tolist()
                 reason = "STEP2: Boundary 0.5"
         
         if current_idx >= self.MAX_SAMPLES:
@@ -359,7 +512,7 @@ class ActiveLearningStrategist:
         num_points = num if num is not None else self.num_candidates
         if not self.FOCUS_POINTS:
             # 従来の全体探索モード (一様分布)
-            cols = [np.random.uniform(self.config.PARAM_RANGES[n][0], self.config.PARAM_RANGES[n][1], num_points) for n in self.param_names]
+            cols = [np.random.uniform(self.active_bounds[n][0], self.active_bounds[n][1], num_points) for n in self.param_names]
             return np.column_stack(cols)
         else:
             # 集中探索(Focus)モード: 指定されたポイントの周辺に正規分布で生成

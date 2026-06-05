@@ -7,6 +7,7 @@ import numpy as np
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import RBF, ConstantKernel as C
 from sklearn.preprocessing import StandardScaler
+import point_extractors
 
 class SafetyEstimator:
     def __init__(self, scenario_name, config, traces_dir="~/simulation_traces"):
@@ -170,3 +171,101 @@ class SafetyEstimator:
         # ガウス過程回帰の核心: return_std=True で標準偏差(σ)を取得
         mean, std = self.model.predict(X_new_scaled, return_std=True)
         return mean, std
+
+    def calculate_dkw_bounds(self, target_column, delta=0.05, bounds=None, region="custom", df=None):
+        """
+        【ステップ1〜4】DKW (Dvoretzky-Kiefer-Wolfowitz-Massart) 不等式による信頼帯の構築
+        経験的累積分布関数 (ECDF) と、信頼水準 (1-delta) に基づく絶対的な信頼帯を計算します。
+        """
+        if df is None:
+            df = self.load_dataset()
+            
+        if df is None or df.empty or target_column not in df.columns:
+            print(f"[Estimator] ⚠️ データセットがない、または指標 '{target_column}' が見つかりません。")
+            return None
+
+        try:
+            df = point_extractors.filter_by_region_and_bounds(df, region=region, bounds=bounds)
+        except Exception as e:
+            print(f"[Estimator] ⚠️ {e}")
+            return None
+
+        # 異常値（-1やタイムアウト等の文字列）を除外し、有効な連続値データのみを抽出
+        data = pd.to_numeric(df[target_column], errors='coerce').dropna()
+        data = data[data >= 0]
+        
+        k = len(data) # サンプル数 (k)
+        if k == 0:
+            print(f"[Estimator] ⚠️ DKWバウンドを計算するための有効なサンプルがありません。")
+            return None
+
+        # 経験的累積分布関数 (ECDF) の構築
+        x_sorted = np.sort(data.values)
+        ecdf = np.arange(1, k + 1) / k
+
+        # DKW不等式による許容誤差 Δ (Delta) の計算
+        # Δ = sqrt( ln(2/δ) / 2k )
+        delta_margin = np.sqrt(np.log(2.0 / delta) / (2 * k))
+
+        # 上限と下限の境界を算出 (0〜1の範囲にクリップ)
+        lower_bound = np.maximum(ecdf - delta_margin, 0.0)
+        upper_bound = np.minimum(ecdf + delta_margin, 1.0)
+
+        return {
+            "x": x_sorted, "ecdf": ecdf,
+            "lower_bound": lower_bound, "upper_bound": upper_bound,
+            "delta": delta, "delta_margin": delta_margin, "sample_size": k,
+            "filtered_df": df
+        }
+        
+    def calculate_quantile_with_dkw(self, target_column, q=0.05, delta=0.05, bounds=None, region="custom", df=None):
+        """
+        【ステップ5】対象指標（分位数）の導出
+        例: 95%の信頼水準 (delta=0.05) で、下位5% (q=0.05) の最小TTCがどの範囲にあるかを数学的に保証する。
+        """
+        dkw_bounds = self.calculate_dkw_bounds(target_column, delta, bounds=bounds, region=region, df=df)
+        if dkw_bounds is None: return None
+            
+        x, ecdf = dkw_bounds["x"], dkw_bounds["ecdf"]
+        
+        # 分位数の点推定と、DKWバウンドに基づく信頼区間(真の分位数の下限・上限)の計算
+        return {
+            "q": q,
+            "confidence_level": 1 - delta,
+            "estimate": x[np.searchsorted(ecdf, q)] if np.searchsorted(ecdf, q) < len(x) else x[-1],
+            "lower_bound": x[np.searchsorted(dkw_bounds["upper_bound"], q)] if np.searchsorted(dkw_bounds["upper_bound"], q) < len(x) else x[-1],
+            "upper_bound": x[np.searchsorted(dkw_bounds["lower_bound"], q)] if np.searchsorted(dkw_bounds["lower_bound"], q) < len(x) else x[-1],
+            "sample_size": dkw_bounds["sample_size"],
+            "filtered_df": dkw_bounds["filtered_df"]
+        }
+
+    def evaluate_and_summarize_dkw(self, target_column, df, q=0.05, delta=0.05, epsilon=0.15):
+        """
+        指定されたデータフレームに対してDKW評価を行い、
+        評価状態や信頼区間などの結果サマリーを辞書で返す。
+        外部モジュール（CLIツールやStrategist）から評価機能として直接利用するためのメソッド。
+        """
+        if df is None or df.empty or len(df) < 2:
+            return {"status": "error", "message": "評価対象のデータが不足しています(2件以上必要)。"}
+
+        bounds_result = self.calculate_quantile_with_dkw(
+            target_column=target_column,
+            q=q,
+            delta=delta,
+            df=df
+        )
+
+        if not bounds_result:
+            return {"status": "error", "message": "DKW評価を実行できませんでした。"}
+
+        return {
+            "status": "success",
+            "q": q,
+            "delta": delta,
+            "epsilon": epsilon,
+            "estimate": bounds_result["estimate"],
+            "lower_bound": bounds_result["lower_bound"],
+            "upper_bound": bounds_result["upper_bound"],
+            "interval_width": bounds_result["upper_bound"] - bounds_result["lower_bound"],
+            "sample_size": bounds_result["sample_size"]
+        }
