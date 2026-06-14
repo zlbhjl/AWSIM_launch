@@ -7,19 +7,28 @@ import os
 import sys
 
 # 1. 対象ディレクトリとファイルの指定
-target_dir = sys.argv[1] if len(sys.argv) > 1 else os.path.expanduser('~/simulation_traces')
+target_path = sys.argv[1] if len(sys.argv) > 1 else os.path.expanduser('~/simulation_traces')
+target_path = os.path.expanduser(target_path)
 
-# 修復済み(_fixed)のデータセットがあれば優先的に読み込む
-csv_file_fixed = os.path.join(target_dir, 'uturn_dataset_fixed.csv')
-csv_file_normal = os.path.join(target_dir, 'uturn_dataset.csv')
-
-if os.path.exists(csv_file_fixed):
-    csv_file = csv_file_fixed
-elif os.path.exists(csv_file_normal):
-    csv_file = csv_file_normal
+if target_path.endswith('.csv'):
+    csv_file = target_path
+    target_dir = os.path.dirname(target_path)
+    if not os.path.exists(csv_file):
+        print(f"[Error] 指定されたCSVファイルが見つかりません: {csv_file}")
+        sys.exit(1)
+    print(f"[Info] 指定されたCSVファイルを直接読み込みます: {csv_file}")
 else:
-    print(f"[Error] データセットが見つかりません: {csv_file_normal} (または _fixed.csv)")
-    sys.exit(1)
+    target_dir = target_path
+    # 修復済み(_fixed)のデータセットがあれば優先的に読み込む
+    csv_file_fixed = os.path.join(target_dir, 'uturn_dataset_fixed.csv')
+    csv_file_normal = os.path.join(target_dir, 'uturn_dataset.csv')
+    if os.path.exists(csv_file_fixed):
+        csv_file = csv_file_fixed
+    elif os.path.exists(csv_file_normal):
+        csv_file = csv_file_normal
+    else:
+        print(f"[Error] データセットが見つかりません: {csv_file_normal} (または _fixed.csv)")
+        sys.exit(1)
 
 print(f"[{csv_file}] を読み込み中...")
 df = pd.read_csv(csv_file)
@@ -33,8 +42,9 @@ if missing_cols:
     sys.exit(1)
 
 # --- [追加] プロット用の座標データを確実に数値化 (文字列混入によるクラッシュ防止) ---
+df = df.copy() # [追加]
 for col in ['dx0', 'npc_speed', 'ego_speed']:
-    df[col] = pd.to_numeric(df[col], errors='coerce')
+    df.loc[:, col] = pd.to_numeric(df[col], errors='coerce')
 
 # 欠損値を含む行を念のため除外
 valid_df = df.dropna(subset=required_cols).copy()
@@ -77,9 +87,10 @@ def plot_jama_zone(data_df, zone_column, title, output_filename):
     ax.set_title(title, fontsize=16, fontweight='bold')
     ax.legend(loc='upper left', bbox_to_anchor=(1.05, 1), fontsize=12)
 
+    output_path = os.path.join(target_dir, output_filename)
     plt.tight_layout()
-    plt.savefig(output_filename, dpi=300, bbox_inches='tight')
-    print(f"[Success] グラフを {output_filename} に保存しました！")
+    plt.savefig(output_path, dpi=300, bbox_inches='tight')
+    print(f"[Success] グラフを {output_path} に保存しました！")
     plt.close()
 
 # 3. グラフの生成と保存

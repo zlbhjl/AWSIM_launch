@@ -103,7 +103,7 @@ class SharedStoreActor:
     def flush_timeout_task(self, scenario_name: str, loop_num: int, params_dict: dict, reason: str, result_headers: list):
         """タイムアウトしたタスクをエラーとして記録する"""
         # 結果部分を-1で埋める
-        result_row = {"loop_num": loop_num, "min_ttc": -1, "min_distance": -1}
+        result_row = {"loop_num": loop_num, "min_ttc": -1, "min_distance": -1, "min_ttb": -1, "z_margin": -1}
         for header in result_headers:
             if header != "loop_num":
                 result_row[header] = -1

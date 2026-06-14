@@ -46,6 +46,7 @@ def main():
         result_labels = getattr(cfg, 'RESULT_LABELS', [])
         formulas_config = getattr(cfg, 'FORMULAS', [])
         target_npcs = getattr(cfg, 'TARGET_NPCS', ["npc1"])
+        invalid_conditions = getattr(cfg, 'INVALID_CONDITIONS', {})
     except ImportError:
         print(f"[Error] configs/{args.type}.py が見つかりません。")
         sys.exit(1)
@@ -252,6 +253,8 @@ def main():
                     metrics = {}
                     min_ttc = -1.0
                     min_distance = -1.0
+                    min_ttb = -1.0
+                    z_margin = -1.0
                     
                     # 1. AWKinematicsPipeline で最小TTCと最小距離のみを抽出する
                     if AWKinematicsPipeline is not None:
@@ -260,12 +263,16 @@ def main():
                             kinematics_metrics = pipeline.get_metrics(target_path)
                             min_ttc = kinematics_metrics.get("min_ttc", -1.0)
                             min_distance = kinematics_metrics.get("min_distance", -1.0)
-                            print(f"  [高速抽出] 最小TTC: {min_ttc} 秒 | 最小距離: {min_distance:.4f} m")
+                            min_ttb = kinematics_metrics.get("min_ttb", -1.0)
+                            z_margin = kinematics_metrics.get("z_margin", -1.0)
+                            print(f"  [高速抽出] 最小TTC: {min_ttc} 秒 | 最小距離: {min_distance:.4f} m | 最小TTB: {min_ttb:.4f} 秒 | 総合マージン: {z_margin:.4f}")
                         except Exception as e:
                             print(f"  [エラー] AWKinematicsPipelineでの抽出に失敗しました: {e}")
 
                     parsed_row["min_ttc"] = min_ttc if min_ttc != -1.0 else ""
                     parsed_row["min_distance"] = min_distance if min_distance != -1.0 else ""
+                    parsed_row["min_ttb"] = min_ttb if min_ttb != -1.0 else ""
+                    parsed_row["z_margin"] = z_margin if z_margin != -1.0 else ""
 
                     # 2. すべての指標について Maude (aw_checkerpy.py) を呼び出して厳密な論理検証を行う
                     print(f"  [Maude検証] すべての指標({len(metric_config)}件)を厳密に論理検証します...")
@@ -299,10 +306,7 @@ def main():
                             
                         parsed_row[header] = val
                         if val == 1:
-                            if "stuck" in header:
-                                has_error = True
-                            else:
-                                is_any_fail = True
+                            is_any_fail = True
 
                     if parsed_row.get("c_collision") == 1:
                         for key in list(parsed_row.keys()):
@@ -319,9 +323,22 @@ def main():
                         elif is_violated:
                             parsed_row[k] = 1
 
+                    # --- [追加] 設定ファイルに基づく無効化条件のチェック ---
+                    for inv_key, inv_val in invalid_conditions.items():
+                        if parsed_row.get(inv_key) == inv_val:
+                            has_error = True
+                            break
+
                     if has_error:
                         stats["Error"] += 1
-                        res_str = "ERROR ⚠️ (異常/解析エラー検出)"
+                        res_str = "ERROR ⚠️ (異常/無効化条件検出)"
+                        # エラー時はすべての結果を -1 に上書きする
+                        parsed_row["min_ttc"] = -1
+                        parsed_row["min_distance"] = -1
+                        parsed_row["min_ttb"] = -1
+                        parsed_row["z_margin"] = -1
+                        for item in metric_config:
+                            parsed_row[item["header"]] = -1
                     else:
                         if is_any_fail:
                             stats["Unsafe"] += 1
@@ -368,7 +385,7 @@ def main():
                     traceback.print_exc()
                     
                     # エラーで落ちた場合も、後続が止まらないようにエラー結果として記録・バッファ削除を行う
-                    parsed_row = {"loop_num": current_loop, "min_ttc": -1, "min_distance": -1}
+                    parsed_row = {"loop_num": current_loop, "min_ttc": -1, "min_distance": -1, "min_ttb": -1, "z_margin": -1}
                     for item in metric_config:
                         parsed_row[item["header"]] = -1
                     stats["Error"] += 1

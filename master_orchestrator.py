@@ -76,10 +76,13 @@ def load_config():
     parser.add_argument("--focus_points", type=str, default=None, help="JSON string for focus points")
     parser.add_argument("--with_host_worker", action="store_true", help="Run a local worker on the host machine (ROS_DOMAIN_ID=21, EXEC_MODE=host)")
     parser.add_argument("--headless_host", action="store_true", help="Run the host worker with Xvfb (No GUI)")
+    parser.add_argument("--headless", action="store_true", help="Run the master container (21号機) with Xvfb (No GUI)")
     parser.add_argument("--resume_from", type=str, default=None, help="Directory to restore dataset from (e.g., ~/simulation_traces_shared_...)")
     parser.add_argument("--ext_mode", type=str, choices=["maude", "cvm", "ctrv"], default="cvm", help="Kinematics extractor mode for evaluating simulation logs")
     parser.add_argument("--dkw_bounds", type=str, default=None, help="JSON string defining the specific region for DKW (e.g., '{\"dx0\": [15.0, 20.0]}')")
     parser.add_argument("--dkw_region", type=str, default="custom", help="Extraction condition string (e.g. 'emp_safe and jama_safe')")
+    parser.add_argument("--dkw_pure_smc", action="store_true", help="DKWモードで過去の探索データを再利用せず、純粋なSMCデータのみで評価する")
+    parser.add_argument("--dkw_simultaneous", action="store_true", help="DKWモードで複数指標を同時に評価し、ボンフェローニ補正を用いた同時保証を行う")
     args = parser.parse_args()
 
     try:
@@ -121,7 +124,7 @@ def load_config():
             print(f"[Fatal] --dkw_bounds 引数のJSONパースに失敗しました: {e}")
             sys.exit(1)
 
-    return args.type, config_module, args.mode, focus_points, args.with_host_worker, args.headless_host, args.ext_mode, args.resume_from, dkw_bounds, args.dkw_region
+    return args.type, config_module, args.mode, focus_points, args.with_host_worker, args.headless_host, args.ext_mode, args.resume_from, dkw_bounds, args.dkw_region, args.dkw_pure_smc, args.dkw_simultaneous, args.headless
 
 # ==============================================================================
 # [追加] 過去のデータセットから最大ループ番号を取得
@@ -153,11 +156,11 @@ def get_last_processed_loop(scenario_name):
 # メインオーケストレーター処理
 # ==============================================================================
 def main():
-    scenario_name, cfg, run_mode, focus_points, with_host_worker, headless_host, ext_mode, resume_from, dkw_bounds, dkw_region = load_config()
+    scenario_name, cfg, run_mode, focus_points, with_host_worker, headless_host, ext_mode, resume_from, dkw_bounds, dkw_region, dkw_pure_smc, dkw_simultaneous, headless = load_config()
 
     # 1. クラスターの一斉起動 (21〜23号機のコンテナを自動で立ち上げる)
     cluster_manager = ClusterManager()
-    cluster_manager.start_cluster(scenario_name, run_mode, with_host_worker, ext_mode)
+    cluster_manager.start_cluster(scenario_name, run_mode, with_host_worker, ext_mode, headless)
     
     # 2. Rayクラスターに接続 (namespaceを指定し、ワーカーから発見可能にする)
     head_address = f"{cluster_manager.master_ip}:{cluster_manager.ray_port}"
@@ -205,7 +208,7 @@ def main():
 
     # 5. AI (Strategist) の初期化
     # [修正] 候補数(num_candidates)を10000から2000に減らし、AI予測の計算量を削減
-    strategist = ActiveLearningStrategist(scenario_name, cfg, num_candidates=2000, focus_points=focus_points, run_mode=run_mode, dkw_bounds=dkw_bounds, dkw_region=dkw_region)
+    strategist = ActiveLearningStrategist(scenario_name, cfg, num_candidates=2000, focus_points=focus_points, run_mode=run_mode, dkw_bounds=dkw_bounds, dkw_region=dkw_region, dkw_pure_smc=dkw_pure_smc, dkw_simultaneous=dkw_simultaneous)
     
     REPEAT_COUNT = getattr(cfg, 'REPEAT_COUNT', 3000)
     
@@ -232,13 +235,20 @@ def main():
             cmd.extend(["--focus_points", json.dumps(focus_points)])
         if dkw_bounds:
             cmd.extend(["--dkw_bounds", json.dumps(dkw_bounds)])
+        if dkw_pure_smc:
+            cmd.append("--dkw_pure_smc")
+        if dkw_simultaneous:
+            cmd.append("--dkw_simultaneous")
         if headless_host:
             cmd.append("--headless")
             
         host_worker_proc = subprocess.Popen(cmd, env=env, stdout=host_worker_log, stderr=subprocess.STDOUT)
         print(f"[Orchestrator] ホストワーカーのコンソール出力は {log_path} に記録されます。")
 
-    print(f"\n=== マスター司令塔 稼働開始 (目標回数: {REPEAT_COUNT}) ===")
+    if run_mode in ["dkw", "verify_consistency"]:
+        print(f"\n=== マスター司令塔 稼働開始 ({run_mode} モード) ===")
+    else:
+        print(f"\n=== マスター司令塔 稼働開始 (目標回数: {REPEAT_COUNT}) ===")
     
     try:
         while True:
@@ -246,20 +256,32 @@ def main():
             # 各ワーカーの状態を並べて文字列化
             ws_str = " | ".join([f"[{k}] {v}" for k, v in sorted(worker_statuses.items())])
             # \033[K で行末の古い文字を消去しつつ、1行に綺麗に表示する
-            sys.stdout.write(f"\r\033[K[Orchestrator] 完了={completed}/{REPEAT_COUNT} | キュー={q_len} || {ws_str}")
+            if run_mode in ["dkw", "verify_consistency"]:
+                sys.stdout.write(f"\r\033[K[Orchestrator] 進行状況 (総ループ: {completed}) | キュー={q_len} || {ws_str}")
+            else:
+                sys.stdout.write(f"\r\033[K[Orchestrator] 完了={completed}/{REPEAT_COUNT} | キュー={q_len} || {ws_str}")
             sys.stdout.flush()
 
-            if completed >= REPEAT_COUNT:
-                print("\n[Orchestrator] 目標回数に到達しました。終了シグナルを送信します。")
-                ray.get(task_queue.set_stop_signal.remote())
-                break
+            if run_mode not in ["dkw", "verify_consistency"]:
+                if completed >= REPEAT_COUNT:
+                    print("\n[Orchestrator] 目標回数に到達しました。終了シグナルを送信します。")
+                    ray.get(task_queue.set_stop_signal.remote())
+                    break
                 
             # キューが減ってきたら AI に次のパラメータを相談して補充
             if q_len <= REFILL_THRESHOLD:
+                stop_requested = False
                 while q_len < MAX_QUEUE_SIZE:
                     next_target = strategist.decide_next_target()
+                    if next_target.get("system_command") == "stop":
+                        print(f"\n[Orchestrator] AI(Strategist)から終了指示を受信しました: {next_target.get('reason')}")
+                        ray.get(task_queue.set_stop_signal.remote())
+                        stop_requested = True
+                        break
                     ray.get(task_queue.add_task.remote(next_target))
                     q_len += 1
+                if stop_requested:
+                    break
 
             time.sleep(2)
     except KeyboardInterrupt:

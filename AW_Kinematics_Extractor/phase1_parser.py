@@ -11,12 +11,6 @@ class AWKinematicsExtractorPhase1:
         self.VEHICLE_CLASS_MAX = 6
         self.CLASSIFICATION_THRESHOLD = 0.1  # classificationの確率閾値 (Maude準拠)
         self.TIME_TOLERANCE_SEC = 0.05       # タイムアライメント許容誤差 (50ms)
-        
-        # 欠損時のデフォルト車両サイズ (gtSizes相当)
-        self.DEFAULT_EGO_LENGTH = 4.8
-        self.DEFAULT_EGO_WIDTH = 1.8
-        self.DEFAULT_NPC_LENGTH = 4.5
-        self.DEFAULT_NPC_WIDTH = 1.8
 
     def _parse_sizes_and_offsets(self, json_data):
         """JSON内の groundtruth_size から車両サイズとオフセット(gtCenters)を抽出する"""
@@ -47,8 +41,11 @@ class AWKinematicsExtractorPhase1:
             
         len_raw = ego_info.get("length", 0.0)
         wid_raw = ego_info.get("width", 0.0)
-        ego_length = len_raw if len_raw > 0.0 else self.DEFAULT_EGO_LENGTH
-        ego_width = wid_raw if wid_raw > 0.0 else self.DEFAULT_EGO_WIDTH
+        
+        # 自車のサイズ情報すら記録されていない場合は、ログ自体が致命的に破損しているとみなして空を返す
+        if len_raw <= 0.0 or wid_raw <= 0.0:
+            return pd.DataFrame()
+            
         ego_offset_x = float(ego_info.get("offset_x", 0.0))
         ego_offset_y = float(ego_info.get("offset_y", 0.0))
 
@@ -57,10 +54,17 @@ class AWKinematicsExtractorPhase1:
             if t is None: continue
             
             # .get() でキー欠損による KeyError を防ぐ（Defensive Extraction）
-            pose = frame.get("groundtruth_ego", {}).get("pose", {})
-            pos = pose.get("position", {})
+            ego_gt = frame.get("groundtruth_ego", {})
+            pose = ego_gt.get("pose")
+            if pose is None: continue
+            pos = pose.get("position")
+            if pos is None: continue
+            
+            if "x" not in pos or "y" not in pos:
+                continue
+                
             rot = pose.get("rotation", {})
-            twist = frame.get("groundtruth_ego", {}).get("twist", {})
+            twist = ego_gt.get("twist", {})
             lin = twist.get("linear", {})
             
             raw_z = float(rot.get("z", 0.0))
@@ -92,8 +96,8 @@ class AWKinematicsExtractorPhase1:
                 "ego_vx": v_global_x,
                 "ego_vy": v_global_y,
                 "ego_yaw_rate": yaw_rate,
-                "ego_length": ego_length,
-                "ego_width": ego_width,
+                "ego_length": len_raw,
+                "ego_width": wid_raw,
                 "ego_offset_x": ego_offset_x,
                 "ego_offset_y": ego_offset_y
             })
@@ -119,8 +123,14 @@ class AWKinematicsExtractorPhase1:
                 if obj_id.lower() not in self.target_npcs:
                     continue
                     
-                pose = npc.get("pose", {})
-                pos = pose.get("position", {})
+                pose = npc.get("pose")
+                if pose is None: continue
+                pos = pose.get("position")
+                if pos is None: continue
+                
+                if "x" not in pos or "y" not in pos:
+                    continue
+                    
                 rot = pose.get("rotation", {})
                 twist = npc.get("twist", {})
                 lin = twist.get("linear", {})
@@ -129,13 +139,13 @@ class AWKinematicsExtractorPhase1:
                 npc_info = size_info.get(obj_id, {})
                 len_raw = npc_info.get("length", 0.0)
                 wid_raw = npc_info.get("width", 0.0)
-                length = len_raw if len_raw > 0.0 else self.DEFAULT_NPC_LENGTH
-                width = wid_raw if wid_raw > 0.0 else self.DEFAULT_NPC_WIDTH
+                
+                # サイズが不明なオブジェクトは、自車のゴースト等のノイズとみなして完全に無視(除外)する
+                if len_raw <= 0.0 or wid_raw <= 0.0:
+                    continue
+                    
                 offset_x = float(npc_info.get("offset_x", 0.0))
                 offset_y = float(npc_info.get("offset_y", 0.0))
-                
-                if length <= 0.0: length = self.DEFAULT_NPC_LENGTH
-                if width <= 0.0: width = self.DEFAULT_NPC_WIDTH
                 
                 raw_z = float(rot.get("z", 0.0))
                 yaw_rad = np.radians(raw_z)
@@ -163,8 +173,8 @@ class AWKinematicsExtractorPhase1:
                     "npc_vx": v_global_x,
                     "npc_vy": v_global_y,
                     "npc_yaw_rate": yaw_rate,
-                    "npc_length": length,
-                    "npc_width": width,
+                    "npc_length": len_raw,
+                    "npc_width": wid_raw,
                     "npc_offset_x": offset_x,
                     "npc_offset_y": offset_y
                 })

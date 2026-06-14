@@ -14,6 +14,7 @@ def _clean_dataframe(df, required_cols):
             return None
     
     clean_df = df.copy()
+        
     for col in required_cols:
         clean_df[col] = pd.to_numeric(clean_df[col], errors='coerce')
     return clean_df.dropna(subset=required_cols)
@@ -90,37 +91,55 @@ def filter_by_region_and_bounds(df, region="custom", bounds=None):
             query_str = re.sub(rf'\b{key}\b', val, query_str)
             
         try:
+            # 評価指標やパラメータの列は強制的に数値化する。純粋な文字列の列は保護する
+            string_cols = {'reason', 'theory_zone_a', 'theory_zone_b', 'worker_id', 'filename', 'npc_id'}
             for col in filtered_df.columns:
-                filtered_df[col] = pd.to_numeric(filtered_df[col], errors='ignore')
-            filtered_df = filtered_df.query(query_str)
+                if col not in string_cols:
+                    # errors='coerce' により、空文字("")等の不正な値はNaNになり安全に計算できる
+                    # .loc を使って明示的に代入することで SettingWithCopyWarning を防ぐ
+                    filtered_df.loc[:, col] = pd.to_numeric(filtered_df[col], errors='coerce')
+            # スライスの警告を防ぐため、query抽出後に明示的にコピーを作成する
+            filtered_df = filtered_df.query(query_str).copy()
         except Exception as e:
             raise ValueError(f"条件式の評価に失敗しました: {e}")
 
     if bounds:
         for col, (min_val, max_val) in bounds.items():
             if col in filtered_df.columns:
-                filtered_df[col] = pd.to_numeric(filtered_df[col], errors='coerce')
+                # .loc を使って明示的に代入することで SettingWithCopyWarning を防ぐ
+                filtered_df.loc[:, col] = pd.to_numeric(filtered_df[col], errors='coerce')
                 filtered_df = filtered_df[(filtered_df[col] >= min_val) & (filtered_df[col] <= max_val)]
 
     return filtered_df
 
-def classify_consistency(df, param_names, threshold=0.2, min_repeats=2):
-    """TTCの標準偏差に基づいて、確実なリスク(Consistent)と偶然のリスク(Stochastic)に分類する"""
+def classify_consistency(df, param_names, target_metric='min_ttc', threshold=0.2, min_repeats=2):
+    """指定されたターゲット指標の標準偏差に基づいて、確実なリスク(Consistent)と偶然のリスク(Stochastic)に分類する"""
     if df is None or df.empty:
         return pd.DataFrame(), pd.DataFrame()
         
-    for col in param_names + ['min_ttc']:
+    df = df.copy() # [追加] スライスの警告を防ぐためにコピーを作成
+
+    # [追加] 完全にエラーとなったデータ (c_collision == -1) を事前に計算から除外する
+    if 'c_collision' in df.columns:
+        df = df[~df['c_collision'].isin([-1, "-1", -1.0])]
+
+    for col in param_names + [target_metric]:
         if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors='coerce')
+            df.loc[:, col] = pd.to_numeric(df[col], errors='coerce')
 
     grouped = df.groupby(param_names)
     consistent_dfs, stochastic_dfs = [], []
 
     for _, group_df in grouped:
         if len(group_df) < min_repeats: continue
-        valid_ttc = group_df['min_ttc'].dropna()[lambda x: x >= 0]
-        if len(valid_ttc) < 2: continue
-        if valid_ttc.std() <= threshold:
+        
+        valid_data = group_df[target_metric].dropna()
+        # 物理的に0未満にならない指標のみマイナス値を弾く
+        if target_metric in ['min_ttc', 'min_distance', 'z_margin']:
+            valid_data = valid_data[valid_data >= 0]
+            
+        if len(valid_data) < 2: continue
+        if valid_data.std() <= threshold:
             consistent_dfs.append(group_df)
         else:
             stochastic_dfs.append(group_df)

@@ -11,12 +11,13 @@ AI (ガウス過程回帰モデル) を用いた **アクティブラーニン�
   1. グローバル探索 (初期データ収集)
   2. 境界線探索 (安定性の評価)
   3. マージン領域のクリーンアップ (不確実性の徹底排除)
+- **KDE重点サンプリングによるデータ再利用**: AIが探索した偏りのあるデータを捨てることなく、カーネル密度推定（KDE）で尤度比を算出し加重ECDFを構築することで、DKW不等式の数学的厳密性（i.i.d.の前提）を保ちつつシミュレーション回数を劇的に削減します。
 - **データの一元管理と高効率化**: パラメータと結果は共有金庫(`shared_store.py`)によってメモリ上で結合され、単一のCSVデータセットとして出力されます。
 - **堅牢な自動リカバリ**: タイムアウトや解析エラー発生時でもシステム全体がフリーズすることなく、異常データを安全に弾いてテストを継続します。
 - **過去データからの自動復元と再開 (`--resume_from`)**: 退避させた過去のデータセットを現在の作業ディレクトリに復元し、シームレスに検証を再開・追記できます。
 - **エッジケース自動抽出・集中検証 (`jama_edge`, `ttc_edge`)**: 過去のデータから「人間なら安全な領域での事故」や「ギリギリのニアミス」などの弱点をAIが自動抽出し、偶然か真の危険かを反復検証します。
 - **最悪TTC探索 (`worst_ttc`)**: 今までの検証データから衝突しなかった「安全領域」を特定し、その中で最もTTCが小さかった（最悪の）ケースの下位N件を自動抽出し集中検証します。
-- **SMC (DKW) 検証モード**: Sequential-DKW不等式を用いて、システムの安全性を数学的に証明します。手動での領域指定 (`--dkw_bounds`) に加え、過去のデータから「経験的安全領域」や「JAMA理論安全領域」を自動算出して証明対象とする (`--dkw_region`) ことも可能です。
+- **SMC (DKW) 検証モード**: Sequential-DKW不等式を用いて、システムの安全性を数学的に証明します。TTCや距離などの複数指標を正規化した総合リスク指標（Z_margin）を用いることで、多重検定（バジェット分割）の問題を回避してシステム全体のテールリスクを評価します。
 - **Config-Driven アーキテクチャ**: シナリオ (Uターン、割り込み等) のパラメータやAIの探索範囲、タイムアウト時間を単一の設定ファイルで柔軟に定義可能 (`configs/`)。
 - **フォーカス (集中) モード**: 特定のパラメータの周辺に絞ってテストを反復するピンポイント検証機能。
 - **リアルタイム進捗監視**: 司令塔の画面で、各ワーカーが「待機中」「実行中」「タイムアウト」など、何をしているかをリアルタイムで1行にまとめて表示します。
@@ -128,6 +129,16 @@ python3 master_orchestrator.py --type uturn --mode dkw --dkw_region intersect_sa
 
 #  union_safe: 上記2つのどちらかを満たす（OR）、少し広めの安全領域。
 python3 master_orchestrator.py --type uturn --mode dkw --dkw_region union_safe
+
+# 3. 過去の探索データを無視し、純粋なSMCサンプリングのみで数学的厳密性を保って証明する場合
+# (デフォルトではKDEによる重要度サンプリング補正を行い、AIの探索データも厳密な数学的証明の有効サンプルとして再利用されます)
+python3 master_orchestrator.py --type uturn --mode dkw --dkw_region intersect_safe --dkw_pure_smc
+
+# 4. TTCや距離など、複数の指標を同時に評価し、ボンフェローニ補正を用いた絶対的な同時保証を行う場合
+python3 master_orchestrator.py --type uturn --mode dkw --dkw_simultaneous
+
+# (応用) KDEデータ再利用 ＋ JAMA経験的安全領域 ＋ ボンフェローニ同時保証 をすべて組み合わせた最強の証明コマンド
+python3 master_orchestrator.py --type uturn --mode dkw --dkw_region intersect_safe --dkw_simultaneous --resume_from ~/simulation_traces_shared_20260611_104737
 
 # 過去に退避させた特定のデータ(例: ~/simulation_traces_shared_...)を復元して、そこから探索を再開する場合
 python3 master_orchestrator.py --type uturn --mode ttc_edge --resume_from ~/simulation_traces_shared_20260525_184326

@@ -13,21 +13,31 @@ except ImportError:
     TheoreticalSafetyCalculator = None
 
 # 1. 対象ディレクトリとファイルの指定
-# コマンドライン引数でディレクトリを指定できるようにする（デフォルトは質問のパス）
-target_dir = sys.argv[1] if len(sys.argv) > 1 else os.path.expanduser('~/simulation_traces_shared_20260512_144346')
+# コマンドライン引数でディレクトリまたはCSVファイルを指定できるようにする
+target_path = sys.argv[1] if len(sys.argv) > 1 else os.path.expanduser('~/simulation_traces')
+target_path = os.path.expanduser(target_path)
 
-# 修復済み(_fixed)のデータセットがあれば優先的に読み込む
-csv_file_fixed = os.path.join(target_dir, 'uturn_dataset_fixed.csv')
-csv_file_normal = os.path.join(target_dir, 'uturn_dataset.csv')
-
-if os.path.exists(csv_file_fixed):
-    csv_file = csv_file_fixed
-    print(f"[Info] 修復済みのデータセットを検知しました。優先して使用します。")
-elif os.path.exists(csv_file_normal):
-    csv_file = csv_file_normal
+if target_path.endswith('.csv'):
+    csv_file = target_path
+    target_dir = os.path.dirname(target_path)
+    if not os.path.exists(csv_file):
+        print(f"[Error] 指定されたCSVファイルが見つかりません: {csv_file}")
+        sys.exit(1)
+    print(f"[Info] 指定されたCSVファイルを直接読み込みます: {csv_file}")
 else:
-    print(f"[Error] データセットが見つかりません: {csv_file_normal} (または _fixed.csv)")
-    sys.exit(1)
+    target_dir = target_path
+    # 修復済み(_fixed)のデータセットがあれば優先的に読み込む
+    csv_file_fixed = os.path.join(target_dir, 'uturn_dataset_fixed.csv')
+    csv_file_normal = os.path.join(target_dir, 'uturn_dataset.csv')
+
+    if os.path.exists(csv_file_fixed):
+        csv_file = csv_file_fixed
+        print(f"[Info] 修復済みのデータセットを検知しました。優先して使用します。")
+    elif os.path.exists(csv_file_normal):
+        csv_file = csv_file_normal
+    else:
+        print(f"[Error] データセットが見つかりません: {csv_file_normal} (または _fixed.csv)")
+        sys.exit(1)
 
 print(f"[{csv_file}] を読み込み中...")
 df = pd.read_csv(csv_file)
@@ -42,15 +52,18 @@ if missing_cols:
     print(f"[Warning] データセットに以下の列が見つかりません: {missing_cols}")
 
 valid_df = df.copy()
+
 for col in target_columns:
     if col in valid_df.columns:
         valid_df = valid_df[valid_df[col].isin([0, 1])]
+        
+valid_df = valid_df.copy() # [追加] フィルター後にコピーを作成して警告を防止
 
 # --- [追加] グラフ描画に必要なパラメータ列を強制的に数値型に変換し、文字列（タイムアウト等）を除外 ---
 plot_cols = ['dx0', 'npc_speed', 'ego_speed']
 for col in plot_cols:
     if col in valid_df.columns:
-        valid_df[col] = pd.to_numeric(valid_df[col], errors='coerce')
+        valid_df.loc[:, col] = pd.to_numeric(valid_df[col], errors='coerce')
 valid_df = valid_df.dropna(subset=plot_cols)
 
 # --- [追加] 既存データに含まれる TTC の論理矛盾（すり抜け）を可視化前に補正 ---

@@ -27,6 +27,8 @@ def load_config():
     parser.add_argument("--ext_mode", type=str, default="cvm", help="Kinematics Extractor Mode for Checker (cvm/ctrv/maude)")
     parser.add_argument("--dkw_bounds", type=str, default=None, help="JSON string defining the specific region for DKW")
     parser.add_argument("--dkw_region", type=str, default="custom", help="Extraction condition string (e.g. 'emp_safe and jama_safe')")
+    parser.add_argument("--dkw_pure_smc", action="store_true", help="DKWモードで過去の探索データを再利用せず、純粋なSMCデータのみで評価する")
+    parser.add_argument("--dkw_simultaneous", action="store_true", help="DKWモードで複数指標を同時に評価し、ボンフェローニ補正を用いた同時保証を行う")
     args = parser.parse_args()
 
     try:

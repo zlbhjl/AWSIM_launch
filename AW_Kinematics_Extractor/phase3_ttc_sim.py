@@ -73,7 +73,8 @@ class TTCSimulator:
 
         # Maudeの `estimate-ttc` と同様に、0.0秒から5.0秒まで 0.1秒刻みでシミュレーション
         # 浮動小数点誤差を避けるため、整数インデックスから計算して丸める
-        num_steps = int(np.ceil(self.TTC_BOUND / self.DT))
+        # [修正] np.arange は終端を含まないため、+1 して確実に 5.0秒目 (t=5.0) も評価させる
+        num_steps = int(np.ceil(self.TTC_BOUND / self.DT)) + 1
         time_steps = np.round(np.arange(num_steps) * self.DT, 2)
 
         for t in time_steps:
@@ -120,6 +121,16 @@ class TTCSimulator:
         # 計算結果をDataFrameに追加
         df['ttc'] = ttc_results
         
+        # --- [追加] TTB (Time-To-Brake: ブレーキ猶予時間) の計算 ---
+        # TTB = TTC - 停止に必要な時間 (空走時間 + 制動時間)
+        # ここではJAMAプロファイルの人間(Human)のデフォルト値を用いて概算
+        v_ego = np.hypot(df['ego_vx'].values, df['ego_vy'].values)
+        t_req = 0.75 + (v_ego / 7.58)  # 空走時間(0.75s) + 制動時間(速度 / 減速度)
+        
+        ttb_results = ttc_results - t_req
+        ttb_results[ttc_results == np.inf] = np.inf  # 衝突しない場合はTTBも無限大
+        df['ttb'] = ttb_results
+
         return df
 
     def _check_collision_sat(self, boxes1: np.ndarray, boxes2: np.ndarray) -> np.ndarray:

@@ -48,11 +48,34 @@ class AWKinematicsPipeline:
             min_ttc = float(df_result['ttc'].min()) if 'ttc' in df_result.columns else float('inf')
             min_distance = float(df_result['distance'].min()) if 'distance' in df_result.columns else float('inf')
             
-            c_collision = 1 if (min_ttc <= 0.01 or min_distance <= 0.05) else 0
+            # [追加] 新しい指標 TTB の最小値を取得
+            min_ttb = float(df_result['ttb'].min()) if 'ttb' in df_result.columns else -1.0
+            
+            # [追加] クリティカル・マージン (Z_margin) の計算
+            # 各指標を安全基準(閾値)で正規化し、最も余裕がないものを代表値とする
+            # (TTBは評価をシンプルにするため除外し、本質的なTTCと距離のみで総合リスクを算出)
+            if min_ttc != -1.0 and min_distance != -1.0:
+                z_ttc = min_ttc / 1.5       # TTC基準: 1.5秒
+                z_dist = min_distance / 1.0 # 距離基準: 1.0メートル
+                z_margin = min(z_ttc, z_dist)
+            else:
+                z_margin = -1.0
+            
+            # [修正] エラー値(-1.0)が 0.01 以下という条件を満たしてしまい、安全なのに衝突(1)と誤認されるのを防ぐ
+            if min_ttc >= 0.0 and min_distance >= 0.0:
+                if self.mode == "maude":
+                    # [修正] Maudeはマージンを持たず、バウンディングボックスが交差した瞬間(TTC=0.0)のみを衝突とする
+                    c_collision = 1 if min_ttc == 0.0 else 0
+                else:
+                    c_collision = 1 if (min_ttc <= 0.01 or min_distance <= 0.05) else 0
+            else:
+                c_collision = -1
             
             return {
                 "min_ttc": min_ttc,
                 "min_distance": min_distance,
+                "min_ttb": min_ttb,
+                "z_margin": z_margin,
                 "c_collision": c_collision
             }
         except Exception as e:

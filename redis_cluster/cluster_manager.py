@@ -12,7 +12,7 @@ class ClusterManager:
         self.master_ip = cluster_config.MASTER_IP
         self.ray_port = cluster_config.RAY_PORT
 
-    def start_cluster(self, scenario_type="uturn", run_mode="explore", with_host_worker=False, ext_mode="cvm"):
+    def start_cluster(self, scenario_type="uturn", run_mode="explore", with_host_worker=False, ext_mode="cvm", headless=False):
         """
         Ray/Redis クラスターを起動し、ワーカーを参加させます。
         """
@@ -99,8 +99,8 @@ class ClusterManager:
                 # [修正] マスター機(自機)とリモート機で画面出力の設定を分ける
                 # -------------------------------------------------------------
 
-                if info["ip"] == self.master_ip:
-                    # 21号機: 物理ディスプレイに画面を表示する通常設定
+                if info["ip"] == self.master_ip and not headless:
+                    # 21号機 (物理画面あり): 物理ディスプレイに画面を表示する通常設定
                     display_mount = f"-v /tmp/.X11-unix:/tmp/.X11-unix "
                     display_env = f"-e DISPLAY "
                     xhost_setup = f"xhost +local:docker > /dev/null 2>&1 || true; "

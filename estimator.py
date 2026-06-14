@@ -7,6 +7,7 @@ import numpy as np
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import RBF, ConstantKernel as C
 from sklearn.preprocessing import StandardScaler
+from scipy.stats import gaussian_kde
 import point_extractors
 
 class SafetyEstimator:
@@ -81,11 +82,6 @@ class SafetyEstimator:
             if col.startswith("c_") or col.startswith("formula_"):
                 df_dataset = df_dataset[~df_dataset[col].isin([-1, "-1", -1.0])]
                 
-        # 2. NPCのスタック (c_npc_stuck 等) が発生したデータを除外 (値が 1 の場合)
-        stuck_cols = [col for col in df_dataset.columns if "stuck" in col]
-        for col in stuck_cols:
-            df_dataset = df_dataset[~df_dataset[col].isin([1, "1", 1.0])]
-        # ----------------------------------------
         
         # --- [追加] 既存データに含まれる TTC の論理矛盾（すり抜け）を学習前に補正 ---
         if "c_collision" in df_dataset.columns:
@@ -172,7 +168,7 @@ class SafetyEstimator:
         mean, std = self.model.predict(X_new_scaled, return_std=True)
         return mean, std
 
-    def calculate_dkw_bounds(self, target_column, delta=0.05, bounds=None, region="custom", df=None):
+    def calculate_dkw_bounds(self, target_column, delta=0.05, bounds=None, region="custom", df=None, use_kde_weighting=False):
         """
         【ステップ1〜4】DKW (Dvoretzky-Kiefer-Wolfowitz-Massart) 不等式による信頼帯の構築
         経験的累積分布関数 (ECDF) と、信頼水準 (1-delta) に基づく絶対的な信頼帯を計算します。
@@ -190,22 +186,73 @@ class SafetyEstimator:
             print(f"[Estimator] ⚠️ {e}")
             return None
 
-        # 異常値（-1やタイムアウト等の文字列）を除外し、有効な連続値データのみを抽出
+        # --- [追加] エラーデータの厳格な除外 ---
+        # c_collision等に -1 が入っている完全なエラー行を事前に弾く
+        if 'c_collision' in df.columns:
+            df = df[~df['c_collision'].isin([-1, "-1", -1.0])]
+
         data = pd.to_numeric(df[target_column], errors='coerce').dropna()
-        data = data[data >= 0]
         
-        k = len(data) # サンプル数 (k)
-        if k == 0:
+        # --- [修正] 指標に応じたマイナス値の扱い ---
+        # min_ttc, min_distance, z_margin は物理的に0未満にならないためマイナスをエラー(ゴミ)として弾くが、
+        # min_ttb や theory_margin は「マイナス(手遅れ)」が正常な物理状態であるため評価に残す
+        if target_column in ['min_ttc', 'min_distance', 'z_margin']:
+            data = data[data >= 0]
+            
+        # --- [追加] 無限大(inf)の安全な処理 ---
+        # TTCなどで衝突しなかった場合の np.inf を、シミュレーションの予測上限値(5.0)にクリップし、幅がinfに発散するのを防ぐ
+        data.replace([np.inf, -np.inf], [5.0, -5.0], inplace=True)
+
+        k_actual = len(data) # 実際のサンプル数
+        if k_actual == 0:
             print(f"[Estimator] ⚠️ DKWバウンドを計算するための有効なサンプルがありません。")
             return None
 
-        # 経験的累積分布関数 (ECDF) の構築
-        x_sorted = np.sort(data.values)
-        ecdf = np.arange(1, k + 1) / k
+        y_values = data.values
+        valid_indices = data.index
+
+        # --- [追加] KDEを用いた重要度サンプリング (Importance Sampling) による重み付け ---
+        if use_kde_weighting and k_actual > 1:
+            try:
+                # パラメータ空間(X)の取得とスケーリング (scipy.stats.gaussian_kde は次元D x サンプル数N を要求)
+                X_params = df.loc[valid_indices, self.feature_names].values
+                X_scaled = self.scaler.fit_transform(X_params).T 
+                
+                # KDEでAIのサンプリング密度(偏り)を推定
+                kde = gaussian_kde(X_scaled)
+                dens = kde.evaluate(X_scaled)
+                dens = np.clip(dens, 1e-10, None) # ゼロ除算防止
+                
+                # 一様分布を仮定した場合の重み (密度の逆数) を計算
+                weights = 1.0 / dens
+                
+                # --- [追加] Weight Clipping (重み崩壊の防止) ---
+                # 極端に密度の低い未知領域のサンプルが持つ異常な重みをカットし、ESSの崩壊を防ぐ
+                clip_val = np.percentile(weights, 99)
+                weights = np.clip(weights, 0.0, clip_val)
+                
+                # 正規化(合計を1)する
+                weights /= np.sum(weights)
+                
+                # 加重ECDF (Weighted ECDF) の構築
+                sort_idx = np.argsort(y_values)
+                x_sorted = y_values[sort_idx]
+                weights_sorted = weights[sort_idx]
+                ecdf = np.cumsum(weights_sorted)
+                
+                # 有効サンプル数 (Effective Sample Size: ESS) の計算
+                k_eff = 1.0 / np.sum(weights**2)
+                print(f"  [Estimator] 💡 KDE重点サンプリング適用: 実サンプル数 {k_actual} -> 有効サンプル数(ESS) {k_eff:.1f}")
+            except Exception as e:
+                print(f"  [Estimator] ⚠️ KDEの計算に失敗しました (偏り補正が不可能なため、この状態でのDKW評価を中止します): {e}")
+                return None
+        else:
+            x_sorted = np.sort(y_values)
+            ecdf = np.arange(1, k_actual + 1) / k_actual
+            k_eff = k_actual
 
         # DKW不等式による許容誤差 Δ (Delta) の計算
-        # Δ = sqrt( ln(2/δ) / 2k )
-        delta_margin = np.sqrt(np.log(2.0 / delta) / (2 * k))
+        delta_margin = np.sqrt(np.log(2.0 / delta) / (2 * k_eff))
 
         # 上限と下限の境界を算出 (0〜1の範囲にクリップ)
         lower_bound = np.maximum(ecdf - delta_margin, 0.0)
@@ -214,16 +261,16 @@ class SafetyEstimator:
         return {
             "x": x_sorted, "ecdf": ecdf,
             "lower_bound": lower_bound, "upper_bound": upper_bound,
-            "delta": delta, "delta_margin": delta_margin, "sample_size": k,
+            "delta": delta, "delta_margin": delta_margin, "sample_size": k_eff,
             "filtered_df": df
         }
         
-    def calculate_quantile_with_dkw(self, target_column, q=0.05, delta=0.05, bounds=None, region="custom", df=None):
+    def calculate_quantile_with_dkw(self, target_column, q=0.05, delta=0.05, bounds=None, region="custom", df=None, use_kde_weighting=False):
         """
         【ステップ5】対象指標（分位数）の導出
         例: 95%の信頼水準 (delta=0.05) で、下位5% (q=0.05) の最小TTCがどの範囲にあるかを数学的に保証する。
         """
-        dkw_bounds = self.calculate_dkw_bounds(target_column, delta, bounds=bounds, region=region, df=df)
+        dkw_bounds = self.calculate_dkw_bounds(target_column, delta, bounds=bounds, region=region, df=df, use_kde_weighting=use_kde_weighting)
         if dkw_bounds is None: return None
             
         x, ecdf = dkw_bounds["x"], dkw_bounds["ecdf"]
@@ -269,3 +316,34 @@ class SafetyEstimator:
             "interval_width": bounds_result["upper_bound"] - bounds_result["lower_bound"],
             "sample_size": bounds_result["sample_size"]
         }
+
+    def evaluate_and_summarize_dkw_multiple(self, target_columns, df, q=0.05, delta_total=0.05, epsilon=0.15, use_kde_weighting=False, region="custom", bounds=None):
+        """
+        複数指標の同時保証を行う。
+        ボンフェローニ補正を用いて、各指標のエラー予算(delta)を分割して評価する。
+        """
+        if df is None or df.empty or len(df) < 2:
+            return {"status": "error", "message": "評価対象のデータが不足しています(2件以上必要)。"}
+
+        M = len(target_columns)
+        if M == 0:
+            return {"status": "error", "message": "評価対象の指標が指定されていません。"}
+            
+        delta_i = delta_total / M  # ボンフェローニ補正によるエラー予算の分割
+
+        results = {"status": "success", "metrics": {}}
+        for target in target_columns:
+            bounds_result = self.calculate_quantile_with_dkw(
+                target_column=target, q=q, delta=delta_i, df=df, use_kde_weighting=use_kde_weighting,
+                region=region, bounds=bounds
+            )
+            
+            if not bounds_result:
+                return {"status": "error", "message": f"指標 '{target}' のDKW評価に失敗しました。有効なサンプルが不足しています。"}
+                
+            results["metrics"][target] = {
+                "estimate": bounds_result["estimate"], "lower_bound": bounds_result["lower_bound"],
+                "upper_bound": bounds_result["upper_bound"], "interval_width": bounds_result["upper_bound"] - bounds_result["lower_bound"],
+                "sample_size": bounds_result["sample_size"], "filtered_df": bounds_result["filtered_df"]
+            }
+        return results

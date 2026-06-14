@@ -4,7 +4,6 @@
 import os
 import numpy as np
 import pandas as pd
-from scipy.stats import qmc  # Sobol配列生成用
 from estimator import SafetyEstimator
 from redis_cluster import cluster_config
 import point_extractors
@@ -15,13 +14,15 @@ except ImportError:
     TheoreticalSafetyCalculator = None
 
 class ActiveLearningStrategist:
-    def __init__(self, scenario_name, config, num_candidates=10000, focus_points=None, run_mode="explore", dkw_bounds=None, dkw_region="custom"):
+    def __init__(self, scenario_name, config, num_candidates=10000, focus_points=None, run_mode="explore", dkw_bounds=None, dkw_region="custom", dkw_pure_smc=False, dkw_simultaneous=False):
         self.scenario_name = scenario_name
         self.config = config
         self.num_candidates = num_candidates
         self.run_mode = run_mode
         self.dkw_bounds = dkw_bounds
         self.dkw_region = dkw_region
+        self.dkw_pure_smc = dkw_pure_smc
+        self.dkw_simultaneous = dkw_simultaneous
         
         self.estimator = SafetyEstimator(scenario_name, config)
         self.param_names = list(self.config.PARAM_RANGES.keys())
@@ -61,7 +62,7 @@ class ActiveLearningStrategist:
         # --- [追加] Sequential-DKW (SMC) 単独証明モード用のパラメータ ---
         if self.run_mode == "dkw":
             self.dkw_stage = 1
-            self.dkw_sobol_index = 0  # [修正] DKW専用の乱数インデックスを新設し、歯抜けを防ぐ
+            self.dkw_random_index = 0  # [修正] DKW専用の乱数インデックスを新設し、独立性を保証する
             self.dkw_base_samples = getattr(self.config, 'DKW_BASE_SAMPLES', 50)     # 基本サンプル数 n
             self.dkw_total_delta = getattr(self.config, 'DKW_TOTAL_DELTA', 0.05)       # 最終的な信頼水準 (例: 95%)
             self.dkw_target_epsilon = getattr(self.config, 'DKW_TARGET_EPSILON', 0.15) # 求める精度 (信頼区間の幅)
@@ -88,6 +89,31 @@ class ActiveLearningStrategist:
                 print(f"[Strategist] 📊 DKW証明モード: 手動で領域を限定して評価します {self.dkw_bounds}")
             elif not self.dkw_bounds:
                 print(f"[Strategist] 📊 DKW証明モード: 空間全体の一様サンプリングによる厳密な統計的保証を行います。")
+                
+            if self.dkw_pure_smc:
+                print(f"[Strategist] ⚠️ 純粋SMCモード有効: 過去のAI探索データは排除し、SMCサンプリングのみで評価します。")
+                
+            if self.dkw_simultaneous:
+                target_metrics = getattr(self.config, 'DKW_TARGET_METRICS', ['min_ttc', 'min_distance'])
+                print(f"[Strategist] 🛡️ 多重指標同時保証モード有効: {target_metrics} を同時評価し、ボンフェローニ補正を適用します。")
+
+            # --- [追加] 現在の有効サンプル数と目標のプレビューを表示 ---
+            df_dataset = self.estimator.load_dataset()
+            if self.dkw_pure_smc:
+                if df_dataset is not None and not df_dataset.empty and 'reason' in df_dataset.columns:
+                    df_dkw = df_dataset[df_dataset['reason'].str.contains('SMC', na=False)]
+                else:
+                    df_dkw = pd.DataFrame() # [修正] SMCデータがない場合に None を渡すと全データが再ロードされてしまうバグを防止
+            else:
+                df_dkw = df_dataset
+                
+            try:
+                f_df = point_extractors.filter_by_region_and_bounds(df_dkw, region=self.dkw_region, bounds=self.dkw_bounds)
+                curr_s = len(f_df) if f_df is not None else 0
+                tgt_s = self.dkw_base_samples * (self.dkw_stage ** 2)
+                print(f"[Strategist] 📈 現在のSMC有効サンプル数: {curr_s} 件 (Stage {self.dkw_stage} 目標: {tgt_s} 件)")
+            except Exception:
+                pass
 
         # アクティブなサンプリング範囲を決定 (DKWモードでの範囲指定があれば上書き)
         self.active_bounds = {}
@@ -114,17 +140,30 @@ class ActiveLearningStrategist:
         # フォーカスモードの反復テスト用独立カウンタ（過去のループ数に依存しないようにする）
         self.focus_exact_test_count = 0
         
-        # [追加] エラーの無限リカバリー(再試行ループ)を防ぐための記録
+        # [修正] 過去のデータを読み込んだ際、過去のエラーをすべてリカバリーしようとしてDKW証明が止まるのを防ぐため、
+        # 起動時点の最大ループ番号を初期値として設定する
         self.last_recovered_loop = 0
+        df_init = self.estimator.load_dataset()
+        if df_init is not None and 'loop_num' in df_init.columns:
+            max_loop = df_init['loop_num'].max()
+            if pd.notna(max_loop):
+                self.last_recovered_loop = int(max_loop)
 
-    def get_sobol_point(self, index):
-        sampler = qmc.Sobol(d=self.dim, scramble=True, seed=42)
-        # [修正] 毎回巨大な配列を生成する計算爆発を防ぎ、O(1) で高速に指定インデックスの点を取得する
-        sampler.fast_forward(int(index))
-        sample = sampler.random(n=1)[0]
-        
-        point_dict = {name: self.active_bounds[name][0] + sample[i] * (self.active_bounds[name][1] - self.active_bounds[name][0]) 
-                      for i, name in enumerate(self.param_names)}
+    def _log_dkw_history(self, records):
+        """DKW評価の推移(収束過程)をCSVに追記記録する"""
+        if not records: return
+        df_hist = pd.DataFrame(records)
+        out_csv = os.path.expanduser(f"~/simulation_traces/{self.scenario_name}_dkw_history.csv")
+        file_exists = os.path.exists(out_csv)
+        df_hist.to_csv(out_csv, mode='a', header=not file_exists, index=False)
+
+    def get_random_point(self, index):
+        # [修正] DKW不等式の前提(i.i.d: 独立同分布)を厳密に満たすため、
+        # 準乱数(Sobol列)ではなく純粋な一様乱数(Pseudo-Random)を使用する。
+        # (中断からの再開時に重複・欠落を防ぐため、indexをシードに含めて一意の乱数を生成する)
+        rng = np.random.default_rng(seed=42 + int(index))
+        point_dict = {name: rng.uniform(self.active_bounds[name][0], self.active_bounds[name][1]) 
+                      for name in self.param_names}
         return point_dict
 
     def get_best_target(self, df):
@@ -264,7 +303,8 @@ class ActiveLearningStrategist:
                         return {"system_command": "stop", "reason": "No consistency data found"}
 
                     threshold = getattr(self.config, 'CONSISTENCY_THRESHOLD', 0.2)
-                    df_consistent, df_stochastic = point_extractors.classify_consistency(consistency_df, self.param_names, threshold=threshold, min_repeats=2)
+                    target_metric = getattr(self.config, 'DKW_TARGET_METRIC', 'min_ttc')
+                    df_consistent, df_stochastic = point_extractors.classify_consistency(consistency_df, self.param_names, target_metric=target_metric, threshold=threshold, min_repeats=2)
                     
                     # --- [追加] 分類されたデータを個別のCSVとして保存 ---
                     traces_dir = os.path.expanduser(f"~/simulation_traces")
@@ -297,42 +337,131 @@ class ActiveLearningStrategist:
         # --- [追加] 単独モード: Sequential-DKW (SMC) による指定データの統計的検証 ---
         if self.run_mode == "dkw":
             delta_i = self.dkw_total_delta / (2 ** self.dkw_stage)
-            bounds_result = self.estimator.calculate_quantile_with_dkw(
-                target_column=self.dkw_target_metric,
-                q=0.05,
-                delta=delta_i,
-                bounds=self.dkw_bounds,
-                region=self.dkw_region
-            )
             
-            if bounds_result:
-                current_samples = bounds_result["sample_size"]
-                target_n_i = self.dkw_base_samples * (self.dkw_stage ** 2)
+            if self.dkw_pure_smc:
+                if df_dataset is not None and not df_dataset.empty and 'reason' in df_dataset.columns:
+                    df_dkw = df_dataset[df_dataset['reason'].str.contains('SMC', na=False)]
+                else:
+                    df_dkw = pd.DataFrame()
+                use_kde = False
+            else:
+                df_dkw = df_dataset
+                use_kde = True
                 
-                interval_width = bounds_result["upper_bound"] - bounds_result["lower_bound"]
-                is_converged = interval_width <= self.dkw_target_epsilon
+            if self.dkw_simultaneous:
+                target_metrics = getattr(self.config, 'DKW_TARGET_METRICS', ['min_ttc', 'min_distance'])
+                summary = self.estimator.evaluate_and_summarize_dkw_multiple(
+                    target_columns=target_metrics, df=df_dkw, q=0.05, delta_total=delta_i,
+                    epsilon=self.dkw_target_epsilon, use_kde_weighting=use_kde,
+                    region=self.dkw_region, bounds=self.dkw_bounds
+                )
                 
-                # --- 具体的な数値を抽出 ---
-                lower = bounds_result["lower_bound"]
-                upper = bounds_result["upper_bound"]
-                estimate = bounds_result["estimate"]
+                if summary["status"] == "success":
+                    metrics_res = summary["metrics"]
+                    current_samples = list(metrics_res.values())[0]["sample_size"]
+                    
+                    history_records = []
+                    for metric, res in metrics_res.items():
+                        history_records.append({
+                            "stage": self.dkw_stage,
+                            "task_count": current_idx,
+                            "metric": metric,
+                            "ess": res["sample_size"],
+                            "estimate": res["estimate"],
+                            "lower_bound": res["lower_bound"],
+                            "upper_bound": res["upper_bound"],
+                            "interval_width": res["interval_width"],
+                            "target_epsilon": self.dkw_target_epsilon
+                        })
+                    self._log_dkw_history(history_records)
+                    
+                    target_n_i = self.dkw_base_samples * (self.dkw_stage ** 2)
+                    
+                    is_converged = True
+                    for metric, res in metrics_res.items():
+                        if res["interval_width"] > self.dkw_target_epsilon:
+                            is_converged = False
+                            
+                    print(f"[Strategist] 📊 DKW同時評価中 (Stage {self.dkw_stage}): 有効サンプル数 {current_samples:.1f}/{target_n_i} (目標区間幅 <= {self.dkw_target_epsilon})")
+                    for metric, res in metrics_res.items():
+                        print(f"             ↳ [{metric}] ワースト5%推定値: {res['estimate']:.3f} | 信頼区間: [{res['lower_bound']:.3f}, {res['upper_bound']:.3f}] (幅: {res['interval_width']:.3f})")
+                        
+                    if is_converged:
+                        metrics_count = len(target_metrics)
+                        individual_conf = (1.0 - (self.dkw_total_delta / metrics_count)) * 100.0
+                        total_conf = (1.0 - self.dkw_total_delta) * 100.0
+                        msg = (f"SMC同時証明完了 (Stage {self.dkw_stage}): \n"
+                               f"システム全体のエラー予算({self.dkw_total_delta*100:.1f}%)を {metrics_count} つの指標に分割し、それぞれ {individual_conf:.2f}% の厳格な信頼水準で評価しました。\n"
+                               f"👉 指定領域において、【 {total_conf:.1f}% の確率(同時信頼水準)で、最悪のデータ(ワースト5%)が以下の範囲に収束する 】ことが証明されました。\n")
+                        for metric, res in metrics_res.items():
+                            msg += f"   - {metric} : [{res['lower_bound']:.3f}, {res['upper_bound']:.3f}] (推定誤差幅: {res['interval_width']:.3f})\n"
+                            
+                        filtered_df = list(metrics_res.values())[0].get("filtered_df")
+                        if filtered_df is not None:
+                            out_csv = os.path.expanduser(f"~/simulation_traces/{self.scenario_name}_dkw_samples.csv")
+                            point_extractors.save_dataframe_to_csv(filtered_df, out_csv)
+                            
+                        self._print_final_report(current_idx, "SMC (DKW Simultaneous)", msg)
+                        return {"system_command": "stop", "reason": "SMC Simultaneous Verification Complete"}
+                else:
+                    current_samples = 0
+                    target_n_i = self.dkw_base_samples * (self.dkw_stage ** 2)
+            else:
+                bounds_result = self.estimator.calculate_quantile_with_dkw(
+                    target_column=self.dkw_target_metric,
+                    q=0.05,
+                    delta=delta_i,
+                    bounds=self.dkw_bounds,
+                    region=self.dkw_region,
+                    df=df_dkw,
+                    use_kde_weighting=use_kde
+                )
+                
+                if bounds_result:
+                    current_samples = bounds_result["sample_size"]
+                    target_n_i = self.dkw_base_samples * (self.dkw_stage ** 2)
+                    
+                    interval_width = bounds_result["upper_bound"] - bounds_result["lower_bound"]
+                    is_converged = interval_width <= self.dkw_target_epsilon
+                    
+                    lower, upper, estimate = bounds_result["lower_bound"], bounds_result["upper_bound"], bounds_result["estimate"]
 
-                # --- [追加] 計算に使用されたサンプルデータを専用ファイルとして保存 ---
-                filtered_df = bounds_result.get("filtered_df")
-                out_csv = os.path.expanduser(f"~/simulation_traces/{self.scenario_name}_dkw_samples.csv")
-                point_extractors.save_dataframe_to_csv(filtered_df, out_csv)
-                # -------------------------------------------------------------
+                    history_records = [{
+                        "stage": self.dkw_stage,
+                        "task_count": current_idx,
+                        "metric": self.dkw_target_metric,
+                        "ess": current_samples,
+                        "estimate": estimate,
+                        "lower_bound": lower,
+                        "upper_bound": upper,
+                        "interval_width": interval_width,
+                        "target_epsilon": self.dkw_target_epsilon
+                    }]
+                    self._log_dkw_history(history_records)
 
                 print(f"[Strategist] 📊 DKW評価中 (Stage {self.dkw_stage}): 有効サンプル数 {current_samples}/{target_n_i}, 信頼区間幅 {interval_width:.3f} (目標 <= {self.dkw_target_epsilon})")
                 print(f"             ↳ ワースト5%の推定値: {estimate:.3f} | 信頼区間: [{lower:.3f}, {upper:.3f}]")
                 if is_converged:
-                    msg = (f"SMC証明完了 (Stage {self.dkw_stage}): 信頼水準 {100*(1-self.dkw_total_delta):.1f}% で精度 {self.dkw_target_epsilon} を満たしました。\n"
-                           f"👉 指定領域におけるワースト5%の {self.dkw_target_metric} は [{lower:.3f}, {upper:.3f}] の間に存在します。")
+                    msg = (f"SMC証明完了 (Stage {self.dkw_stage}): 信頼水準 {100*(1-self.dkw_total_delta):.1f}% で目標精度(誤差幅 <= {self.dkw_target_epsilon})に到達しました。\n"
+                           f"👉 指定領域において、【 {100*(1-self.dkw_total_delta):.1f}% の確率(信頼水準)で、最悪のデータ(ワースト5%)が以下の範囲に収束する 】ことが証明されました。\n"
+                           f"   - {self.dkw_target_metric} : [{lower:.3f}, {upper:.3f}] (推定誤差幅: {interval_width:.3f})")
                     self._print_final_report(current_idx, "SMC (DKW)", msg)
                     return {"system_command": "stop", "reason": msg}
-            else:
-                current_samples = 0
-                target_n_i = self.dkw_base_samples * (self.dkw_stage ** 2)
+                    filtered_df = bounds_result.get("filtered_df")
+                    out_csv = os.path.expanduser(f"~/simulation_traces/{self.scenario_name}_dkw_samples.csv")
+                    point_extractors.save_dataframe_to_csv(filtered_df, out_csv)
+
+                    print(f"[Strategist] 📊 DKW評価中 (Stage {self.dkw_stage}): 有効サンプル数 {current_samples:.1f}/{target_n_i}, 信頼区間幅 {interval_width:.3f} (目標 <= {self.dkw_target_epsilon})")
+                    print(f"             ↳ ワースト5%の推定値: {estimate:.3f} | 信頼区間: [{lower:.3f}, {upper:.3f}]")
+                    if is_converged:
+                        msg = (f"SMC証明完了 (Stage {self.dkw_stage}): 信頼水準 {100*(1-self.dkw_total_delta):.1f}% で目標精度(誤差幅 <= {self.dkw_target_epsilon})に到達しました。\n"
+                               f"👉 指定領域において、【 {100*(1-self.dkw_total_delta):.1f}% の確率(信頼水準)で、最悪のデータ(ワースト5%)が以下の範囲に収束する 】ことが証明されました。\n"
+                               f"   - {self.dkw_target_metric} : [{lower:.3f}, {upper:.3f}] (推定誤差幅: {interval_width:.3f})")
+                        self._print_final_report(current_idx, "SMC (DKW)", msg)
+                        return {"system_command": "stop", "reason": msg}
+                else:
+                    current_samples = 0
+                    target_n_i = self.dkw_base_samples * (self.dkw_stage ** 2)
 
             if current_samples >= target_n_i:
                 self.dkw_stage += 1
@@ -340,19 +469,6 @@ class ActiveLearningStrategist:
 
             reason = f"SMC: Sequential-DKW Sampling (Stage {self.dkw_stage})"
             
-            # --- [追加] 非矩形領域からの棄却サンプリング (Rejection Sampling) ---
-            import re
-            MACROS = {
-                "emp_safe": "(c_collision == 0)",
-                "jama_safe": "(theory_margin_a_human >= 0.0)",
-                "intersect_safe": "((c_collision == 0) and (theory_margin_a_human >= 0.0))",
-                "union_safe": "((c_collision == 0) or (theory_margin_a_human >= 0.0))"
-            }
-            query_str = self.dkw_region
-            if query_str != "custom":
-                for key, val in MACROS.items():
-                    query_str = re.sub(rf'\b{key}\b', val, query_str)
-                    
             calc = TheoreticalSafetyCalculator(self.config) if TheoreticalSafetyCalculator else None
             
             # [最適化] ループ内で毎回計算しないよう、過去データの最大ループ番号を事前に算出しておく
@@ -362,14 +478,15 @@ class ActiveLearningStrategist:
                 if pd.notna(max_loop_val):
                     max_loop_num = int(max_loop_val)
 
+            random_offset = len(df_dkw) if (self.dkw_pure_smc and df_dkw is not None) else max_loop_num
+
             while len(self.task_cache) < self.CACHE_SIZE:
-                # [修正] 専用のインデックスを使って順番通りにSobol列を取得し、統計の一様性を維持
-                # [修正] 過去データと重複しないように、過去データの最大ループ番号をオフセットとして加算
-                pt = self.get_sobol_point(max_loop_num + self.dkw_sobol_index)
-                self.dkw_sobol_index += 1
+                # [修正] 純粋な一様乱数を取得し、サンプルの独立性(i.i.d.)を維持
+                pt = self.get_random_point(random_offset + self.dkw_random_index)
+                self.dkw_random_index += 1
                 
                 # 事前条件チェック
-                if query_str != "custom":
+                if self.dkw_region != "custom":
                     check_pt = pt.copy()
                     # 理論値の事前計算 (JAMA理論の領域などを判定可能にする)
                     if calc:
@@ -378,11 +495,16 @@ class ActiveLearningStrategist:
                     # シミュレーション結果依存の変数は、結果が出る前に棄却されないよう安全なダミー値をセット
                     check_pt["c_collision"] = 0
                     check_pt["min_ttc"] = 99.9
+                    check_pt["min_distance"] = 99.9
+                    check_pt["min_ttb"] = 99.9 # [追加] TTB指定時のエラー回避
                     try:
-                        if pd.DataFrame([check_pt]).query(query_str).empty:
-                            continue # 領域条件を満たさないため棄却して次の点を生成
-                    except Exception:
-                        pass # 評価エラーの場合は安全のためそのまま通す
+                        # 共通の抽出関数を使って確実にフィルタリングする
+                        temp_df = pd.DataFrame([check_pt])
+                        if point_extractors.filter_by_region_and_bounds(temp_df, region=self.dkw_region).empty:
+                            continue # 領域条件を満たさない(JAMA領域外など)ため棄却して次の乱数を引く
+                    except Exception as e:
+                        print(f"[Strategist] ⚠️ 棄却サンプリング中にエラー発生 (破棄します): {e}")
+                        continue
                 
                 pt["reason"] = reason
                 self.task_cache.append(pt)
@@ -402,14 +524,14 @@ class ActiveLearningStrategist:
                 self.dispatched_task_count += 1
                 return result
             else:
-                result = {**self.get_sobol_point(current_idx), "reason": f"STEP1: Global Search (V:{num_violations})"}
+                result = {**self.get_random_point(current_idx), "reason": f"STEP1: Global Search (V:{num_violations})"}
                 self.dispatched_task_count += 1
                 return result
                 
         # --- マージンモードのセーフティ (危険データが1つもない場合は境界が引けないためランダム探索でごまかす) ---
         if self.current_phase == "STEP3" and num_violations == 0:
             print("[Strategist] ⚠️ STEP3(マージンモード)で起動されましたが、データセットに衝突(1)の記録がありません。境界構築のため一時的にグローバル探索を実施します。")
-            result = {**self.get_sobol_point(current_idx), "reason": "STEP3 Fallback: Global Search (No Violations)"}
+            result = {**self.get_random_point(current_idx), "reason": "STEP3 Fallback: Global Search (No Violations)"}
             self.dispatched_task_count += 1
             return result
 
@@ -418,7 +540,7 @@ class ActiveLearningStrategist:
         candidates = self.generate_candidate_points()
         mean, std = self.estimator.predict_uncertainty(candidates)
         if mean is None:
-            result = {**self.get_sobol_point(current_idx), "reason": "Fallback (Error)"}
+            result = {**self.get_random_point(current_idx), "reason": "Fallback (Error)"}
             self.dispatched_task_count += 1
             return result
 
