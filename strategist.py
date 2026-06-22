@@ -14,7 +14,7 @@ except ImportError:
     TheoreticalSafetyCalculator = None
 
 class ActiveLearningStrategist:
-    def __init__(self, scenario_name, config, num_candidates=10000, focus_points=None, run_mode="explore", dkw_bounds=None, dkw_region="custom", dkw_pure_smc=False, dkw_simultaneous=False):
+    def __init__(self, scenario_name, config, num_candidates=10000, focus_points=None, run_mode="explore", dkw_bounds=None, dkw_region="custom", dkw_pure_smc=False, dkw_simultaneous=False, max_samples=None):
         self.scenario_name = scenario_name
         self.config = config
         self.num_candidates = num_candidates
@@ -33,6 +33,7 @@ class ActiveLearningStrategist:
         self.INITIAL_EXPLORATION_LIMIT = getattr(self.config, 'INITIAL_EXPLORATION_LIMIT', 100)
         self.MIN_SAMPLES = getattr(self.config, 'MIN_SAMPLES', 500)
         self.MAX_SAMPLES = getattr(self.config, 'MAX_SAMPLES', 2000)
+        self.max_samples = max_samples or self.MAX_SAMPLES
 
         # [変更] フェーズ移行・終了条件の新しいパラメータ
         self.STABILITY_REFERENCE_POINTS = getattr(self.config, 'STABILITY_REFERENCE_POINTS', 2000)
@@ -115,10 +116,39 @@ class ActiveLearningStrategist:
             except Exception:
                 pass
 
+        # --- [追加] dkw_fixed: 指定回数一様サンプリング → 事後一括DKW評価 ---
+        if self.run_mode == "dkw_fixed":
+            self.dkw_random_index = 0
+            self.dkw_total_delta = getattr(self.config, 'DKW_TOTAL_DELTA', 0.05)
+            self.dkw_target_epsilon = getattr(self.config, 'DKW_TARGET_EPSILON', 0.15)
+            self.dkw_target_metric = getattr(self.config, 'DKW_TARGET_METRIC', 'min_ttc')
+
+            if self.dkw_region != "custom":
+                df = self.estimator.load_dataset()
+                if df is not None and not df.empty:
+                    try:
+                        f_df = point_extractors.filter_by_region_and_bounds(df, region=self.dkw_region)
+                        if not f_df.empty:
+                            self.dkw_bounds = {col: [float(f_df[col].min()), float(f_df[col].max())] for col in self.param_names if col in f_df.columns}
+                            print(f"[Strategist] 📊 DKW固定サンプリング: 抽出条件 '{self.dkw_region}' に基づきサンプリング領域を自動算出しました -> {self.dkw_bounds}")
+                        else:
+                            print(f"[Strategist] ⚠️ 指定された条件('{self.dkw_region}')に該当するデータがありません。")
+                    except Exception as e:
+                        print(f"[Strategist] ⚠️ 領域計算に失敗しました: {e}")
+                else:
+                    print(f"[Strategist] ⚠️ データセットが存在しないため、領域の自動算出ができません。")
+
+            print(f"[Strategist] 📊 DKW固定サンプリングモード: 指定回数 {self.max_samples} 回をフルで回し、最後に一括DKW評価します。")
+            if self.dkw_bounds:
+                print(f"[Strategist] 📍 サンプリング領域: {self.dkw_bounds}")
+            if self.dkw_simultaneous:
+                target_metrics = getattr(self.config, 'DKW_TARGET_METRICS', ['min_ttc', 'min_distance'])
+                print(f"[Strategist] 🛡️ 多重指標同時保証モード: {target_metrics}")
+
         # アクティブなサンプリング範囲を決定 (DKWモードでの範囲指定があれば上書き)
         self.active_bounds = {}
         for name in self.param_names:
-            if self.run_mode == "dkw" and self.dkw_bounds and name in self.dkw_bounds:
+            if self.run_mode in ["dkw", "dkw_fixed"] and self.dkw_bounds and name in self.dkw_bounds:
                 self.active_bounds[name] = self.dkw_bounds[name]
             else:
                 self.active_bounds[name] = self.config.PARAM_RANGES[name]
@@ -257,14 +287,19 @@ class ActiveLearningStrategist:
                 return self.task_cache.pop(0)
         # --------------------------------------------------------------------------------------
 
-        # [修正] 行数ではなく、CSVに記録されている最大のループ番号と同期させる（データ欠損対策）
+                # [修正] 行数ではなく、CSVに記録されている最大のループ番号と同期させる（データ欠損対策）
         if df_dataset is not None and 'loop_num' in df_dataset.columns:
-            max_loop_val = df_dataset['loop_num'].max()
-            # [修正] データが空で NaN が返ってきた場合の ValueError を防ぐ
-            if pd.notna(max_loop_val):
-                max_loop = int(max_loop_val)
-                if self.dispatched_task_count < max_loop:
-                    self.dispatched_task_count = max_loop
+            # dkw_fixed + pure_smc の場合は SMCタグの新規データのみカウント
+            if self.run_mode == "dkw_fixed" and self.dkw_pure_smc:
+                sync_df = df_dataset[df_dataset.get('reason', '').str.contains('SMC', na=False)]
+            else:
+                sync_df = df_dataset
+            if not sync_df.empty:
+                max_loop_val = pd.to_numeric(sync_df['loop_num'], errors='coerce').max()
+                if pd.notna(max_loop_val):
+                    max_loop = int(max_loop_val)
+                    if self.dispatched_task_count < max_loop:
+                        self.dispatched_task_count = max_loop
             
         best_target = self.get_best_target(df_dataset)
         num_violations = (df_dataset[best_target] == 1).sum() if (df_dataset is not None and best_target) else 0
@@ -333,6 +368,72 @@ class ActiveLearningStrategist:
 
                 self._print_final_report(current_idx, "一貫性検証 (Verify Consistency)", "分類ごとのDKW証明完了")
                 return {"system_command": "stop", "reason": "Consistency Verification Complete"}
+
+        # ============================================================
+        # dkw_fixed: 指定回数一様サンプリング → 全データ揃ったら事後評価
+        # ============================================================
+        if self.run_mode == "dkw_fixed":
+            if self.dispatched_task_count < self.max_samples:
+                pt = self.get_random_point(self.dkw_random_index)
+                self.dkw_random_index += 1
+                pt["reason"] = f"SMC: Fixed Sampling ({self.dispatched_task_count+1}/{self.max_samples})"
+                self.dispatched_task_count += 1
+                return pt
+
+            print(f"\n[Strategist] 🎯 指定回数 {self.max_samples} 回のサンプリング完了。最終DKW評価を実行します...")
+            df_dataset = self.estimator.load_dataset()
+            if df_dataset is None or df_dataset.empty:
+                return {"system_command": "stop", "reason": "Empty dataset"}
+
+            if self.dkw_pure_smc:
+                if 'reason' in df_dataset.columns:
+                    df_dkw = df_dataset[df_dataset['reason'].str.contains('SMC', na=False)]
+                else:
+                    df_dkw = pd.DataFrame()
+            else:
+                df_dkw = df_dataset
+
+            try:
+                df_filtered = point_extractors.filter_by_region_and_bounds(df_dkw, region=self.dkw_region, bounds=self.dkw_bounds)
+            except Exception as e:
+                print(f"[Strategist] ⚠️ 領域フィルタリング失敗: {e}")
+                df_filtered = df_dkw
+
+            if df_filtered is None or df_filtered.empty:
+                return {"system_command": "stop", "reason": "No data after region filtering"}
+
+            print(f"[Strategist] 📊 最終評価: {len(df_filtered)} サンプルでDKW評価を実行します。")
+
+            if self.dkw_simultaneous:
+                target_metrics = getattr(self.config, 'DKW_TARGET_METRICS', ['min_ttc', 'min_distance'])
+                summary = self.estimator.evaluate_and_summarize_dkw_multiple(
+                    target_columns=target_metrics, df=df_filtered,
+                    q=0.05, delta_total=self.dkw_total_delta,
+                    epsilon=self.dkw_target_epsilon, use_kde_weighting=False,
+                    region="custom", bounds=None
+                )
+                if summary["status"] == "success":
+                    for metric, res in summary["metrics"].items():
+                        print(f"  [{metric}] ワースト5%推定値: {res['estimate']:.3f} | 信頼区間: [{res['lower_bound']:.3f}, {res['upper_bound']:.3f}] (幅: {res['interval_width']:.3f})")
+                    msg = f"固定サンプリング({self.max_samples}回) + 最終DKW同時証明完了"
+                else:
+                    msg = f"DKW評価失敗: {summary.get('message', '不明')}"
+            else:
+                summary = self.estimator.evaluate_and_summarize_dkw(
+                    target_column=self.dkw_target_metric, df=df_filtered,
+                    q=0.05, delta=self.dkw_total_delta,
+                    epsilon=self.dkw_target_epsilon
+                )
+                if summary["status"] == "success":
+                    print(f"  [{self.dkw_target_metric}] ワースト5%推定値: {summary['estimate']:.3f} | 信頼区間: [{summary['lower_bound']:.3f}, {summary['upper_bound']:.3f}] (幅: {summary['interval_width']:.3f})")
+                    msg = f"固定サンプリング({self.max_samples}回) + 最終DKW証明完了"
+                else:
+                    msg = f"DKW評価失敗: {summary.get('message', '不明')}"
+
+            out_csv = os.path.expanduser(f"~/simulation_traces/{self.scenario_name}_dkw_samples.csv")
+            point_extractors.save_dataframe_to_csv(df_filtered, out_csv, f"[Strategist] 💾 DKWサンプルを保存: {out_csv}")
+            self._print_final_report(self.dispatched_task_count, "DKW Fixed", msg)
+            return {"system_command": "stop", "reason": msg}
 
         # --- [追加] 単独モード: Sequential-DKW (SMC) による指定データの統計的検証 ---
         if self.run_mode == "dkw":

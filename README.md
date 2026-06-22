@@ -17,7 +17,8 @@ AI (ガウス過程回帰モデル) を用いた **アクティブラーニン�
 - **過去データからの自動復元と再開 (`--resume_from`)**: 退避させた過去のデータセットを現在の作業ディレクトリに復元し、シームレスに検証を再開・追記できます。
 - **エッジケース自動抽出・集中検証 (`jama_edge`, `ttc_edge`)**: 過去のデータから「人間なら安全な領域での事故」や「ギリギリのニアミス」などの弱点をAIが自動抽出し、偶然か真の危険かを反復検証します。
 - **最悪TTC探索 (`worst_ttc`)**: 今までの検証データから衝突しなかった「安全領域」を特定し、その中で最もTTCが小さかった（最悪の）ケースの下位N件を自動抽出し集中検証します。
-- **SMC (DKW) 検証モード**: Sequential-DKW不等式を用いて、システムの安全性を数学的に証明します。TTCや距離などの複数指標を正規化した総合リスク指標（Z_margin）を用いることで、多重検定（バジェット分割）の問題を回避してシステム全体のテールリスクを評価します。
+- **SMC (DKW) 検証モード (`--mode dkw`)**: Sequential-DKW不等式を用いて、システムの安全性を逐次的に数学的に証明します。ステージごとに収束をチェックし、信頼区間が目標精度に達したら早期終了します。
+- **固定サンプリング+一括DKW評価モード (`--mode dkw_fixed`)**: 指定回数（`--max_samples`）の一様乱数サンプリングを必ず実行し、全データ収集後に1回だけDKW評価を行います。`--dkw_pure_smc` で過去データを除外した純粋評価と、全データを使った評価を選択可能です。
 - **Config-Driven アーキテクチャ**: シナリオ (Uターン、割り込み等) のパラメータやAIの探索範囲、タイムアウト時間を単一の設定ファイルで柔軟に定義可能 (`configs/`)。
 - **フォーカス (集中) モード**: 特定のパラメータの周辺に絞ってテストを反復するピンポイント検証機能。
 - **リアルタイム進捗監視**: 司令塔の画面で、各ワーカーが「待機中」「実行中」「タイムアウト」など、何をしているかをリアルタイムで1行にまとめて表示します。
@@ -27,8 +28,9 @@ AI (ガウス過程回帰モデル) を用いた **アクティブラーニン�
 
 ```text
 AWSIM_launch/
-├── master_orchestrator.py    # 【司令塔】システム全体の起動、クラスター構築、AIタスクのキュー管理を行うマスタープロセス。
-├── run_manager.py            # 【ワーカー】各ノードのメインプロセス。インフラの起動、司令塔からのタスク受信、テスト実行を管理。
+├── local_worker.py           # 【ホストワーカー】--with_host_worker 時の run_manager.py のプロセス起動・管理。
+├── master_orchestrator.py    # 【司令塔】システム全体の起動、クラスター構築、AIタスクのキュー管理/停止判断。
+├── run_manager.py            # 【ワーカー】各ノードのメインプロセス。司令塔からのタスク受信、process_controller.py を介したシミュレーション実行を管理。
 ├── run_scenario.py           # 単一のシミュレーションを実行するスクリプト。動的パラメータを受け取りシナリオを構築。
 ├── strategist.py             # AIの探索戦略を司る頭脳。現在のフェーズを判断し、次に検証すべきパラメータを決定。
 ├── estimator.py              # 【内部モジュール】ガウス過程回帰やDKW不等式など、統計的な評価・計算を行う数学エンジン。
@@ -39,19 +41,23 @@ AWSIM_launch/
 ├── extract_region_data.py    # 【CLIツール】コマンドで抽出条件を指定し、結果をCSVとして出力させるためのユーザー操作用スクリプト。
 ├── analyze_ttc_consistency.py # 【CLIツール】反復テストデータからTTCのばらつきを分析し、確実/偶然リスクに分類してDKW評価を出力するスクリプト。
 ├── fix_dataset_labels.py     # 過去のデータセットを最新の抽出ロジックで全号機から並列再解析し、安全に修復(更新)するスクリプト。
+├── core/                     # 【アプリケーション基盤層】どのシナリオ・モードでも共通して使う基盤機能
+│   ├── config_loader.py      # コマンドライン引数のパース、configs/*.py の動的import（副作用なし）
+│   └── dataset_repo.py       # データセットCSVの読み書き、--resume_from による過去データ復元（ファイルI/Oカプセル化）
+├── redis_cluster/            # 【インフラ層】分散実行基盤およびローカルプロセス管理
+│   ├── cluster_config.py     # ワーカーPCのIPやコンテナ名、通信割り当て設定などを一元管理。
+│   ├── cluster_manager.py    # 各PCにSSH接続し、Dockerコンテナを自動起動・同期するクラスター構築スクリプト。
+│   ├── process_controller.py # AWSIM/Autoware/RuntimeMonitorの起動・終了・監視、Xvfb設定をカプセル化。
+│   ├── task_queue.py         # 【司令塔キュー】TaskQueueActor。ワーカーからのタスク取得をスレッドセーフに管理するRay Actor。
+│   └── shared_store.py       # 【共有金庫】非同期で送られてくるパラメータと結果を結合し、単一のCSVに記録するスレッドセーフなRay Actor。メモリリーク防止機能付き。
+├── configs/                  # シナリオごとの設定ファイルを格納するディレクトリ。
+│   └── uturn.py              # Uターンシナリオ用の設定 (探索範囲、ターゲット優先度、タイムアウト秒数など)。
 ├── visualize_traces.py       # 実行結果のCSVデータを読み込み、3Dグラフとして可視化するスクリプト。
 ├── visualize_traces_split.py # ホスト(21号機)とコンテナ(22・23号機)の実行結果を分割し、それぞれ独立した3Dグラフとして可視化するスクリプト。
 ├── visualize_worker_stats.py # ワーカー別（ホスト vs コンテナ）の衝突やTTC違反の発生確率を棒グラフで比較・可視化するスクリプト。
 ├── visualize_min_ttc_3d.py   # Maudeの論理フラグではなく、AW_Kinematics_Extractorが計算した連続値のmin_ttcを基準に危険度を色分けして3D可視化するスクリプト。
 ├── visualize_jama_zones.py   # JAMA物理モデルに基づく理論的な安全領域(Zone)の分布をグラフ化して可視化・分析するスクリプト。
 ├── visualize_risk_matrix.py  # 衝突、最小TTC、最小接近距離を組み合わせて、安全性を4段階のリスクレベルで総合的に評価・可視化するスクリプト。
-├── redis_cluster/      # 分散クラスター管理モジュール
-│   ├── cluster_config.py  # ワーカーPCのIPやコンテナ名、通信割り当て設定などを一元管理。
-│   ├── cluster_manager.py # 各PCにSSH接続し、Dockerコンテナを自動起動・同期するクラスター構築スクリプト。
-│   └── shared_store.py # 【共有金庫】非同期で送られてくるパラメータと結果を結合し、単一のCSVに記録するスレッドセーフなRay Actor。メモリリーク防止機能付き。
-├── configs/            # シナリオごとの設定ファイルを格納するディレクトリ。
-│   └── uturn.py        # Uターンシナリオ用の設定 (探索範囲、ターゲット優先度、タイムアウト秒数など)。
-└── README.md           # 本ドキュメント
 ```
 
 ## 前提環境 (Dependencies)
@@ -140,6 +146,16 @@ python3 master_orchestrator.py --type uturn --mode dkw --dkw_simultaneous
 # (応用) KDEデータ再利用 ＋ JAMA経験的安全領域 ＋ ボンフェローニ同時保証 をすべて組み合わせた最強の証明コマンド
 python3 master_orchestrator.py --type uturn --mode dkw --dkw_region intersect_safe --dkw_simultaneous --resume_from ~/simulation_traces_shared_20260611_104737
 
+# 【固定サンプリング+一括DKW評価モード (dkw_fixed)】指定回数サンプリング後に一括DKW評価
+# 5. 純粋SMC: 過去データを使わず、新規6000回のサンプリングのみで証明する場合
+python3 master_orchestrator.py --type uturn --mode dkw_fixed --dkw_region intersect_safe --dkw_simultaneous --max_samples 6000 --dkw_pure_smc
+
+# 6. 全データ利用: resume_fromの過去データ＋新規サンプルで証明する場合
+python3 master_orchestrator.py --type uturn --mode dkw_fixed --dkw_region intersect_safe --dkw_simultaneous --resume_from ~/simulation_traces_shared_20260611_104737 --max_samples 6000
+
+# 7. 中断再開: 途中まで終わった dkw_fixed を再開する場合（_dataset.csv の続きから）
+python3 master_orchestrator.py --type uturn --mode dkw_fixed --dkw_region intersect_safe --dkw_simultaneous --max_samples 6000
+
 # 過去に退避させた特定のデータ(例: ~/simulation_traces_shared_...)を復元して、そこから探索を再開する場合
 python3 master_orchestrator.py --type uturn --mode ttc_edge --resume_from ~/simulation_traces_shared_20260525_184326
 ```
@@ -213,35 +229,19 @@ python3 archive_results.py
 ```
 
 ### 実行結果の3D可視化
+```bash
 # 最新の実験結果を可視化する場合
 python3 visualize_traces.py ~/simulation_traces
 
 # 過去に退避させた特定のデータを可視化する場合
 python3 visualize_traces.py ~/simulation_traces_shared_20260512_144346
-+```
-+
-+#### 2. ワーカー別の3Dグラフの生成
-+ホスト環境（21号機）とコンテナ環境（22, 23号機）の実行結果を別々の3Dグラフに分割して出力し、環境による結果の偏りがないか確認します。
-+```bash
-+python3 visualize_traces_split.py ~/simulation_traces
-+```
-+
-+#### 3. ワーカー別の違反確率比較グラフの生成
-+ホスト環境とコンテナ環境で、衝突や各TTC違反の発生確率に統計的な差がないかを棒グラフで比較します。
-+```bash
-+python3 visualize_worker_stats.py ~/simulation_traces
-+```
-+
-+#### 4. JAMA物理モデル理論領域の3D可視化
-+JAMA理論に基づく理論的安全領域(Zone)の分布をグラフ化して可視化・分析します。
-+```bash
-+python3 visualize_jama_zones.py ~/simulation_traces
 
 # MIN_TTCの連続値に基づく深刻度の3D可視化 (Maudeのフラグではなく抽出器の数値を優先)
 python3 visualize_min_ttc_3d.py ~/simulation_traces
 
-リスク評価マトリックスの3D可視化
+# リスク評価マトリックスの3D可視化
 python3 visualize_risk_matrix.py ~/simulation_traces
+```
 
 # 対象のフォルダ（ディレクトリ）を指定する場合
 python3 compare_ttc_modes.py --dir ~/simulation_traces_shared_20260512_144346
@@ -294,15 +294,15 @@ cd /home/passd/autoware && source install/setup.bash && ros2 launch autoware_lau
 ## 今後の拡張性
 新しくワーカーPC（例：24号機）を追加したい場合は、`redis_cluster/cluster_config.py` に新しいIPアドレスやコンテナ名、`ROS_DOMAIN_ID` を追記するだけで、システムが全自動でコンテナを構築し、クラスターの計算力（スループット）を向上させます。
 
+<!-- 最新のシミュレーションデータで各モデルのTTCを計算し、差分をCSVに出力する場合
+python3 compare_ttc_modes.py
 
-+# 最新のシミュレーションデータで各モデルのTTCを計算し、差分をCSVに出力する場合
-+python3 compare_ttc_modes.py
-+
 # 対象のフォルダ（ディレクトリ）を指定する場合
 python3 compare_ttc_modes.py --dir ~/simulation_traces_shared_20260512_144346
 
-@@ -143,6 +155,7 @@
+# 出力されるCSVファイルの名前を指定する場合
 python3 compare_ttc_modes.py --output custom_comparison_result.csv
 
 # 両方を指定する場合
 python3 compare_ttc_modes.py --dir ~/my_test_data --output my_test_diff.csv
+-->

@@ -1,17 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import argparse
-import importlib
-import json
 import sys
 import os
 import time
 import ray
-import csv
-import subprocess
-import shutil
-
 # パスの追加
 LAUNCH_DIR = os.path.dirname(os.path.abspath(__file__))
 if LAUNCH_DIR not in sys.path:
@@ -19,148 +12,23 @@ if LAUNCH_DIR not in sys.path:
 
 from redis_cluster.cluster_manager import ClusterManager
 from redis_cluster.shared_store import SharedStoreActor
+from redis_cluster.task_queue import TaskQueueActor
 from redis_cluster import cluster_config
+from core.config_loader import load_config
+from core.dataset_repo import DatasetRepository
+from local_worker import HostWorkerManager
 from strategist import ActiveLearningStrategist
-
-# ==============================================================================
-# TaskQueueActor (Ray Actor)
-# ワーカーからのアクセスをスレッドセーフに受け付けるキュー管理役
-# ==============================================================================
-@ray.remote
-class TaskQueueActor:
-    def __init__(self):
-        self.queue = []
-        self.completed_count = 0
-        self.stop_signal = False
-        self.dispatched_count = 0  # [追加] マスターが発行する絶対的なループ番号
-        self.worker_statuses = {}  # [追加] 各ワーカーのリアルタイムな状態
-
-    def update_worker_status(self, worker_id: str, status: str):
-        self.worker_statuses[worker_id] = status
-
-    def add_task(self, task: dict):
-        self.queue.append(task)
-
-    def get_next_task(self):
-        if self.stop_signal:
-            return {"system_command": "stop", "reason": "Target Reached or Master Stopped"}
-        if len(self.queue) > 0:
-            task = self.queue.pop(0)
-            self.dispatched_count += 1
-            task["global_loop_num"] = self.dispatched_count # [追加] タスクにIDを刻印
-            return task
-        return None
-
-    def set_start_counts(self, count: int):
-        if self.dispatched_count == 0:
-            self.dispatched_count = count
-            self.completed_count = count
-
-    def report_completion(self, loop_num: int, status: str):
-        self.completed_count += 1
-        return True
-
-    def get_status(self):
-        return len(self.queue), self.completed_count, self.worker_statuses
-
-    def set_stop_signal(self):
-        self.stop_signal = True
-
-# ==============================================================================
-# 設定の動的読み込み
-# ==============================================================================
-def load_config():
-    parser = argparse.ArgumentParser(description="Multi-Scenario Autonomous Driving Test Master Orchestrator")
-    parser.add_argument("--type", type=str, default="uturn", help="Scenario type (e.g., uturn, cutin)")
-    parser.add_argument("--mode", type=str, choices=["explore", "focus", "margin", "jama_edge", "ttc_edge", "worst_ttc", "dkw", "verify_consistency"], default="explore", help="Search mode")
-    parser.add_argument("--focus_points", type=str, default=None, help="JSON string for focus points")
-    parser.add_argument("--with_host_worker", action="store_true", help="Run a local worker on the host machine (ROS_DOMAIN_ID=21, EXEC_MODE=host)")
-    parser.add_argument("--headless_host", action="store_true", help="Run the host worker with Xvfb (No GUI)")
-    parser.add_argument("--headless", action="store_true", help="Run the master container (21号機) with Xvfb (No GUI)")
-    parser.add_argument("--resume_from", type=str, default=None, help="Directory to restore dataset from (e.g., ~/simulation_traces_shared_...)")
-    parser.add_argument("--ext_mode", type=str, choices=["maude", "cvm", "ctrv"], default="cvm", help="Kinematics extractor mode for evaluating simulation logs")
-    parser.add_argument("--dkw_bounds", type=str, default=None, help="JSON string defining the specific region for DKW (e.g., '{\"dx0\": [15.0, 20.0]}')")
-    parser.add_argument("--dkw_region", type=str, default="custom", help="Extraction condition string (e.g. 'emp_safe and jama_safe')")
-    parser.add_argument("--dkw_pure_smc", action="store_true", help="DKWモードで過去の探索データを再利用せず、純粋なSMCデータのみで評価する")
-    parser.add_argument("--dkw_simultaneous", action="store_true", help="DKWモードで複数指標を同時に評価し、ボンフェローニ補正を用いた同時保証を行う")
-    args = parser.parse_args()
-
-    try:
-        config_module = importlib.import_module(f"configs.{args.type}")
-        print(f"[System] シナリオ設定 'configs.{args.type}' を正常に読み込みました。")
-    except ImportError:
-        print(f"[Fatal] 設定ファイル configs/{args.type}.py が見つかりません。")
-        sys.exit(1)
-
-    focus_points = None
-    if args.mode == "focus":
-        if args.focus_points:
-            focus_points = json.loads(args.focus_points)
-        else:
-            focus_points = getattr(config_module, 'FOCUS_POINTS', None)
-            if not focus_points:
-                print("[Fatal] --mode focus が指定されましたが FOCUS_POINTS が設定されていません。")
-                sys.exit(1)
-
-    # --- [追加] 退避した過去のデータセットを現在の作業フォルダに復元 ---
-    if args.resume_from:
-        src_csv = os.path.expanduser(f"{args.resume_from}/{args.type}_dataset.csv")
-        dest_dir = os.path.expanduser("~/simulation_traces")
-        dest_base_csv = os.path.join(dest_dir, f"{args.type}_dataset_base.csv")
-        
-        if os.path.exists(src_csv):
-            os.makedirs(dest_dir, exist_ok=True)
-            shutil.copy2(src_csv, dest_base_csv)
-            print(f"[System] 📂 過去の退避データ ({src_csv}) を読み込み専用(base)としてセットしました。新しい結果は新しいCSVに書き出されます。")
-        else:
-            print(f"[Fatal] 復元元のデータセットが見つかりません: {src_csv}")
-            sys.exit(1)
-
-    dkw_bounds = None
-    if args.dkw_bounds:
-        try:
-            dkw_bounds = json.loads(args.dkw_bounds)
-        except json.JSONDecodeError as e:
-            print(f"[Fatal] --dkw_bounds 引数のJSONパースに失敗しました: {e}")
-            sys.exit(1)
-
-    return args.type, config_module, args.mode, focus_points, args.with_host_worker, args.headless_host, args.ext_mode, args.resume_from, dkw_bounds, args.dkw_region, args.dkw_pure_smc, args.dkw_simultaneous, args.headless
-
-# ==============================================================================
-# [追加] 過去のデータセットから最大ループ番号を取得
-# ==============================================================================
-def get_last_processed_loop(scenario_name):
-    csv_paths = [
-        os.path.expanduser(f"~/simulation_traces/{scenario_name}_dataset_base.csv"),
-        os.path.expanduser(f"~/simulation_traces/{scenario_name}_dataset.csv")
-    ]
-    last_loop = 0
-    for csv_path in csv_paths:
-        if not os.path.exists(csv_path):
-            continue
-        try:
-            with open(csv_path, "r", encoding="utf-8") as f:
-                reader = csv.DictReader(f)
-                for row in reader:
-                    try:
-                        loop_num = int(row["loop_num"])
-                        if loop_num > last_loop:
-                            last_loop = loop_num
-                    except (ValueError, KeyError):
-                        pass
-        except Exception:
-            pass
-    return last_loop
 
 # ==============================================================================
 # メインオーケストレーター処理
 # ==============================================================================
 def main():
-    scenario_name, cfg, run_mode, focus_points, with_host_worker, headless_host, ext_mode, resume_from, dkw_bounds, dkw_region, dkw_pure_smc, dkw_simultaneous, headless = load_config()
-
+    cfg = load_config()
+    repo = DatasetRepository(cfg.scenario_name)
+    repo.restore_base_dataset(cfg.resume_from)
     # 1. クラスターの一斉起動 (21〜23号機のコンテナを自動で立ち上げる)
     cluster_manager = ClusterManager()
-    cluster_manager.start_cluster(scenario_name, run_mode, with_host_worker, ext_mode, headless)
+    cluster_manager.start_cluster(cfg.scenario_name, cfg.run_mode, cfg.with_host_worker, cfg.ext_mode, cfg.headless)
     
     # 2. Rayクラスターに接続 (namespaceを指定し、ワーカーから発見可能にする)
     head_address = f"{cluster_manager.master_ip}:{cluster_manager.ray_port}"
@@ -181,10 +49,19 @@ def main():
         print("[Orchestrator] 司令塔 (TaskQueueActor) を新しく作成しました。")
         
         # [追加] 過去のデータセットから再開位置を復元
-        last_loop = get_last_processed_loop(scenario_name)
-        if last_loop > 0:
-            ray.get(task_queue.set_start_counts.remote(last_loop))
-            print(f"[Orchestrator] 過去のデータセットを検知しました。ループ番号 {last_loop + 1} からタスクを再開します。")
+        # dkw_fixed モード: resume_from の過去データ(_base)は使わず、
+        # 今回の実行で途中までできた _dataset.csv のみを参照して再開する
+        if cfg.run_mode == "dkw_fixed":
+            # _dataset.csv のみから最終ループ番号を取得（_base.csv は除外）
+            last_loop = repo.get_last_loop_num_from_current()
+            if last_loop > 0:
+                ray.get(task_queue.set_start_counts.remote(last_loop))
+                print(f"[Orchestrator] dkw_fixed: 途中までのデータを検知。ループ番号 {last_loop + 1} から再開します。")
+        else:
+            last_loop = repo.get_last_loop_num()
+            if last_loop > 0:
+                ray.get(task_queue.set_start_counts.remote(last_loop))
+                print(f"[Orchestrator] 過去のデータセットを検知しました。ループ番号 {last_loop + 1} からタスクを再開します。")
     except ValueError:
         task_queue = ray.get_actor("TaskQueueActor")
         print("[Orchestrator] 既存の司令塔 (TaskQueueActor) に再接続しました。")
@@ -193,8 +70,8 @@ def main():
     try:
         # 共有金庫を確実にマスター機(21号機)のローカルで起動させる制約を追加
         shared_store = SharedStoreActor.options(
-            name="SharedStoreActor", 
-            lifetime="detached", 
+            name="SharedStoreActor",
+            lifetime="detached",
             num_cpus=0,
             scheduling_strategy=ray.util.scheduling_strategies.NodeAffinitySchedulingStrategy(
                 node_id=ray.get_runtime_context().get_node_id(),
@@ -207,46 +84,36 @@ def main():
         print("[Orchestrator] 既存の共有金庫 (SharedStoreActor) に再接続しました。")
 
     # 5. AI (Strategist) の初期化
-    # [修正] 候補数(num_candidates)を10000から2000に減らし、AI予測の計算量を削減
-    strategist = ActiveLearningStrategist(scenario_name, cfg, num_candidates=2000, focus_points=focus_points, run_mode=run_mode, dkw_bounds=dkw_bounds, dkw_region=dkw_region, dkw_pure_smc=dkw_pure_smc, dkw_simultaneous=dkw_simultaneous)
-    
-    REPEAT_COUNT = getattr(cfg, 'REPEAT_COUNT', 3000)
-    
+    config_module = cfg.config_module
+    strategist = ActiveLearningStrategist(
+        cfg.scenario_name, config_module, num_candidates=2000,
+        focus_points=cfg.focus_points, run_mode=cfg.run_mode,
+        dkw_bounds=cfg.dkw_bounds, dkw_region=cfg.dkw_region,
+        dkw_pure_smc=cfg.dkw_pure_smc, dkw_simultaneous=cfg.dkw_simultaneous,
+        max_samples=cfg.max_samples
+    )
+
+    REPEAT_COUNT = getattr(config_module, 'REPEAT_COUNT', 3000)
+    if cfg.max_samples is not None:
+        REPEAT_COUNT = cfg.max_samples
+
     # 稼働中のマシン(ワーカー)数を動的にカウントし、キューのサイズを自動調整
     worker_count = sum(1 for node in cluster_config.CLUSTER_NODES.values() if node.get("enabled", True))
     MAX_QUEUE_SIZE = worker_count * 4    # ワーカー数の4倍を上限(High-Water Mark)とする
     REFILL_THRESHOLD = worker_count * 2  # ワーカー数の2倍まで減ったら補充を開始(枯渇防止の強力なバッファ)
 
     # 6. ホストワーカーの直接起動
-    host_worker_proc = None
-    if with_host_worker:
-        print("\n[Orchestrator] ホストモードのワーカー(21号機)をバックグラウンドで起動します...")
-        env = os.environ.copy()
-        env["ROS_DOMAIN_ID"] = "21"
-        env["EXEC_MODE"] = "host"
-        
-        log_dir = os.path.expanduser("~/simulation_traces_host")
-        os.makedirs(log_dir, exist_ok=True)
-        log_path = os.path.join(log_dir, "host_worker_console.log")
-        host_worker_log = open(log_path, "w")
-        
-        cmd = ["python3", "-u", "run_manager.py", "--type", scenario_name, "--mode", run_mode, "--ext_mode", ext_mode, "--dkw_region", dkw_region]
-        if focus_points:
-            cmd.extend(["--focus_points", json.dumps(focus_points)])
-        if dkw_bounds:
-            cmd.extend(["--dkw_bounds", json.dumps(dkw_bounds)])
-        if dkw_pure_smc:
-            cmd.append("--dkw_pure_smc")
-        if dkw_simultaneous:
-            cmd.append("--dkw_simultaneous")
-        if headless_host:
-            cmd.append("--headless")
-            
-        host_worker_proc = subprocess.Popen(cmd, env=env, stdout=host_worker_log, stderr=subprocess.STDOUT)
-        print(f"[Orchestrator] ホストワーカーのコンソール出力は {log_path} に記録されます。")
+    host_worker = HostWorkerManager()
+    if cfg.with_host_worker:
+        host_worker.start(cfg.scenario_name, cfg.run_mode, cfg.ext_mode, cfg.dkw_region,
+                          focus_points=cfg.focus_points, dkw_bounds=cfg.dkw_bounds,
+                          dkw_pure_smc=cfg.dkw_pure_smc, dkw_simultaneous=cfg.dkw_simultaneous,
+                          headless_host=cfg.headless_host)
 
-    if run_mode in ["dkw", "verify_consistency"]:
-        print(f"\n=== マスター司令塔 稼働開始 ({run_mode} モード) ===")
+    if cfg.run_mode == "dkw_fixed":
+        print(f"\n=== マスター司令塔 稼働開始 (固定サンプリングモード: 目標 {REPEAT_COUNT} 回) ===")
+    elif cfg.run_mode in ["dkw", "verify_consistency"]:
+        print(f"\n=== マスター司令塔 稼働開始 ({cfg.run_mode} モード) ===")
     else:
         print(f"\n=== マスター司令塔 稼働開始 (目標回数: {REPEAT_COUNT}) ===")
     
@@ -256,13 +123,15 @@ def main():
             # 各ワーカーの状態を並べて文字列化
             ws_str = " | ".join([f"[{k}] {v}" for k, v in sorted(worker_statuses.items())])
             # \033[K で行末の古い文字を消去しつつ、1行に綺麗に表示する
-            if run_mode in ["dkw", "verify_consistency"]:
+            if cfg.run_mode == "dkw_fixed":
+                sys.stdout.write(f"\r\033[K[Orchestrator] 固定サンプリング中 {completed}/{REPEAT_COUNT} | キュー={q_len} || {ws_str}")
+            elif cfg.run_mode in ["dkw", "verify_consistency"]:
                 sys.stdout.write(f"\r\033[K[Orchestrator] 進行状況 (総ループ: {completed}) | キュー={q_len} || {ws_str}")
             else:
                 sys.stdout.write(f"\r\033[K[Orchestrator] 完了={completed}/{REPEAT_COUNT} | キュー={q_len} || {ws_str}")
             sys.stdout.flush()
 
-            if run_mode not in ["dkw", "verify_consistency"]:
+            if cfg.run_mode not in ["dkw", "verify_consistency"]:
                 if completed >= REPEAT_COUNT:
                     print("\n[Orchestrator] 目標回数に到達しました。終了シグナルを送信します。")
                     ray.get(task_queue.set_stop_signal.remote())
@@ -288,13 +157,8 @@ def main():
         print("\n[Orchestrator] 中断シグナルを受信しました。全ワーカーに停止命令を送ります。")
         ray.get(task_queue.set_stop_signal.remote())
     finally:
-        if host_worker_proc:
-            print("\n[Orchestrator] ホストワーカープロセスを終了しています...")
-            host_worker_proc.terminate()
-            try:
-                host_worker_proc.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                host_worker_proc.kill()
+        if cfg.with_host_worker:
+            host_worker.stop(timeout=5)
         
 if __name__ == "__main__":
     main()
