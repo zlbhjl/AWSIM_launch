@@ -41,10 +41,8 @@ AWSIM_launch/
 ├── extract_region_data.py    # 【CLIツール】コマンドで抽出条件を指定し、結果をCSVとして出力させるためのユーザー操作用スクリプト。
 ├── analyze_ttc_consistency.py # 【CLIツール】反復テストデータからTTCのばらつきを分析し、確実/偶然リスクに分類してDKW評価を出力するスクリプト。
 ├── fix_dataset_labels.py     # 過去のデータセットを最新の抽出ロジックで全号機から並列再解析し、安全に修復(更新)するスクリプト。
-├── core/                     # 【アプリケーション基盤層】どのシナリオ・モードでも共通して使う基盤機能
-│   ├── config_loader.py      # コマンドライン引数のパース、configs/*.py の動的import（副作用なし）
-│   └── dataset_repo.py       # データセットCSVの読み書き、--resume_from による過去データ復元（ファイルI/Oカプセル化）
-├── redis_cluster/            # 【インフラ層】分散実行基盤およびローカルプロセス管理
+├── dataset_repo.py           # データセットCSVの読み書き、--resume_from による過去データ復元
+├── redis_cluster/
 │   ├── cluster_config.py     # ワーカーPCのIPやコンテナ名、通信割り当て設定などを一元管理。
 │   ├── cluster_manager.py    # 各PCにSSH接続し、Dockerコンテナを自動起動・同期するクラスター構築スクリプト。
 │   ├── process_controller.py # AWSIM/Autoware/RuntimeMonitorの起動・終了・監視、Xvfb設定をカプセル化。
