@@ -23,6 +23,7 @@ AI (ガウス過程回帰モデル) を用いた **アクティブラーニン�
 - **フォーカス (集中) モード**: 特定のパラメータの周辺に絞ってテストを反復するピンポイント検証機能。
 - **リアルタイム進捗監視**: 司令塔の画面で、各ワーカーが「待機中」「実行中」「タイムアウト」など、何をしているかをリアルタイムで1行にまとめて表示します。
 - **JAMA物理モデルに基づく理論値算出**: シミュレーションの入力パラメータから、物理限界（空走時間・ブレーキ性能）に基づく理論上の停止距離と安全マージン（Zone）を同時算出・記録し、AIの学習特徴量として活用 (`theoretical_calculator.py`)。
+- **外部検証器アダプタ**: AWSIM_launch の外側にある検証器を、対象システムと切り離したまま起動できる汎用入口を追加。第一段階として `BBSL-test` の FT4D 実験を AWSIM_launch 側から呼び出せます (`run_external_verifier.py`, `external_verifiers/`)。
 
 ## ファイル・ディレクトリ構成
 
@@ -31,6 +32,7 @@ AWSIM_launch/
 ├── local_worker.py           # 【ホストワーカー】--with_host_worker 時の run_manager.py のプロセス起動・管理。
 ├── master_orchestrator.py    # 【司令塔】システム全体の起動、クラスター構築、AIタスクのキュー管理/停止判断。
 ├── run_manager.py            # 【ワーカー】各ノードのメインプロセス。司令塔からのタスク受信、process_controller.py を介したシミュレーション実行を管理。
+├── run_external_verifier.py  # 【外部検証器入口】AWSIM_launch から外部検証器を起動する汎用CLI。
 ├── run_scenario.py           # 単一のシミュレーションを実行するスクリプト。動的パラメータを受け取りシナリオを構築。
 ├── strategist.py             # AIの探索戦略を司る頭脳。現在のフェーズを判断し、次に検証すべきパラメータを決定。
 ├── estimator.py              # 【内部モジュール】ガウス過程回帰やDKW不等式など、統計的な評価・計算を行う数学エンジン。
@@ -42,6 +44,10 @@ AWSIM_launch/
 ├── analyze_ttc_consistency.py # 【CLIツール】反復テストデータからTTCのばらつきを分析し、確実/偶然リスクに分類してDKW評価を出力するスクリプト。
 ├── fix_dataset_labels.py     # 過去のデータセットを最新の抽出ロジックで全号機から並列再解析し、安全に修復(更新)するスクリプト。
 ├── dataset_repo.py           # データセットCSVの読み書き、--resume_from による過去データ復元
+├── external_verifiers/
+│   ├── base.py               # 検証器/検証対象を分離する共通インターフェース
+│   ├── registry.py           # 検証器アダプタの登録
+│   └── bbsl_ft4d.py          # BBSL-test FT4D 実験を外部検証器として呼ぶアダプタ
 ├── redis_cluster/
 │   ├── cluster_config.py     # ワーカーPCのIPやコンテナ名、通信割り当て設定などを一元管理。
 │   ├── cluster_manager.py    # 各PCにSSH接続し、Dockerコンテナを自動起動・同期するクラスター構築スクリプト。
@@ -157,6 +163,42 @@ python3 master_orchestrator.py --type uturn --mode dkw_fixed --dkw_region inters
 # 過去に退避させた特定のデータ(例: ~/simulation_traces_shared_...)を復元して、そこから探索を再開する場合
 python3 master_orchestrator.py --type uturn --mode ttc_edge --resume_from ~/simulation_traces_shared_20260525_184326
 ```
+
+### 2. 外部検証器を AWSIM_launch から起動する
+この入口は、検証器と検証対象を切り離したまま扱うための最初の土台です。
+現時点では AWSIM のシミュレーション結果そのものを BBSL-test に流し込む統合までは行わず、
+まずは AWSIM_launch 側のフレームワークから外部検証器を起動できることを示します。
+
+```bash
+# BBSL-test の FT4D 実験を AWSIM_launch 側から起動
+python3 run_external_verifier.py \
+  --verifier bbsl_ft4d \
+  --target-repo /home/passd/BBSL-test \
+  --tree basic \
+  --sigma-pf-source dataset \
+  --sigma-pb-mode delta-clean \
+  --and-rule min
+
+# 軽い疎通確認
+python3 run_external_verifier.py \
+  --verifier bbsl_ft4d \
+  --target-repo /home/passd/BBSL-test \
+  --mini \
+  --max-images 3 \
+  --tree basic \
+  --sigma-pf-source dataset \
+  --sigma-pb-mode delta-clean \
+  --and-rule min
+```
+
+このコマンドは AWSIM_launch 内に正規化済みの結果 JSON を保存しつつ、
+実際の検証本体は `BBSL-test/examples/run_full_experiment_all.py` をそのまま呼び出します。
+つまり現段階では、
+
+- AWSIM_launch = 検証器を起動・管理するフレーム
+- BBSL-test = 実際の FT4D / BBSL 検証器
+
+という役割分担です。
 
 ### 3. チェッカープロセスの起動 (別ターミナル)
 生成されたシミュレーションデータ (JSON)を手動で安全性を判定するために、ターミナルでチェッカーを使ってくださいしてください。
@@ -304,3 +346,18 @@ python3 compare_ttc_modes.py --output custom_comparison_result.csv
 # 両方を指定する場合
 python3 compare_ttc_modes.py --dir ~/my_test_data --output my_test_diff.csv
 -->
+
+
+
+1. ソフトウェア拡張のための3大設計思想
+① OCP（Open-Closed Principle：開放閉鎖の原則）
+「いろんな用途に合わせる」ための最も重要な原則です。ソフトウェアの構成要素は「拡張に対して開いており（Open）、修正に対して閉じている（Closed）べきである」という思想です。
+新しい用途（機能）を追加する際、既存のコアコードを「書き換える（修正する）」のではなく、新しいコードを「追加する（拡張する）」だけで済むように設計します。外部評価ツールを安全に相乗りさせるためのアダプター層の導入は、まさにこのOCPの完璧な実践例です。
+
+② Microkernel Architecture（プラグイン・アーキテクチャ）
+OS（オペレーティングシステム）の設計から派生した思想で、システムを「最小限の機能を持つコア（Microkernel）」と「特定の用途向けの拡張モジュール（Plugin）」に明確に分離します。
+VS CodeやEclipseなどのエディタが、あらゆるプログラミング言語（用途）に対応できるのはこの思想で作られているためです。タスクのキュー管理やインフラの起動といった「コア」だけを強固に作り、検証シナリオや評価ツールを「プラグイン」として外付けする設計がこれに当たります。
+
+③ DIP（Dependency Inversion Principle：依存性逆転の原則）
+「上位のロジック（抽象的なワークフロー）は、下位の詳細（具体的なツールやOSのコマンド）に依存してはならない。両者は『抽象（インターフェース）』に依存すべきである」という思想です。
+現場監督（メインスクリプト）が直接Linuxコマンドを叩くのではなく、「プロセスを管理する専門家」というインターフェースを介して操作するようにしたことで、この原則が満たされています。
