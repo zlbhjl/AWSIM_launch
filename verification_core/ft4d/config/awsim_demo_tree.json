@@ -1,0 +1,69 @@
+{
+  "tree": {
+    "top_event": {
+      "id": "TOP",
+      "gate": "OR",
+      "use_dataset_aggregation": true,
+      "children": [
+        {
+          "id": "SINGLE_SCENARIOS",
+          "gate": "OR",
+          "use_dataset_aggregation": true,
+          "children": [
+            "HIGH_SPEED",
+            "SHORT_GAP",
+            "LOW_TTC"
+          ]
+        },
+        {
+          "id": "COMBINED_SCENARIOS",
+          "gate": "OR",
+          "use_dataset_aggregation": true,
+          "children": [
+            {
+              "id": "HIGH_SPEED_AND_SHORT_GAP",
+              "gate": "AND",
+              "use_dataset_aggregation": true,
+              "children": ["HIGH_SPEED", "SHORT_GAP"]
+            },
+            {
+              "id": "HIGH_SPEED_AND_LOW_TTC",
+              "gate": "AND",
+              "use_dataset_aggregation": true,
+              "children": ["HIGH_SPEED", "LOW_TTC"]
+            },
+            {
+              "id": "SHORT_GAP_AND_LOW_TTC",
+              "gate": "AND",
+              "use_dataset_aggregation": true,
+              "children": ["SHORT_GAP", "LOW_TTC"]
+            },
+            {
+              "id": "ALL_THREE",
+              "gate": "AND",
+              "use_dataset_aggregation": true,
+              "children": ["HIGH_SPEED", "SHORT_GAP", "LOW_TTC"]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "params": {
+    "HIGH_SPEED": {"sigma_pf": 0.20, "sigma_pb": 0.00},
+    "SHORT_GAP": {"sigma_pf": 0.15, "sigma_pb": 0.00},
+    "LOW_TTC": {"sigma_pf": 0.25, "sigma_pb": 0.00}
+  },
+  "labels": {
+    "TOP": "危険シナリオ総合リスク",
+    "SINGLE_SCENARIOS": "単独危険条件",
+    "COMBINED_SCENARIOS": "複合危険条件（推定）",
+    "HIGH_SPEED": "高速度条件",
+    "SHORT_GAP": "短車間条件",
+    "LOW_TTC": "低TTC条件",
+    "HIGH_SPEED_AND_SHORT_GAP": "高速度 + 短車間",
+    "HIGH_SPEED_AND_LOW_TTC": "高速度 + 低TTC",
+    "SHORT_GAP_AND_LOW_TTC": "短車間 + 低TTC",
+    "ALL_THREE": "高速度 + 短車間 + 低TTC"
+  }
+}

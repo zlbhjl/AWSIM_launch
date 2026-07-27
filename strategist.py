@@ -14,7 +14,24 @@ except ImportError:
     TheoreticalSafetyCalculator = None
 
 class ActiveLearningStrategist:
-    def __init__(self, scenario_name, config, num_candidates=10000, focus_points=None, run_mode="explore", dkw_bounds=None, dkw_region="custom", dkw_pure_smc=False, dkw_simultaneous=False, max_samples=None):
+    def __init__(
+        self,
+        scenario_name,
+        config,
+        num_candidates=10000,
+        focus_points=None,
+        run_mode="explore",
+        dkw_bounds=None,
+        dkw_region="custom",
+        dkw_pure_smc=False,
+        dkw_simultaneous=False,
+        max_samples=None,
+        binomial_target=None,
+        binomial_method=None,
+        binomial_confidence=None,
+        binomial_target_width=None,
+        binomial_min_samples=None,
+    ):
         self.scenario_name = scenario_name
         self.config = config
         self.num_candidates = num_candidates
@@ -23,6 +40,20 @@ class ActiveLearningStrategist:
         self.dkw_region = dkw_region
         self.dkw_pure_smc = dkw_pure_smc
         self.dkw_simultaneous = dkw_simultaneous
+        self.binomial_target = binomial_target or getattr(config, "BINOMIAL_CI_TARGET", "c_collision")
+        self.binomial_method = binomial_method or getattr(config, "BINOMIAL_CI_METHOD", "wilson")
+        self.binomial_confidence = (
+            binomial_confidence if binomial_confidence is not None
+            else getattr(config, "BINOMIAL_CI_CONFIDENCE", 0.95)
+        )
+        self.binomial_target_width = (
+            binomial_target_width if binomial_target_width is not None
+            else getattr(config, "BINOMIAL_CI_TARGET_WIDTH", 0.02)
+        )
+        self.binomial_min_samples = (
+            binomial_min_samples if binomial_min_samples is not None
+            else getattr(config, "BINOMIAL_CI_MIN_SAMPLES", 100)
+        )
         
         self.estimator = SafetyEstimator(scenario_name, config)
         self.param_names = list(self.config.PARAM_RANGES.keys())
@@ -145,10 +176,28 @@ class ActiveLearningStrategist:
                 target_metrics = getattr(self.config, 'DKW_TARGET_METRICS', ['min_ttc', 'min_distance'])
                 print(f"[Strategist] 🛡️ 多重指標同時保証モード: {target_metrics}")
 
+        if self.run_mode == "binomial_ci":
+            self.binomial_random_index = 0
+            print(
+                f"[Strategist] 📊 Binomial CI モード: target={self.binomial_target} "
+                f"| method={self.binomial_method} | confidence={self.binomial_confidence:.2%} "
+                f"| target_width<={self.binomial_target_width:.4f}"
+            )
+            if self.dkw_region == "custom" and self.dkw_bounds:
+                print(f"[Strategist] 📍 評価領域(手動指定): {self.dkw_bounds}")
+            elif not self.dkw_bounds and self.dkw_region == "custom":
+                print("[Strategist] 📍 評価領域: パラメータ空間全体の一様ランダム")
+            else:
+                print(f"[Strategist] 📍 評価領域フィルタ: {self.dkw_region}")
+            print(
+                f"[Strategist] 🎯 停止条件: サンプル数 >= {self.binomial_min_samples} かつ "
+                f"95%信頼区間幅 <= {self.binomial_target_width:.4f}"
+            )
+
         # アクティブなサンプリング範囲を決定 (DKWモードでの範囲指定があれば上書き)
         self.active_bounds = {}
         for name in self.param_names:
-            if self.run_mode in ["dkw", "dkw_fixed"] and self.dkw_bounds and name in self.dkw_bounds:
+            if self.run_mode in ["dkw", "dkw_fixed", "binomial_ci"] and self.dkw_bounds and name in self.dkw_bounds:
                 self.active_bounds[name] = self.dkw_bounds[name]
             else:
                 self.active_bounds[name] = self.config.PARAM_RANGES[name]
@@ -178,12 +227,314 @@ class ActiveLearningStrategist:
             max_loop = df_init['loop_num'].max()
             if pd.notna(max_loop):
                 self.last_recovered_loop = int(max_loop)
+        self.boundary_gap_initial_summary = None
+        self.boundary_gap_cycle = 1
+        if self.run_mode == "boundary_gap":
+            self.boundary_gap_initial_summary = point_extractors.summarize_boundary_gap_progress(
+                df_init,
+                self.param_names,
+                self.config,
+                target_points=self.FOCUS_POINTS,
+            )
+
+    def _print_boundary_gap_progress(self):
+        df = self.estimator.load_dataset()
+        summary = point_extractors.summarize_boundary_gap_progress(
+            df,
+            self.param_names,
+            self.config,
+            target_points=self.FOCUS_POINTS,
+        )
+        initial = self.boundary_gap_initial_summary or {}
+
+        print("\n[Strategist] 📐 boundary_gap 検証後の境界セル集計")
+        print(
+            f"  - 要追加セル: {initial.get('candidate_cells', 0)} -> {summary['candidate_cells']} "
+            f"(差分 {summary['candidate_cells'] - initial.get('candidate_cells', 0):+d})"
+        )
+        print(
+            f"  - 追加観測で十分に埋まった危険セル: {summary['densified_cells']} "
+            f"| 明確化セル: {summary['clarified_cells']}"
+        )
+
+        target_rows = summary.get("target_cells", [])
+        if target_rows:
+            traces_dir = os.path.expanduser("~/simulation_traces")
+            out_csv = os.path.join(traces_dir, f"{self.scenario_name}_boundary_gap_progress.csv")
+            pd.DataFrame(target_rows).to_csv(out_csv, index=False)
+            remaining = sum(1 for row in target_rows if row.get("status") == "needs_more_data")
+            print(
+                f"  - 今回のターゲット {len(target_rows)} セル中、まだ薄いセル: {remaining}"
+            )
+            print(f"[Strategist] 💾 ターゲットごとの集計を保存しました: {out_csv}")
+        return summary
+
+    def _refresh_boundary_gap_targets(self):
+        df = self.estimator.load_dataset()
+        summary = self._print_boundary_gap_progress()
+        extractor_func = point_extractors.EXTRACTORS.get("boundary_gap")
+        next_points = extractor_func(df, self.param_names, self.config) if extractor_func else []
+
+        if next_points:
+            self.FOCUS_POINTS = next_points
+            self.focus_exact_test_count = 0
+            self.boundary_gap_cycle += 1
+            print(
+                f"[Strategist] 🔁 boundary_gap 継続: Cycle {self.boundary_gap_cycle} として "
+                f"{len(self.FOCUS_POINTS)} 件のターゲットを再設定しました。"
+            )
+            return {"continue": True, "summary": summary}
+
+        self.FOCUS_POINTS = []
+        return {"continue": False, "summary": summary}
+
+    def _flatten_ft4d_tree_nodes(self, node, labels, tree_mode, path=None):
+        if path is None:
+            path = []
+
+        label = labels.get(node["id"], node["id"])
+        current_path = path + [label]
+        entry = {
+            "tree_mode": tree_mode,
+            "node_id": node["id"],
+            "label": label,
+            "path": " > ".join(current_path),
+            "type": node.get("type", "gate"),
+            "gate": node.get("gate"),
+            "sigma_pf": node.get("sigma_pf", 0.0),
+            "sigma_pe": node.get("sigma_pe", 0.0),
+            "confidence": node.get("confidence", 1.0),
+            "confidence_delta": node.get("confidence_delta", 0.0),
+            "has_recognition_test": "recognition_test" in node,
+            "recognition_test": node.get("recognition_test"),
+        }
+
+        flattened = [entry]
+        for child in node.get("children", []):
+            flattened.extend(
+                self._flatten_ft4d_tree_nodes(
+                    child,
+                    labels,
+                    tree_mode,
+                    path=current_path,
+                )
+            )
+        return flattened
+
+    def _classify_ft4d_gap_reason(self, event, threshold):
+        if event["type"] == "basic":
+            if not event["has_any_recognition_test"]:
+                return "missing-recognition-test"
+            if event["insufficient_sample_occurrences"] > 0:
+                return "insufficient-samples"
+            if event["failed_test_occurrences"] > 0:
+                return "failed-recognition-test"
+            if event["min_confidence"] < threshold:
+                return "low-confidence"
+            return "ok"
+
+        if event["min_confidence"] < threshold:
+            return "child-confidence-propagation"
+        return "ok"
+
+    def _recommend_ft4d_action(self, gap_reason):
+        actions = {
+            "missing-recognition-test": "add_recognition_test",
+            "insufficient-samples": "collect_more_samples",
+            "failed-recognition-test": "inspect_basic_event",
+            "child-confidence-propagation": "inspect_child_events",
+            "low-confidence": "review_confidence_target",
+            "ok": "no_action",
+        }
+        return actions.get(gap_reason, "review_event")
+
+    def _aggregate_ft4d_nodes(self, all_nodes, threshold):
+        grouped = {}
+        for node in all_nodes:
+            event = grouped.setdefault(
+                node["node_id"],
+                {
+                    "node_id": node["node_id"],
+                    "label": node["label"],
+                    "type": node["type"],
+                    "gate": node["gate"],
+                    "tree_modes": set(),
+                    "occurrence_count": 0,
+                    "paths": [],
+                    "min_confidence": 1.0,
+                    "max_confidence_delta": 0.0,
+                    "max_sigma_pe": 0.0,
+                    "max_sigma_pf": 0.0,
+                    "has_any_recognition_test": False,
+                    "failed_test_occurrences": 0,
+                    "insufficient_sample_occurrences": 0,
+                    "recognition_test_samples": [],
+                },
+            )
+
+            event["tree_modes"].add(node["tree_mode"])
+            event["occurrence_count"] += 1
+            event["paths"].append(node["path"])
+            event["min_confidence"] = min(event["min_confidence"], node["confidence"])
+            event["max_confidence_delta"] = max(
+                event["max_confidence_delta"],
+                node["confidence_delta"],
+            )
+            event["max_sigma_pe"] = max(event["max_sigma_pe"], node["sigma_pe"])
+            event["max_sigma_pf"] = max(event["max_sigma_pf"], node["sigma_pf"])
+            event["has_any_recognition_test"] = (
+                event["has_any_recognition_test"] or node["has_recognition_test"]
+            )
+
+            recognition_test = node.get("recognition_test")
+            if recognition_test is not None:
+                event["recognition_test_samples"].append(recognition_test)
+                if not recognition_test.get("has_required_sample_size", True):
+                    event["insufficient_sample_occurrences"] += 1
+                if not recognition_test.get("passed", True):
+                    event["failed_test_occurrences"] += 1
+
+        aggregated_events = []
+        reason_priority = {
+            "insufficient-samples": 0,
+            "failed-recognition-test": 1,
+            "child-confidence-propagation": 2,
+            "missing-recognition-test": 3,
+            "low-confidence": 4,
+            "ok": 5,
+        }
+        for event in grouped.values():
+            event["tree_modes"] = sorted(event["tree_modes"])
+            event["paths"] = sorted(set(event["paths"]))
+            event["gap_reason"] = self._classify_ft4d_gap_reason(event, threshold)
+            event["recommended_action"] = self._recommend_ft4d_action(
+                event["gap_reason"]
+            )
+            event["is_underconfident"] = event["min_confidence"] < threshold
+            event["priority_score"] = (
+                0 if event["type"] == "basic" else 1,
+                reason_priority.get(event["gap_reason"], 99),
+                event["min_confidence"],
+                -event["max_sigma_pe"],
+                event["node_id"],
+            )
+            aggregated_events.append(event)
+
+        aggregated_events.sort(key=lambda event: event["priority_score"])
+        underconfident_events = [
+            event for event in aggregated_events
+            if event["is_underconfident"]
+        ]
+        return aggregated_events, underconfident_events
+
+    def summarize_ft4d_confidence_gaps(self, ft4d_result, min_confidence=None):
+        threshold = (
+            min_confidence
+            if min_confidence is not None
+            else getattr(self.config, "FT4D_MIN_CONFIDENCE", 0.95)
+        )
+
+        local_runs = {}
+        if ft4d_result.get("tree_mode") == "all":
+            local_runs = ft4d_result.get("local_runs", {})
+        else:
+            local_runs = {
+                ft4d_result["tree_mode"]: {
+                    "local_ft4d_report": ft4d_result["local_ft4d_report"],
+                    "top_sigma_pe": ft4d_result["top_sigma_pe"],
+                }
+            }
+
+        all_nodes = []
+        for tree_mode, run in local_runs.items():
+            report = run["local_ft4d_report"]
+            labels = report.get("labels", {})
+            all_nodes.extend(
+                self._flatten_ft4d_tree_nodes(
+                    report["tree"],
+                    labels,
+                    tree_mode,
+                )
+            )
+
+        underconfident_nodes = [
+            node for node in all_nodes
+            if node["confidence"] < threshold
+        ]
+        underconfident_nodes.sort(
+            key=lambda node: (node["confidence"], -node["sigma_pe"], node["path"])
+        )
+
+        nodes_with_tests = [
+            node for node in all_nodes
+            if node["has_recognition_test"]
+        ]
+        aggregated_events, underconfident_events = self._aggregate_ft4d_nodes(
+            all_nodes,
+            threshold,
+        )
+
+        return {
+            "threshold": threshold,
+            "total_nodes": len(all_nodes),
+            "total_unique_events": len(aggregated_events),
+            "nodes_with_recognition_test": len(nodes_with_tests),
+            "has_any_recognition_test": bool(nodes_with_tests),
+            "underconfident_count": len(underconfident_nodes),
+            "underconfident_nodes": underconfident_nodes,
+            "underconfident_unique_count": len(underconfident_events),
+            "aggregated_events": aggregated_events,
+            "underconfident_events": underconfident_events,
+            "all_nodes": all_nodes,
+        }
+
+    def inspect_bbsl_ft4d_confidence_gaps(
+        self,
+        *,
+        target_repo,
+        mini=False,
+        max_images=None,
+        tree="basic",
+        sigma_pf_source="dataset",
+        sigma_pb_mode="delta-clean",
+        and_rule="min",
+        detect_timeout=None,
+        reuse_existing_output=False,
+        min_confidence=None,
+    ):
+        ft4d_result = self.estimator.run_bbsl_and_evaluate_ft4d(
+            target_repo=target_repo,
+            mini=mini,
+            max_images=max_images,
+            tree=tree,
+            sigma_pf_source=sigma_pf_source,
+            sigma_pb_mode=sigma_pb_mode,
+            and_rule=and_rule,
+            detect_timeout=detect_timeout,
+            reuse_existing_output=reuse_existing_output,
+        )
+        confidence_summary = self.summarize_ft4d_confidence_gaps(
+            ft4d_result,
+            min_confidence=min_confidence,
+        )
+        return {
+            "ft4d_result": ft4d_result,
+            "confidence_summary": confidence_summary,
+        }
 
     def _log_dkw_history(self, records):
         """DKW評価の推移(収束過程)をCSVに追記記録する"""
         if not records: return
         df_hist = pd.DataFrame(records)
         out_csv = os.path.expanduser(f"~/simulation_traces/{self.scenario_name}_dkw_history.csv")
+        file_exists = os.path.exists(out_csv)
+        df_hist.to_csv(out_csv, mode='a', header=not file_exists, index=False)
+
+    def _log_binomial_history(self, record):
+        if not record:
+            return
+        df_hist = pd.DataFrame([record])
+        out_csv = os.path.expanduser(f"~/simulation_traces/{self.scenario_name}_binomial_ci_history.csv")
         file_exists = os.path.exists(out_csv)
         df_hist.to_csv(out_csv, mode='a', header=not file_exists, index=False)
 
@@ -195,6 +546,50 @@ class ActiveLearningStrategist:
         point_dict = {name: rng.uniform(self.active_bounds[name][0], self.active_bounds[name][1]) 
                       for name in self.param_names}
         return point_dict
+
+    def _build_binomial_random_task(self, df_dataset):
+        reason = (
+            f"BINOMIAL_CI: target={self.binomial_target} "
+            f"method={self.binomial_method} conf={self.binomial_confidence:.2f}"
+        )
+        calc = TheoreticalSafetyCalculator(self.config) if TheoreticalSafetyCalculator else None
+
+        max_loop_num = 0
+        if df_dataset is not None and 'loop_num' in df_dataset.columns:
+            max_loop_val = df_dataset['loop_num'].max()
+            if pd.notna(max_loop_val):
+                max_loop_num = int(max_loop_val)
+
+        random_offset = max_loop_num
+        while len(self.task_cache) < self.CACHE_SIZE:
+            pt = self.get_random_point(random_offset + self.binomial_random_index)
+            self.binomial_random_index += 1
+
+            if self.dkw_region != "custom":
+                check_pt = pt.copy()
+                if calc:
+                    theory_res = calc.evaluate(
+                        pt.get("dx0", 0),
+                        pt.get("ego_speed", 0),
+                        pt.get("npc_speed", 0),
+                    )
+                    check_pt.update(theory_res)
+                check_pt["c_collision"] = 0
+                check_pt["min_ttc"] = 99.9
+                check_pt["min_distance"] = 99.9
+                check_pt["min_ttb"] = 99.9
+                try:
+                    temp_df = pd.DataFrame([check_pt])
+                    if point_extractors.filter_by_region_and_bounds(
+                        temp_df, region=self.dkw_region
+                    ).empty:
+                        continue
+                except Exception as e:
+                    print(f"[Strategist] ⚠️ 二項ランダムサンプリング中にエラー発生 (破棄します): {e}")
+                    continue
+
+            pt["reason"] = reason
+            self.task_cache.append(pt)
 
     def get_best_target(self, df):
         if df is None or len(df) == 0: return None
@@ -320,12 +715,40 @@ class ActiveLearningStrategist:
                 exact_point = self.FOCUS_POINTS[point_idx]
                 result = {name: exact_point.get(name, sum(self.config.PARAM_RANGES[name])/2.0) for name in self.param_names}
                 
-                mode_label = "CONSISTENCY" if self.run_mode == "verify_consistency" else "FOCUS"
-                result["reason"] = f"[{mode_label}] Exact Point {point_idx+1}/{len(self.FOCUS_POINTS)} (Repeat {repeat_idx}/{exact_repeats})"
+                if self.run_mode == "verify_consistency":
+                    mode_label = "CONSISTENCY"
+                elif self.run_mode == "boundary_gap":
+                    mode_label = "BOUNDARY_GAP"
+                else:
+                    mode_label = "FOCUS"
+                if self.run_mode == "boundary_gap":
+                    result["reason"] = (
+                        f"[{mode_label}] Cycle {self.boundary_gap_cycle} "
+                        f"Point {point_idx+1}/{len(self.FOCUS_POINTS)} "
+                        f"(Repeat {repeat_idx}/{exact_repeats})"
+                    )
+                else:
+                    result["reason"] = f"[{mode_label}] Exact Point {point_idx+1}/{len(self.FOCUS_POINTS)} (Repeat {repeat_idx}/{exact_repeats})"
                 
                 self.focus_exact_test_count += 1
                 self.dispatched_task_count += 1
                 return result
+            elif self.run_mode == "boundary_gap":
+                refresh = self._refresh_boundary_gap_targets()
+                summary = refresh["summary"]
+                if refresh["continue"]:
+                    return self.decide_next_target()
+
+                remaining = sum(
+                    1 for row in summary.get("target_cells", [])
+                    if row.get("status") == "needs_more_data"
+                )
+                msg = (
+                    f"boundary_gap 検証完了: 残り要追加セル {summary['candidate_cells']} "
+                    f"(最後のターゲットで未解消 {remaining})"
+                )
+                self._print_final_report(current_idx, "Boundary Gap", msg)
+                return {"system_command": "stop", "reason": msg}
             elif self.run_mode == "verify_consistency":
                 # --- 全反復テスト完了時の自動分類とDKW評価 ---
                 print("\n[Strategist] 📊 全反復テスト完了。TTCの安定性を評価し、分類ごとのDKW証明を行います...")
@@ -434,6 +857,68 @@ class ActiveLearningStrategist:
             point_extractors.save_dataframe_to_csv(df_filtered, out_csv, f"[Strategist] 💾 DKWサンプルを保存: {out_csv}")
             self._print_final_report(self.dispatched_task_count, "DKW Fixed", msg)
             return {"system_command": "stop", "reason": msg}
+
+        if self.run_mode == "binomial_ci":
+            reason_pattern = r"BINOMIAL_CI:"
+            summary = self.estimator.evaluate_and_summarize_binomial_ci(
+                target_column=self.binomial_target,
+                confidence_level=self.binomial_confidence,
+                method=self.binomial_method,
+                bounds=self.dkw_bounds,
+                region=self.dkw_region,
+                df=df_dataset,
+                reason_pattern=reason_pattern,
+            )
+
+            if summary["status"] == "success":
+                n = summary["sample_size"]
+                k = summary["success_count"]
+                width = summary["interval_width"]
+                self._log_binomial_history({
+                    "task_count": current_idx,
+                    "metric": self.binomial_target,
+                    "method": self.binomial_method,
+                    "confidence_level": self.binomial_confidence,
+                    "sample_size": n,
+                    "success_count": k,
+                    "estimate": summary["estimate"],
+                    "lower_bound": summary["lower_bound"],
+                    "upper_bound": summary["upper_bound"],
+                    "interval_width": width,
+                    "target_width": self.binomial_target_width,
+                })
+                print(
+                    f"[Strategist] 📊 Binomial CI 評価中: n={n}, k={k}, "
+                    f"p̂={summary['estimate']:.5f} | "
+                    f"{self.binomial_confidence:.1%} CI=[{summary['lower_bound']:.5f}, {summary['upper_bound']:.5f}] "
+                    f"(幅 {width:.5f}, 目標 <= {self.binomial_target_width:.5f})"
+                )
+
+                if n >= self.binomial_min_samples and width <= self.binomial_target_width:
+                    out_csv = os.path.expanduser(f"~/simulation_traces/{self.scenario_name}_binomial_ci_samples.csv")
+                    point_extractors.save_dataframe_to_csv(
+                        summary["filtered_df"],
+                        out_csv,
+                        f"[Strategist] 💾 Binomial CI サンプルを保存: {out_csv}"
+                    )
+                    msg = (
+                        f"Binomial CI 完了: {self.binomial_target} の推定値 {summary['estimate']:.5f}, "
+                        f"{self.binomial_confidence:.1%} CI=[{summary['lower_bound']:.5f}, {summary['upper_bound']:.5f}]"
+                    )
+                    self._print_final_report(self.dispatched_task_count, "Binomial CI", msg)
+                    return {"system_command": "stop", "reason": msg}
+
+                if self.max_samples is not None and n >= self.max_samples:
+                    msg = (
+                        f"Binomial CI は max_samples={self.max_samples} に到達。"
+                        f" 現在の {self.binomial_confidence:.1%} CI=[{summary['lower_bound']:.5f}, {summary['upper_bound']:.5f}]"
+                    )
+                    self._print_final_report(self.dispatched_task_count, "Binomial CI", msg)
+                    return {"system_command": "stop", "reason": msg}
+
+            self._build_binomial_random_task(df_dataset)
+            self.dispatched_task_count += 1
+            return self.task_cache.pop(0)
 
         # --- [追加] 単独モード: Sequential-DKW (SMC) による指定データの統計的検証 ---
         if self.run_mode == "dkw":
@@ -713,7 +1198,7 @@ class ActiveLearningStrategist:
                 best_indices = np.random.choice(top_candidates, size=min(len(top_candidates), self.CACHE_SIZE), replace=False).tolist()
                 reason = "STEP2: Boundary 0.5"
         
-        if current_idx >= self.MAX_SAMPLES:
+        if self.run_mode not in ["boundary_gap", "binomial_ci"] and current_idx >= self.MAX_SAMPLES:
             return {"system_command": "stop", "reason": "Max Samples Reached"}
 
         # 選ばれた上位の候補をキャッシュに保存

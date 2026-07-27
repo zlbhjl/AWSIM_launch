@@ -17,13 +17,18 @@ AI (ガウス過程回帰モデル) を用いた **アクティブラーニン�
 - **過去データからの自動復元と再開 (`--resume_from`)**: 退避させた過去のデータセットを現在の作業ディレクトリに復元し、シームレスに検証を再開・追記できます。
 - **エッジケース自動抽出・集中検証 (`jama_edge`, `ttc_edge`)**: 過去のデータから「人間なら安全な領域での事故」や「ギリギリのニアミス」などの弱点をAIが自動抽出し、偶然か真の危険かを反復検証します。
 - **最悪TTC探索 (`worst_ttc`)**: 今までの検証データから衝突しなかった「安全領域」を特定し、その中で最もTTCが小さかった（最悪の）ケースの下位N件を自動抽出し集中検証します。
+- **境界ギャップ探索 (`boundary_gap`)**: 過去データを粗く区切って、危険寄りなのにサンプル数が薄いセルを自動抽出し、境界線づくりに足りない領域を重点検証します。各バッチ検証後に「まだ薄いセルが残っているか」を自動集計し、候補が残る限り次のターゲットを再抽出して繰り返します。`MAX_SAMPLES` では止まらず、ターゲットごとの進捗CSVも保存します。
+- **二項信頼区間モード (`binomial_ci`)**: `c_collision` のような 0/1 指標に対して、純粋な一様ランダムサンプルだけを収集し、Wilson または Clopper-Pearson による95%信頼区間を逐次評価します。信頼区間幅が目標以下になったら自動停止します。
 - **SMC (DKW) 検証モード (`--mode dkw`)**: Sequential-DKW不等式を用いて、システムの安全性を逐次的に数学的に証明します。ステージごとに収束をチェックし、信頼区間が目標精度に達したら早期終了します。
 - **固定サンプリング+一括DKW評価モード (`--mode dkw_fixed`)**: 指定回数（`--max_samples`）の一様乱数サンプリングを必ず実行し、全データ収集後に1回だけDKW評価を行います。`--dkw_pure_smc` で過去データを除外した純粋評価と、全データを使った評価を選択可能です。
 - **Config-Driven アーキテクチャ**: シナリオ (Uターン、割り込み等) のパラメータやAIの探索範囲、タイムアウト時間を単一の設定ファイルで柔軟に定義可能 (`configs/`)。
 - **フォーカス (集中) モード**: 特定のパラメータの周辺に絞ってテストを反復するピンポイント検証機能。
 - **リアルタイム進捗監視**: 司令塔の画面で、各ワーカーが「待機中」「実行中」「タイムアウト」など、何をしているかをリアルタイムで1行にまとめて表示します。
 - **JAMA物理モデルに基づく理論値算出**: シミュレーションの入力パラメータから、物理限界（空走時間・ブレーキ性能）に基づく理論上の停止距離と安全マージン（Zone）を同時算出・記録し、AIの学習特徴量として活用 (`theoretical_calculator.py`)。
-- **外部検証器アダプタ**: AWSIM_launch の外側にある検証器を、対象システムと切り離したまま起動できる汎用入口を追加。第一段階として `BBSL-test` の FT4D 実験を AWSIM_launch 側から呼び出せます (`run_external_verifier.py`, `external_verifiers/`)。
+- **外部検証器アダプタ**: AWSIM_launch の外側にある検証器を、対象システムと切り離したまま起動できる汎用入口を追加。第一段階として `BBSL-test` の実験を AWSIM_launch 側から起動できます (`run_external_verifier.py`, `external_verifiers/`)。
+- **内部 FT4D コア**: FT4D を `verification_core/ft4d` として AWSIM_launch 内へ保持し、`estimator.py` から実行できます。BBSL 側は raw result を出力し、FT4D の計算本体と信頼度再構成は AWSIM_launch 側へ寄せています。
+- **BBSL raw result 連携**: `BBSL-test/examples/run_full_experiment_all.py` / `run_full_experiment.py` は `--ft4d-backend none` で raw result のみを保存でき、AWSIM_launch 側が `U / D(n) / E(n)`、`recognition_test`、信頼度伝播を再構成します。
+- **FT4D ベースの司令塔補助**: `strategist.py` は FT4D 結果を読み、信頼度不足ノードの列挙だけでなく、`node_id` 単位の集約、不足理由分類、推奨アクション生成まで行えます。
 
 ## ファイル・ディレクトリ構成
 
@@ -33,9 +38,11 @@ AWSIM_launch/
 ├── master_orchestrator.py    # 【司令塔】システム全体の起動、クラスター構築、AIタスクのキュー管理/停止判断。
 ├── run_manager.py            # 【ワーカー】各ノードのメインプロセス。司令塔からのタスク受信、process_controller.py を介したシミュレーション実行を管理。
 ├── run_external_verifier.py  # 【外部検証器入口】AWSIM_launch から外部検証器を起動する汎用CLI。
+├── run_ft4d_smoke.py         # 【内部FT4D疎通確認】AWSIM_launch 内部の FT4D コアを単独実行するCLI。
+├── run_bbsl_local_ft4d.py    # BBSL raw result を AWSIM_launch 側 FT4D で再計算するCLI。
 ├── run_scenario.py           # 単一のシミュレーションを実行するスクリプト。動的パラメータを受け取りシナリオを構築。
-├── strategist.py             # AIの探索戦略を司る頭脳。現在のフェーズを判断し、次に検証すべきパラメータを決定。
-├── estimator.py              # 【内部モジュール】ガウス過程回帰やDKW不等式など、統計的な評価・計算を行う数学エンジン。
+├── strategist.py             # AIの探索戦略を司る頭脳。現在のフェーズを判断し、次に検証すべきパラメータを決定。FT4D の confidence gap 集約も担当。
+├── estimator.py              # 【内部モジュール】ガウス過程回帰やDKW不等式など、統計的な評価・計算を行う数学エンジン。BBSL raw result からの FT4D 実行APIも保持。
 ├── awchecker.py              # シミュレーション結果(JSON)を解析し、安全性を判定。判定結果を共有金庫へ送信。
 ├── param_logger.py           # テスト実行時のパラメータを一時的に共有金庫のバッファへ送信。
 ├── theoretical_calculator.py # JAMA物理モデルに基づく理論的安全領域(Zone)とマージンを計算するモジュール。
@@ -44,6 +51,11 @@ AWSIM_launch/
 ├── analyze_ttc_consistency.py # 【CLIツール】反復テストデータからTTCのばらつきを分析し、確実/偶然リスクに分類してDKW評価を出力するスクリプト。
 ├── fix_dataset_labels.py     # 過去のデータセットを最新の抽出ロジックで全号機から並列再解析し、安全に修復(更新)するスクリプト。
 ├── dataset_repo.py           # データセットCSVの読み書き、--resume_from による過去データ復元
+├── verification_core/
+│   └── ft4d/                 # AWSIM_launch 内に保持する共通 FT4D コア
+├── adapters/
+│   ├── awsim/                # AWSIM 用の U/D/E 構築アダプタ骨格
+│   └── bbsl/                 # BBSL raw result を AWSIM_launch 側 FT4D 入力へ変換するアダプタ
 ├── external_verifiers/
 │   ├── base.py               # 検証器/検証対象を分離する共通インターフェース
 │   ├── registry.py           # 検証器アダプタの登録
@@ -62,6 +74,9 @@ AWSIM_launch/
 ├── visualize_min_ttc_3d.py   # Maudeの論理フラグではなく、AW_Kinematics_Extractorが計算した連続値のmin_ttcを基準に危険度を色分けして3D可視化するスクリプト。
 ├── visualize_jama_zones.py   # JAMA物理モデルに基づく理論的な安全領域(Zone)の分布をグラフ化して可視化・分析するスクリプト。
 ├── visualize_risk_matrix.py  # 衝突、最小TTC、最小接近距離を組み合わせて、安全性を4段階のリスクレベルで総合的に評価・可視化するスクリプト。
+├── visualize_collision_regions.py  # 衝突セル/非衝突セルを3Dボクセルで表示し、AI学習領域とJAMA面を比較するスクリプト。
+├── visualize_collision_surfaces.py # 実データの衝突外縁とAI学習境界を滑らかな曲面として可視化するスクリプト。
+├── analyze_boundary_gap.py         # boundary_gap 用に、境界セルのサンプル不足状況と優先候補を集計するスクリプト。
 ```
 
 ## 前提環境 (Dependencies)
@@ -123,6 +138,19 @@ python3 master_orchestrator.py --type uturn --mode ttc_edge
 # 【最悪TTC探索モード】これまでの検証データから衝突しなかった安全領域内の「TTC最悪ケース（下位10件）」を抽出し、本当に安全か周辺を集中検証する場合
 python3 master_orchestrator.py --type uturn --mode worst_ttc
 
+# 【境界ギャップ探索モード】過去データを読み、危険寄りだがサンプル数が薄い領域を自動抽出し、
+# 検証後に境界セルを再判定しながら、候補がなくなるまで自動反復する場合
+python3 master_orchestrator.py --type uturn --mode boundary_gap
+
+# いまのデータセットで、boundary_gap の未解消セルを単独集計する場合
+python3 analyze_boundary_gap.py ~/simulation_traces
+
+# 【二項信頼区間モード】純粋ランダム標本だけで c_collision の95%信頼区間を Wilson で直接評価する場合
+python3 master_orchestrator.py --type uturn --mode binomial_ci --binomial_target c_collision --binomial_method wilson --binomial_confidence 0.95 --binomial_target_width 0.02
+
+# Clopper-Pearson でより保守的に評価する場合
+python3 master_orchestrator.py --type uturn --mode binomial_ci --binomial_target c_collision --binomial_method clopper-pearson --binomial_confidence 0.95 --binomial_target_width 0.02
+
 # 【DKW証明モード】統計的モデル検査(SMC)で安全性を証明する
 # 1. 手動で指定した領域の安全性を証明する場合
 python3 master_orchestrator.py --type uturn --mode dkw --dkw_bounds '{"dx0": [20.0, 25.0], "ego_speed": [30.0, 35.0]}'
@@ -165,7 +193,7 @@ python3 master_orchestrator.py --type uturn --mode ttc_edge --resume_from ~/simu
 ```
 
 ### 2. 外部検証器を AWSIM_launch から起動する
-この入口は、検証器と検証対象を切り離したまま扱うための最初の土台です。
+この入口は、検証器と検証対象を切り離したまま扱うための土台です。
 現時点では AWSIM のシミュレーション結果そのものを BBSL-test に流し込む統合までは行わず、
 まずは AWSIM_launch 側のフレームワークから外部検証器を起動できることを示します。
 
@@ -192,15 +220,103 @@ python3 run_external_verifier.py \
 ```
 
 このコマンドは AWSIM_launch 内に正規化済みの結果 JSON を保存しつつ、
-実際の検証本体は `BBSL-test/examples/run_full_experiment_all.py` をそのまま呼び出します。
-つまり現段階では、
+実際の検証本体は `BBSL-test/examples/run_full_experiment_all.py` を呼び出します。
+つまりこの経路は、
 
 - AWSIM_launch = 検証器を起動・管理するフレーム
-- BBSL-test = 実際の FT4D / BBSL 検証器
+- BBSL-test = 実験エンジン
 
 という役割分担です。
 
-### 3. チェッカープロセスの起動 (別ターミナル)
+### 3. BBSL の出力を AWSIM_launch 側で読み直し、ローカル FT4D コアで再計算する
+こちらが現在の推奨経路です。外部の `BBSL-test` でノイズ生成・推論・BBSL判定を行い、
+その raw result JSON を AWSIM_launch 側の `adapters/bbsl/` で読み直して
+`verification_core/ft4d` で計算し直します。
+
+```bash
+# 軽い確認
+python3 run_bbsl_local_ft4d.py \
+  --target-repo /home/passd/BBSL-test \
+  --mini \
+  --max-images 3 \
+  --tree basic \
+  --sigma-pf-source dataset \
+  --sigma-pb-mode delta-clean \
+  --and-rule min
+
+# 既存の BBSL raw result を再利用して FT4D だけ AWSIM_launch 側で回す
+python3 run_bbsl_local_ft4d.py \
+  --target-repo /home/passd/BBSL-test \
+  --mini \
+  --tree basic \
+  --sigma-pf-source dataset \
+  --sigma-pb-mode delta-clean \
+  --and-rule min \
+  --reuse-existing-output
+```
+
+この経路では、BBSL 側は raw result を保存するだけで、
+`U / D(n) / E(n)` の構築、Bonferroni に基づく `recognition_test` の再計算、FT4D の計算本体、confidence gap の集約は AWSIM_launch 側で実行します。
+
+役割分担は次のとおりです。
+
+- `BBSL-test` = 実験エンジン
+  - ノイズ生成
+  - 推論
+  - 正解比較
+  - raw result 保存
+- `AWSIM_launch` = 検証コア
+  - FT4D
+  - `recognition_test` 再構成
+  - confidence gap 集約
+  - 将来の探索判断
+
+#### BBSL 側で raw result だけを作るコマンド
+AWSIM_launch へ渡す前段として、BBSL 側単独でも次のように raw result を作れます。
+
+```bash
+# 同一画像で全条件比較する経路
+python3 /home/passd/BBSL-test/examples/run_full_experiment_all.py \
+  --mini \
+  --max-images 3 \
+  --tree basic \
+  --sigma-pf-source dataset \
+  --sigma-pb-mode delta-clean \
+  --and-rule min \
+  --ft4d-backend none
+
+# 条件ごとに画像を分割する従来経路
+python3 /home/passd/BBSL-test/examples/run_full_experiment.py \
+  --mini \
+  --max-images 6 \
+  --tree basic \
+  --sigma-pf-source dataset \
+  --sigma-pb-mode raw \
+  --and-rule min \
+  --ft4d-backend none
+```
+
+生成される主なファイルは次です。
+
+- `output/experiment_all_raw_result.json`
+- `output/experiment_all_raw_result_mini.json`
+- `output/experiment_full_raw_result.json`
+- `output/experiment_full_raw_result_mini.json`
+
+`run_bbsl_local_ft4d.py` は既定でこれらの raw result を優先して読みます。
+
+### 4. AWSIM_launch 内部の FT4D コアを単独で確認する
+このコマンドは、まず AWSIM_launch 内だけで FT4D コアが成立しているかを確認するためのものです。
+
+```bash
+python3 run_ft4d_smoke.py
+```
+
+これは AWSIM 風の小さなダミーデータフレームから `U / D(n) / E(n)` を作り、
+`verification_core/ft4d/config/awsim_demo_tree.json` を用いて FT4D を計算します。
+現在はこの内部コアが `estimator.py` に統合されており、`strategist.py` はその結果を集約・分類できます。
+
+### 5. チェッカープロセスの起動 (別ターミナル)
 生成されたシミュレーションデータ (JSON)を手動で安全性を判定するために、ターミナルでチェッカーを使ってくださいしてください。
 
 ```bash
@@ -281,6 +397,12 @@ python3 visualize_min_ttc_3d.py ~/simulation_traces
 
 # リスク評価マトリックスの3D可視化
 python3 visualize_risk_matrix.py ~/simulation_traces
+
+# 衝突セル/非衝突セルをボクセル領域として可視化
+python3 visualize_collision_regions.py ~/simulation_traces
+
+# 実データの衝突外縁とAI学習境界を滑らかな面として可視化
+python3 visualize_collision_surfaces.py ~/simulation_traces
 ```
 
 # 対象のフォルダ（ディレクトリ）を指定する場合

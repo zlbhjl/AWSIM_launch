@@ -145,12 +145,32 @@ JAMA_PROFILES = {
 TTC_EDGE_THRESHOLD = 1.5
 
 # ==========================================
+# 7.5. 境界ギャップ探索モードの設定
+# ==========================================
+# 空間を粗くビニングし、「危険寄りだがサンプル数が薄い」セル中心を抽出する。
+BOUNDARY_GAP_GRID_SIZE = 8
+BOUNDARY_GAP_MAX_CASES = 12
+BOUNDARY_GAP_MIN_SAMPLES = 2
+BOUNDARY_GAP_MAX_SAMPLES = 12
+BOUNDARY_GAP_COLLISION_RATIO_RANGE = (0.15, 0.85)
+BOUNDARY_GAP_TTC_THRESHOLD = 1.1
+
+# ==========================================
 # 8. SMC (DKW) 証明モードの設定
 # ==========================================
 # 評価対象とする指標 (複数指標の最悪値を正規化した総合リスク指標 Z_margin を使用)
 DKW_TARGET_METRIC = "z_margin"
 # 同時保証モード(--dkw_simultaneous)で評価する複数指標リスト
 DKW_TARGET_METRICS = ["min_ttc", "min_distance"]
+
+# ==========================================
+# 8.5. Binomial CI モードの設定
+# ==========================================
+BINOMIAL_CI_TARGET = "c_collision"
+BINOMIAL_CI_METHOD = "wilson"
+BINOMIAL_CI_CONFIDENCE = 0.95
+BINOMIAL_CI_TARGET_WIDTH = 0.02
+BINOMIAL_CI_MIN_SAMPLES = 100
 
 # ==========================================
 # 9. 異常データの無効化条件

@@ -21,7 +21,7 @@ from typing import List, Tuple, Optional
 def load_config():
     parser = argparse.ArgumentParser(description="Multi-Scenario Autonomous Driving Test Manager")
     parser.add_argument("--type", type=str, default="uturn", help="Scenario type (e.g., uturn, cutin)")
-    parser.add_argument("--mode", type=str, choices=["explore", "focus", "margin", "jama_edge", "ttc_edge", "worst_ttc", "dkw", "dkw_fixed", "verify_consistency"], default="explore", help="Search mode: explore (default), focus, margin, jama_edge, ttc_edge, worst_ttc, dkw, dkw_fixed, or verify_consistency")
+    parser.add_argument("--mode", type=str, choices=["explore", "focus", "margin", "jama_edge", "ttc_edge", "worst_ttc", "dkw", "dkw_fixed", "verify_consistency", "binomial_ci", "boundary_gap"], default="explore", help="Search mode: explore (default), focus, margin, jama_edge, ttc_edge, worst_ttc, dkw, dkw_fixed, verify_consistency, binomial_ci, or boundary_gap")
     parser.add_argument("--focus_points", type=str, default=None, help="JSON string for focus points (e.g., '[{\"dx0\": 15.0}]')")
     parser.add_argument("--headless", action="store_true", help="Run with Xvfb (No GUI)")
     parser.add_argument("--ext_mode", type=str, default="cvm", help="Kinematics Extractor Mode for Checker (cvm/ctrv/maude)")

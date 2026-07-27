@@ -88,6 +88,8 @@ class BBSLFT4DVerifier(ExternalVerifier):
 
         return {
             "status": "ok",
+            "integration_mode": "external-launch-only",
+            "recommended_path": "run_bbsl_local_ft4d.py",
             "tree_mode": data.get("tree_mode"),
             "active_conditions": data.get("active_conditions"),
             "sigma_pf_source": data.get("sigma_pf_source"),

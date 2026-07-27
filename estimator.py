@@ -2,12 +2,13 @@
 # -*- coding: utf-8 -*-
 
 import os
+from types import SimpleNamespace
 import pandas as pd
 import numpy as np
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import RBF, ConstantKernel as C
 from sklearn.preprocessing import StandardScaler
-from scipy.stats import gaussian_kde
+from scipy.stats import gaussian_kde, beta, norm
 import point_extractors
 
 class SafetyEstimator:
@@ -35,7 +36,8 @@ class SafetyEstimator:
         
         self.is_trained = False
         # [汎用化] 入力パラメータ名を Config のキーから自動取得
-        self.feature_names = list(self.config.PARAM_RANGES.keys())
+        param_ranges = getattr(self.config, "PARAM_RANGES", {}) if self.config is not None else {}
+        self.feature_names = list(param_ranges.keys())
 
     def load_dataset(self):
         """
@@ -347,3 +349,379 @@ class SafetyEstimator:
                 "sample_size": bounds_result["sample_size"], "filtered_df": bounds_result["filtered_df"]
             }
         return results
+
+    def calculate_binomial_confidence_interval(
+        self,
+        target_column,
+        confidence_level=0.95,
+        method="wilson",
+        bounds=None,
+        region="custom",
+        df=None,
+        reason_pattern=None,
+    ):
+        if df is None:
+            df = self.load_dataset()
+
+        if df is None or df.empty or target_column not in df.columns:
+            print(f"[Estimator] ⚠️ データセットがない、または指標 '{target_column}' が見つかりません。")
+            return None
+
+        working_df = df.copy()
+        if reason_pattern and "reason" in working_df.columns:
+            reason_series = working_df["reason"].fillna("").astype(str)
+            working_df = working_df[reason_series.str.contains(reason_pattern, na=False)]
+
+        try:
+            working_df = point_extractors.filter_by_region_and_bounds(
+                working_df, region=region, bounds=bounds
+            )
+        except Exception as e:
+            print(f"[Estimator] ⚠️ {e}")
+            return None
+
+        if working_df is None or working_df.empty:
+            print("[Estimator] ⚠️ 指定条件に一致するデータがありません。")
+            return None
+
+        if "c_collision" in working_df.columns:
+            working_df = working_df[~working_df["c_collision"].isin([-1, "-1", -1.0])]
+
+        target = pd.to_numeric(working_df[target_column], errors="coerce")
+        valid_mask = target.isin([0, 1])
+        valid_df = working_df[valid_mask].copy()
+        if valid_df.empty:
+            print(f"[Estimator] ⚠️ 指標 '{target_column}' の有効な 0/1 データがありません。")
+            return None
+
+        target_valid = pd.to_numeric(valid_df[target_column], errors="coerce")
+        n = int(len(target_valid))
+        k = int((target_valid == 1).sum())
+        p_hat = k / n
+        alpha = 1.0 - confidence_level
+
+        if method == "wilson":
+            z = norm.ppf(1.0 - alpha / 2.0)
+            denom = 1.0 + (z ** 2) / n
+            center = (p_hat + (z ** 2) / (2.0 * n)) / denom
+            half_width = (
+                z
+                * np.sqrt((p_hat * (1.0 - p_hat) / n) + (z ** 2) / (4.0 * (n ** 2)))
+                / denom
+            )
+            lower = max(0.0, center - half_width)
+            upper = min(1.0, center + half_width)
+        elif method == "clopper-pearson":
+            lower = 0.0 if k == 0 else float(beta.ppf(alpha / 2.0, k, n - k + 1))
+            upper = 1.0 if k == n else float(beta.ppf(1.0 - alpha / 2.0, k + 1, n - k))
+        else:
+            raise ValueError(f"Unsupported binomial CI method: {method}")
+
+        return {
+            "target_column": target_column,
+            "method": method,
+            "confidence_level": confidence_level,
+            "sample_size": n,
+            "success_count": k,
+            "estimate": p_hat,
+            "lower_bound": lower,
+            "upper_bound": upper,
+            "interval_width": upper - lower,
+            "filtered_df": valid_df,
+        }
+
+    def evaluate_and_summarize_binomial_ci(
+        self,
+        target_column,
+        confidence_level=0.95,
+        method="wilson",
+        bounds=None,
+        region="custom",
+        df=None,
+        reason_pattern=None,
+    ):
+        result = self.calculate_binomial_confidence_interval(
+            target_column=target_column,
+            confidence_level=confidence_level,
+            method=method,
+            bounds=bounds,
+            region=region,
+            df=df,
+            reason_pattern=reason_pattern,
+        )
+        if not result:
+            return {"status": "error", "message": "二項信頼区間を計算できませんでした。"}
+
+        return {
+            "status": "success",
+            "target_column": target_column,
+            "method": method,
+            "confidence_level": confidence_level,
+            "sample_size": result["sample_size"],
+            "success_count": result["success_count"],
+            "estimate": result["estimate"],
+            "lower_bound": result["lower_bound"],
+            "upper_bound": result["upper_bound"],
+            "interval_width": result["interval_width"],
+            "filtered_df": result["filtered_df"],
+        }
+
+    def _ft4d_config_dir(self):
+        return os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "verification_core",
+            "ft4d",
+            "config",
+        )
+
+    def _ft4d_tree_path(self, tree_mode):
+        if tree_mode not in {"basic", "combined"}:
+            raise ValueError(
+                "tree_mode must be 'basic' or 'combined', "
+                f"got {tree_mode!r}"
+            )
+        filename = "tree_basic.json" if tree_mode == "basic" else "tree_bbsl.json"
+        return os.path.join(self._ft4d_config_dir(), filename)
+
+    def _ft4d_event_mapping(self, tree_mode):
+        basic_mapping = {
+            "SALT_PEPPER": "salt_pepper",
+            "OCCLUSION": "occlusion",
+            "BLUR": "blur",
+        }
+        combined_mapping = {
+            "SALT_PEPPER": "salt_pepper",
+            "OCCLUSION": "occlusion",
+            "BLUR": "blur",
+            "SP_OCC": "sp_occ",
+            "SP_BLUR": "sp_blur",
+            "OCC_BLUR": "occ_blur",
+            "ALL_THREE": "all_three",
+        }
+        return basic_mapping if tree_mode == "basic" else combined_mapping
+
+    def _calculate_ft4d_tree(self, built, *, tree_mode, sigma_pf_source, and_rule):
+        from verification_core.ft4d import FT4DCalculator, FT4DVisualizer, FaultTree
+        from verification_core.ft4d.statistics import (
+            RecognitionTestResult,
+            bonferroni_child_delta,
+            evaluate_recognition_test,
+        )
+
+        tree = FaultTree.from_json(self._ft4d_tree_path(tree_mode))
+        calc = FT4DCalculator(
+            tree,
+            sigma_pf_source=sigma_pf_source,
+            and_rule=and_rule,
+        )
+        calc.set_universal_dataset(built["universal_dataset"])
+
+        sigma_pf_assumptions = built["sigma_pf_assumptions"]
+        statistical_test_config = built.get("statistical_test_config", {})
+        recognition_tests_by_tree = built.get("recognition_tests_by_tree", {})
+        mapping = self._ft4d_event_mapping(tree_mode)
+        root_delta = statistical_test_config.get(
+            "root_delta",
+            statistical_test_config.get("delta"),
+        )
+        epsilon = statistical_test_config.get("epsilon")
+        expected_recognition_rate = statistical_test_config.get(
+            "expected_recognition_rate"
+        )
+        computed_child_delta = None
+        if root_delta is not None:
+            computed_child_delta = bonferroni_child_delta(
+                root_delta,
+                len(mapping),
+            )
+        recognition_test_payloads = {}
+        for event_id, condition_name in mapping.items():
+            if condition_name not in built["events"]:
+                raise KeyError(
+                    f"Condition {condition_name!r} is required for tree_mode "
+                    f"{tree_mode!r} but not present in the BBSL output."
+                )
+
+            metrics = built["events"][condition_name]
+            calc.set_basic_event(
+                event_id,
+                sigma_pf=sigma_pf_assumptions[event_id],
+                sigma_pb=metrics["sigma_pb"],
+            )
+            calc.set_basic_event_datasets(
+                event_id,
+                metrics["dataset_d"],
+                metrics["dataset_e"],
+            )
+            recognition_test = None
+            if (
+                metrics["total_count"] > 0
+                and epsilon is not None
+                and expected_recognition_rate is not None
+                and computed_child_delta is not None
+            ):
+                recognition_test = evaluate_recognition_test(
+                    correct_count=metrics["correct_count"],
+                    expected_recognition_rate=expected_recognition_rate,
+                    epsilon=epsilon,
+                    delta=computed_child_delta,
+                    n=metrics["total_count"],
+                )
+            raw_recognition_test = (
+                recognition_tests_by_tree.get(tree_mode, {}).get(condition_name)
+                or metrics.get("recognition_test")
+            )
+            if recognition_test is None and raw_recognition_test is not None:
+                recognition_test = RecognitionTestResult(**raw_recognition_test)
+            if recognition_test is not None:
+                recognition_test_payloads[condition_name] = {
+                    "n": recognition_test.n,
+                    "required_sample_size": recognition_test.required_sample_size,
+                    "has_required_sample_size": recognition_test.has_required_sample_size,
+                    "correct_count": recognition_test.correct_count,
+                    "required_correct_count": recognition_test.required_correct_count,
+                    "meets_correct_count": recognition_test.meets_correct_count,
+                    "sample_recognition_rate": recognition_test.sample_recognition_rate,
+                    "required_sample_rate": recognition_test.required_sample_rate,
+                    "expected_recognition_rate": recognition_test.expected_recognition_rate,
+                    "epsilon": recognition_test.epsilon,
+                    "delta": recognition_test.delta,
+                    "confidence": recognition_test.confidence,
+                    "passed": recognition_test.passed,
+                }
+                calc.set_basic_event_test(
+                    event_id,
+                    recognition_test,
+                )
+
+        report = calc.calculate()
+        visualizer = FT4DVisualizer(tree)
+        return {
+            "tree_mode": tree_mode,
+            "event_inputs": {
+                event_id: {
+                    "condition_name": condition_name,
+                    "dataset_d": sorted(
+                        built["events"][condition_name]["dataset_d"]
+                    ),
+                    "dataset_e": sorted(
+                        built["events"][condition_name]["dataset_e"]
+                    ),
+                    "total_count": built["events"][condition_name]["total_count"],
+                    "correct_count": built["events"][condition_name]["correct_count"],
+                    "error_count": built["events"][condition_name]["error_count"],
+                    "sigma_pb": built["events"][condition_name]["sigma_pb"],
+                    "recognition_test": recognition_test_payloads.get(condition_name),
+                }
+                for event_id, condition_name in mapping.items()
+            },
+            "local_ft4d_report": report,
+            "rendered_tree": visualizer.render_tree(),
+            "top_sigma_pe": report["tree"]["sigma_pe"],
+        }
+
+    def evaluate_ft4d_from_bbsl_output(
+        self,
+        output_json_path,
+        *,
+        tree_mode="basic",
+        sigma_pf_source=None,
+        and_rule=None,
+    ):
+        from adapters.bbsl import BBSLExperimentAdapter, BBSLEventSetBuilder
+
+        adapter = BBSLExperimentAdapter()
+        output = adapter.load_output(output_json_path)
+        builder = BBSLEventSetBuilder(adapter)
+        built = builder.build_event_inputs(output)
+
+        effective_sigma_pf_source = sigma_pf_source or built["sigma_pf_source"]
+        effective_and_rule = and_rule or built["and_rule"]
+
+        result = {
+            "source_output_json": output_json_path,
+            "tree_mode": tree_mode,
+            "active_conditions": built["active_conditions"],
+            "sigma_pf_source": effective_sigma_pf_source,
+            "sigma_pb_mode": built["sigma_pb_mode"],
+            "and_rule": effective_and_rule,
+        }
+
+        if tree_mode == "all":
+            basic = self._calculate_ft4d_tree(
+                built,
+                tree_mode="basic",
+                sigma_pf_source=effective_sigma_pf_source,
+                and_rule=effective_and_rule,
+            )
+            combined = self._calculate_ft4d_tree(
+                built,
+                tree_mode="combined",
+                sigma_pf_source=effective_sigma_pf_source,
+                and_rule=effective_and_rule,
+            )
+            result["local_runs"] = {
+                "basic": basic,
+                "combined": combined,
+            }
+            result["top_sigma_pe"] = {
+                "basic": basic["top_sigma_pe"],
+                "combined": combined["top_sigma_pe"],
+            }
+        else:
+            result.update(
+                self._calculate_ft4d_tree(
+                    built,
+                    tree_mode=tree_mode,
+                    sigma_pf_source=effective_sigma_pf_source,
+                    and_rule=effective_and_rule,
+                )
+            )
+
+        return result
+
+    def run_bbsl_and_evaluate_ft4d(
+        self,
+        *,
+        target_repo,
+        mini=False,
+        max_images=None,
+        tree="basic",
+        sigma_pf_source="dataset",
+        sigma_pb_mode="delta-clean",
+        and_rule="min",
+        detect_timeout=None,
+        reuse_existing_output=False,
+    ):
+        from adapters.bbsl import BBSLExperimentAdapter, run_bbsl_experiment
+
+        if reuse_existing_output:
+            output_json_path = BBSLExperimentAdapter().default_output_path(
+                target_repo,
+                mini,
+            )
+        else:
+            output_json_path = run_bbsl_experiment(
+                target_repo,
+                mini=mini,
+                max_images=max_images,
+                tree=tree,
+                sigma_pf_source=sigma_pf_source,
+                sigma_pb_mode=sigma_pb_mode,
+                and_rule=and_rule,
+                detect_timeout=detect_timeout,
+            )
+
+        return self.evaluate_ft4d_from_bbsl_output(
+            output_json_path,
+            tree_mode=tree,
+            sigma_pf_source=sigma_pf_source,
+            and_rule=and_rule,
+        )
+
+
+def create_ft4d_only_estimator():
+    return SafetyEstimator(
+        scenario_name="ft4d_bridge",
+        config=SimpleNamespace(PARAM_RANGES={}),
+    )

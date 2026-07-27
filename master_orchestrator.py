@@ -14,8 +14,8 @@ from redis_cluster.cluster_manager import ClusterManager
 from redis_cluster.shared_store import SharedStoreActor
 from redis_cluster.task_queue import TaskQueueActor
 from redis_cluster import cluster_config
-from core.config_loader import load_config
-from core.dataset_repo import DatasetRepository
+from config_loader import load_config
+from dataset_repo import DatasetRepository
 from local_worker import HostWorkerManager
 from strategist import ActiveLearningStrategist
 
@@ -90,11 +90,20 @@ def main():
         focus_points=cfg.focus_points, run_mode=cfg.run_mode,
         dkw_bounds=cfg.dkw_bounds, dkw_region=cfg.dkw_region,
         dkw_pure_smc=cfg.dkw_pure_smc, dkw_simultaneous=cfg.dkw_simultaneous,
-        max_samples=cfg.max_samples
+        max_samples=cfg.max_samples,
+        binomial_target=cfg.binomial_target,
+        binomial_method=cfg.binomial_method,
+        binomial_confidence=cfg.binomial_confidence,
+        binomial_target_width=cfg.binomial_target_width,
+        binomial_min_samples=cfg.binomial_min_samples,
     )
 
     REPEAT_COUNT = getattr(config_module, 'REPEAT_COUNT', 3000)
-    if cfg.max_samples is not None:
+    if cfg.run_mode == "boundary_gap":
+        REPEAT_COUNT = None
+    elif cfg.run_mode == "binomial_ci":
+        REPEAT_COUNT = cfg.max_samples
+    elif cfg.max_samples is not None:
         REPEAT_COUNT = cfg.max_samples
 
     # 稼働中のマシン(ワーカー)数を動的にカウントし、キューのサイズを自動調整
@@ -112,8 +121,10 @@ def main():
 
     if cfg.run_mode == "dkw_fixed":
         print(f"\n=== マスター司令塔 稼働開始 (固定サンプリングモード: 目標 {REPEAT_COUNT} 回) ===")
-    elif cfg.run_mode in ["dkw", "verify_consistency"]:
+    elif cfg.run_mode in ["dkw", "verify_consistency", "binomial_ci"]:
         print(f"\n=== マスター司令塔 稼働開始 ({cfg.run_mode} モード) ===")
+    elif cfg.run_mode == "boundary_gap":
+        print(f"\n=== マスター司令塔 稼働開始 (boundary_gap: 候補セルがなくなるまで継続) ===")
     else:
         print(f"\n=== マスター司令塔 稼働開始 (目標回数: {REPEAT_COUNT}) ===")
     
@@ -125,14 +136,16 @@ def main():
             # \033[K で行末の古い文字を消去しつつ、1行に綺麗に表示する
             if cfg.run_mode == "dkw_fixed":
                 sys.stdout.write(f"\r\033[K[Orchestrator] 固定サンプリング中 {completed}/{REPEAT_COUNT} | キュー={q_len} || {ws_str}")
-            elif cfg.run_mode in ["dkw", "verify_consistency"]:
+            elif cfg.run_mode in ["dkw", "verify_consistency", "binomial_ci"]:
                 sys.stdout.write(f"\r\033[K[Orchestrator] 進行状況 (総ループ: {completed}) | キュー={q_len} || {ws_str}")
+            elif cfg.run_mode == "boundary_gap":
+                sys.stdout.write(f"\r\033[K[Orchestrator] boundary_gap 継続中 | 完了={completed} | キュー={q_len} || {ws_str}")
             else:
                 sys.stdout.write(f"\r\033[K[Orchestrator] 完了={completed}/{REPEAT_COUNT} | キュー={q_len} || {ws_str}")
             sys.stdout.flush()
 
-            if cfg.run_mode not in ["dkw", "verify_consistency"]:
-                if completed >= REPEAT_COUNT:
+            if cfg.run_mode not in ["dkw", "verify_consistency", "binomial_ci"]:
+                if REPEAT_COUNT is not None and completed >= REPEAT_COUNT:
                     print("\n[Orchestrator] 目標回数に到達しました。終了シグナルを送信します。")
                     ray.get(task_queue.set_stop_signal.remote())
                     break

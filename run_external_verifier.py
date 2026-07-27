@@ -24,15 +24,17 @@ DEFAULT_BBSL_REPO = "/home/passd/BBSL-test"
 def parse_args():
     parser = argparse.ArgumentParser(
         description=(
-            "Run an external verification tool from the AWSIM_launch framework. "
-            "This keeps the verifier and the target system decoupled."
+            "Run an external experiment/verifier entrypoint from the "
+            "AWSIM_launch framework. This keeps the verifier and the target "
+            "system decoupled. For FT4D-core unification, prefer the "
+            "raw-result flow via run_bbsl_local_ft4d.py."
         )
     )
     parser.add_argument(
         "--verifier",
         choices=list_verifiers(),
         default="bbsl_ft4d",
-        help="External verifier adapter to use.",
+        help="External experiment/verifier adapter to use.",
     )
     parser.add_argument(
         "--target-name",
@@ -123,12 +125,19 @@ def main():
     print(f"target        : {result.target_name}")
     print(f"return code   : {result.returncode}")
     print(f"result json   : {args.output_json}")
-    print(f"raw result    : {result.raw_result_path}")
+    print(f"external output: {result.raw_result_path}")
     if result.summary:
         print(f"summary state : {result.summary.get('status')}")
+        print(f"mode          : {result.summary.get('integration_mode', 'external-launch-only')}")
         print(f"tree mode     : {result.summary.get('tree_mode')}")
         print(f"conditions    : {result.summary.get('active_conditions')}")
         print(f"top sigma_pe  : {result.summary.get('top_sigma_pe')}")
+        if result.summary.get("recommended_path"):
+            print(
+                "recommended   : use "
+                f"{result.summary.get('recommended_path')} "
+                "for the raw-result -> AWSIM FT4D path"
+            )
     print("=" * 60)
 
     if result.returncode != 0:
