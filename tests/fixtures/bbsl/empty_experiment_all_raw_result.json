@@ -1,0 +1,39 @@
+{
+  "timestamp": "2026-08-02T16:46:00+09:00",
+  "elapsed_min": 0.0,
+  "experiment_type": "full_all",
+  "mini_mode": true,
+  "max_images": 0,
+  "tree_mode": "basic",
+  "active_conditions": [
+    "clean",
+    "salt_pepper",
+    "occlusion",
+    "blur"
+  ],
+  "sigma_pf_source": "dataset",
+  "sigma_pb_mode": "delta-clean",
+  "detect_timeout": null,
+  "and_rule": "min",
+  "ft4d_backend": "none",
+  "bbsl_results": {
+    "clean": [],
+    "salt_pepper": [],
+    "occlusion": [],
+    "blur": []
+  },
+  "universal_dataset_size": 0,
+  "universal_dataset": [],
+  "universal_dataset_records": [],
+  "condition_datasets": {
+    "clean": [],
+    "salt_pepper": [],
+    "occlusion": [],
+    "blur": []
+  },
+  "sigma_pf_assumptions": {},
+  "statistical_test_config": {
+    "epsilon": 0.1,
+    "delta": 0.05
+  }
+}

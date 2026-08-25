@@ -1,182 +1,46 @@
-# ==========================================
-# uturn.py (加速型3ステップ検証・最適化版)
-# ==========================================
+from __future__ import annotations
 
-SCENARIO_TYPE = "uturn"
+# Legacy compatibility wrapper.
+# New code should import `targets.awsim.case_kinds.uturn` directly.
+from targets.awsim.case_kinds.uturn import (  # noqa: F401
+    BINOMIAL_CI_CONFIDENCE,
+    BINOMIAL_CI_METHOD,
+    BINOMIAL_CI_MIN_SAMPLES,
+    BINOMIAL_CI_TARGET,
+    BINOMIAL_CI_TARGET_WIDTH,
+    BOUNDARY_GAP_COLLISION_RATIO_RANGE,
+    BOUNDARY_GAP_GRID_SIZE,
+    BOUNDARY_GAP_MAX_CASES,
+    BOUNDARY_GAP_MAX_SAMPLES,
+    BOUNDARY_GAP_MIN_SAMPLES,
+    BOUNDARY_GAP_TTC_THRESHOLD,
+    DKW_TARGET_METRIC,
+    DKW_TARGET_METRICS,
+    EVENT_DEFINITIONS,
+    FIXED_PARAMS,
+    FOCUS_NOISE,
+    FOCUS_POINTS,
+    FORMULAS,
+    INITIAL_EXPLORATION_LIMIT,
+    INVALID_CONDITIONS,
+    JAMA_PROFILES,
+    MARGIN_MAX_UNCERTAINTY,
+    MARGIN_RANGE,
+    MAX_SAMPLES,
+    MIN_SAMPLES,
+    PARAM_RANGES,
+    REPEAT_COUNT,
+    RESULT_LABELS,
+    SCENARIO_TYPE,
+    STABILITY_HISTORY_LENGTH,
+    STABILITY_HYSTERESIS,
+    STABILITY_REFERENCE_POINTS,
+    STABILITY_REQUIRED_STREAK,
+    STABILITY_SHIFT_THRESHOLD,
+    STEP2_MAX_EXPLORATION,
+    TARGET_NPCS,
+    TARGET_PRIORITIES,
+    TIMEOUT_SEC,
+    TTC_EDGE_THRESHOLD,
+)
 
-# run_manager.py のループ上限 (AIの最大試行回数より大きく設定)
-REPEAT_COUNT = 10000
-
-# 1回のシミュレーション実行におけるタイムアウト時間（秒）
-TIMEOUT_SEC = 200
-
-# ==========================================
-# 1. 出力データの定義 (checker_results.csv の列名)
-# ==========================================
-RESULT_LABELS = [
-    "c_collision",     # 衝突の有無 (0:安全, 1:衝突)
-    "c_ttc_1.5",       # TTC 1.5秒以下
-    "c_ttc_1.3",       # TTC 1.3秒以下
-    "c_ttc_1.2",       # TTC 1.2秒以下
-    "c_ttc_1.1",       # TTC 1.1秒以下
-    "c_ttc_0.9",       # TTC 0.9秒以下
-    "c_ttc_0.7",       # TTC 0.7秒以下 (危険領域の指標)
-    "c_ttc_0.5",       # TTC 0.5秒以下
-    "c_ttc_0.3",       # TTC 0.3秒以下
-    "c_pos_diff_4.0",  # 車間距離 4.0m以内
-    "c_npc_stuck"      # NPC1が途中で停止していないか
-]
-
-# 上記の RESULT_LABELS に対応する Maude の検証式
-# awchecker.py が起動時にこれを formulas.txt に自動で書き込みます
-FORMULAS = [
-    '[] ~ collision("ego", "npc1")',
-    '[] ttc("npc1") >= 1.5',
-    '[] ttc("npc1") >= 1.3',
-    '[] ttc("npc1") >= 1.2',
-    '[] ttc("npc1") >= 1.1',
-    '[] ttc("npc1") >= 0.9',
-    '[] ttc("npc1") >= 0.7',
-    '[] ttc("npc1") >= 0.5',
-    '[] ttc("npc1") >= 0.3',
-    '[] pos-diff("ego", "npc1") >= 4.0',
-    '<> speed("npc1") >= 0.1'  # 変更: より確実にスタックだけを検知するため 0.1 m/s まで低下
-]
-
-# AW_Kinematics_Extractor がTTCや距離を計算する対象のNPCの名前を指定します。
-# これにより、誤って混入した自車(ego)や無関係な車両との誤検知(自己衝突など)を防ぎ、
-# 将来的に複数台(npc1, npc2)を評価する際もここに追加するだけで対応可能になります。
-TARGET_NPCS = ["npc1"]
-
-# AIが重点的に検証し、境界線を引くターゲットの優先順位
-TARGET_PRIORITIES = [
-    "c_collision",
-    "c_ttc_0.3",
-    "c_ttc_0.5",
-    "c_ttc_0.7",
-    "c_ttc_0.9",
-    "c_ttc_1.1",
-    "c_ttc_1.2",
-    "c_ttc_1.3",
-    "c_ttc_1.5"
-]
-
-# ==========================================
-# 2. 入力データの定義 (AIが探索するパラメータ範囲)
-# ==========================================
-PARAM_RANGES = {
-    "dx0": (10.0, 25.0),         # 自車とNPCの初期距離 (m)
-    "ego_speed": (30.0, 40.0),   # 自車の速度 (km/h)
-    "npc_speed": (10.0, 25.0),   # NPCの速度 (km/h)
-}
-
-# ==========================================
-# 3. AI の検証戦略・終了条件 (3ステップ戦略用)
-# ==========================================
-# --- フェーズ移行・リミット設定 ---
-INITIAL_EXPLORATION_LIMIT = 100  # STEP 1: 最初のデータ収集回数
-MIN_SAMPLES = 500               # STEP 3 完了判定を開始する最低回数
-MAX_SAMPLES = 10000             # 強制終了する最大回数
-
-# --- 戦略のキーパラメータ (境界安定性・マージン検証) ---
-# 境界線の安定性を評価し、STEP 2 から STEP 3 へ移行するための設定
-STABILITY_REFERENCE_POINTS = 2000
-STABILITY_HISTORY_LENGTH = 50
-STABILITY_HYSTERESIS = (0.40, 0.60)
-STABILITY_SHIFT_THRESHOLD = 0.01
-STABILITY_REQUIRED_STREAK = 3
-STEP2_MAX_EXPLORATION = 500
-
-# STEP 3 で徹底的に叩く「安全マージン領域」と終了条件
-MARGIN_RANGE = (0.3, 0.48)
-MARGIN_MAX_UNCERTAINTY = 0.05
-
-# ==========================================
-# 4. 固定パラメータ (シミュレータに渡す定数値)
-# ==========================================
-FIXED_PARAMS = {
-    "ego_init_lane": "514", 
-    "ego_init_offset": 30,  
-    "ego_goal_lane": "516",
-    "ego_goal_offset": 20,
-
-    "npc_init_lane": "521",
-    "npc_init_offset": 32,
-    "uturn_next_lane": "514", # 衝突リスクを作るため自車と同じレーンへ
-    
-    "acceleration": 7.0
-}
-
-# ==========================================
-# 5. フォーカス（集中）モードの設定
-# ==========================================
-# コマンドで --mode focus を指定し、かつ --focus_points を省略した場合に以下の点が探索されます
-FOCUS_POINTS = [
-    {"dx0": 10.09, "ego_speed": 37.98, "npc_speed": 14.20},
-    {"dx0": 14.81, "ego_speed": 39.80, "npc_speed": 13.49},
-    {"dx0": 10.23, "ego_speed": 35.96, "npc_speed": 17.80},
-    {"dx0": 13.29, "ego_speed": 39.33, "npc_speed": 13.95},
-    {"dx0": 14.16, "ego_speed": 35.43, "npc_speed": 10.02},
-    {"dx0": 11.17, "ego_speed": 31.90, "npc_speed": 11.91}
-]
-FOCUS_NOISE = 0.05
-# FOCUS_EXACT_REPEATS = 20  # コメントアウトすると、自動的に「稼働中のワーカー数」だけ反復テストを行います
-
-# ==========================================
-# 6. JAMA 理論安全領域計算プロファイル
-# ==========================================
-JAMA_PROFILES = {
-    "human": {
-        "t_delay": 0.75,
-        "t_jerk": 0.6,
-        "a_max": 7.58
-    },
-    "ai_aeb": {
-        "t_delay": 0.1,
-        "t_jerk": 0.1,
-        "a_max": 8.33
-    }
-}
-
-# ==========================================
-# 7. TTC エッジ探索モードの設定
-# ==========================================
-# 衝突しなかったが(c_collision=0)、ニアミスが発生したとみなすTTCの閾値（秒）
-TTC_EDGE_THRESHOLD = 1.5
-
-# ==========================================
-# 7.5. 境界ギャップ探索モードの設定
-# ==========================================
-# 空間を粗くビニングし、「危険寄りだがサンプル数が薄い」セル中心を抽出する。
-BOUNDARY_GAP_GRID_SIZE = 8
-BOUNDARY_GAP_MAX_CASES = 12
-BOUNDARY_GAP_MIN_SAMPLES = 2
-BOUNDARY_GAP_MAX_SAMPLES = 12
-BOUNDARY_GAP_COLLISION_RATIO_RANGE = (0.15, 0.85)
-BOUNDARY_GAP_TTC_THRESHOLD = 1.1
-
-# ==========================================
-# 8. SMC (DKW) 証明モードの設定
-# ==========================================
-# 評価対象とする指標 (複数指標の最悪値を正規化した総合リスク指標 Z_margin を使用)
-DKW_TARGET_METRIC = "z_margin"
-# 同時保証モード(--dkw_simultaneous)で評価する複数指標リスト
-DKW_TARGET_METRICS = ["min_ttc", "min_distance"]
-
-# ==========================================
-# 8.5. Binomial CI モードの設定
-# ==========================================
-BINOMIAL_CI_TARGET = "c_collision"
-BINOMIAL_CI_METHOD = "wilson"
-BINOMIAL_CI_CONFIDENCE = 0.95
-BINOMIAL_CI_TARGET_WIDTH = 0.02
-BINOMIAL_CI_MIN_SAMPLES = 100
-
-# ==========================================
-# 9. 異常データの無効化条件
-# ==========================================
-# 指定した列が指定した値になった場合、シミュレーション失敗(エラー)とみなし
-# その行のすべての評価指標(TTC等)を -1 に上書きして無効化します。
-INVALID_CONDITIONS = {
-    "c_npc_stuck": 1
-}

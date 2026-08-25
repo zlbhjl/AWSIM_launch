@@ -1,0 +1,16 @@
+{
+  "groundtruth_size": {
+    "camera_screen_width": 1920.0,
+    "camera_screen_height": 1080.0,
+    "other_note": ""
+  },
+  "groundtruth_kinematic": [],
+  "perception_objects": [],
+  "boundingbox_perception_objects": [],
+  "ego_estimated_kinematic": [],
+  "control_cmds": [],
+  "planning_trajectory": [],
+  "metadata": {
+    "waypoints": []
+  }
+}

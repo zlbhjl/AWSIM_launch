@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import os
+import re
+from glob import glob
 from typing import Any
 
 
@@ -18,6 +20,12 @@ CONDITION_ORDER = [
 
 
 class BBSLExperimentAdapter:
+    _NOISY_BATCH_RE = re.compile(r"noisy_batch_(\d{4})(?:_mini)?\.json$")
+
+    def batch_output_dir(self, target_repo: str) -> str:
+        target_repo = os.path.abspath(target_repo)
+        return os.path.join(target_repo, "output", "batches")
+
     def default_output_path(
         self,
         target_repo: str,
@@ -43,6 +51,53 @@ class BBSLExperimentAdapter:
     def load_output(self, output_json_path: str) -> dict[str, Any]:
         with open(output_json_path, "r", encoding="utf-8") as handle:
             return json.load(handle)
+
+    def clean_baseline_output_path(self, target_repo: str, mini: bool) -> str:
+        suffix = "_mini" if mini else ""
+        return os.path.join(
+            self.batch_output_dir(target_repo),
+            f"clean_baseline{suffix}.json",
+        )
+
+    def clean_success_path(self, target_repo: str, mini: bool) -> str:
+        suffix = "_mini" if mini else ""
+        return os.path.join(
+            self.batch_output_dir(target_repo),
+            f"clean_success_image_ids{suffix}.json",
+        )
+
+    def noisy_batch_output_path(
+        self,
+        target_repo: str,
+        batch_id: int,
+        mini: bool,
+    ) -> str:
+        suffix = "_mini" if mini else ""
+        return os.path.join(
+            self.batch_output_dir(target_repo),
+            f"noisy_batch_{batch_id:04d}{suffix}.json",
+        )
+
+    def list_noisy_batch_output_paths(self, target_repo: str, mini: bool) -> list[str]:
+        suffix = "_mini" if mini else ""
+        pattern = os.path.join(
+            self.batch_output_dir(target_repo),
+            f"noisy_batch_*{suffix}.json",
+        )
+        paths = []
+        for path in glob(pattern):
+            match = self._NOISY_BATCH_RE.search(os.path.basename(path))
+            if match is None:
+                continue
+            paths.append((int(match.group(1)), path))
+        paths.sort(key=lambda item: item[0])
+        return [path for _, path in paths]
+
+    def noisy_batch_id_from_path(self, path: str) -> int | None:
+        match = self._NOISY_BATCH_RE.search(os.path.basename(path))
+        if match is None:
+            return None
+        return int(match.group(1))
 
     def active_conditions(self, output: dict[str, Any]) -> list[str]:
         active = output.get("active_conditions")

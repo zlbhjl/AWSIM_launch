@@ -4,14 +4,76 @@
 import os
 import numpy as np
 import pandas as pd
-from estimator import SafetyEstimator
+from evaluation.gp_boundary import GPBoundaryService
+from evaluation.statistical_service import StatisticalEvaluationService
 from redis_cluster import cluster_config
 import point_extractors
+from runtime.repository.strategy_dataset import StrategyDatasetRepository
+from targets.bbsl.batch_loop import (
+    run_bbsl_until_ft4d_confident,
+)
+from targets.bbsl.ft4d_bridge import (
+    run_bbsl_and_evaluate_ft4d,
+)
+from targets.bbsl.underconfident_loop import run_bbsl_underconfident_loop
 
 try:
     from theoretical_calculator import TheoreticalSafetyCalculator
 except ImportError:
     TheoreticalSafetyCalculator = None
+
+
+def _load_case_definition_from_config(config, scenario_name):
+    explicit_loader = getattr(config, "get_case_definition", None)
+    if callable(explicit_loader):
+        loaded = dict(explicit_loader())
+        return {
+            "scenario_type": loaded.get("scenario_type", scenario_name),
+            "repeat_count": int(loaded.get("repeat_count", 0)),
+            "timeout_sec": float(loaded.get("timeout_sec", 200.0)),
+            "target_npcs": list(loaded.get("target_npcs", [])),
+            "param_ranges": dict(loaded.get("param_ranges", {})),
+            "fixed_params": dict(loaded.get("fixed_params", {})),
+        }
+
+    return {
+        "scenario_type": getattr(config, "SCENARIO_TYPE", scenario_name),
+        "repeat_count": int(getattr(config, "REPEAT_COUNT", 0)),
+        "timeout_sec": float(getattr(config, "TIMEOUT_SEC", 200.0)),
+        "target_npcs": list(getattr(config, "TARGET_NPCS", [])),
+        "param_ranges": dict(getattr(config, "PARAM_RANGES", {})),
+        "fixed_params": dict(getattr(config, "FIXED_PARAMS", {})),
+    }
+
+
+def _load_strategy_settings_from_config(config):
+    explicit_loader = getattr(config, "get_strategy_settings", None)
+    if callable(explicit_loader):
+        return dict(explicit_loader())
+
+    return {
+        "target_priorities": list(getattr(config, "TARGET_PRIORITIES", [])),
+        "initial_exploration_limit": getattr(config, "INITIAL_EXPLORATION_LIMIT", 100),
+        "min_samples": getattr(config, "MIN_SAMPLES", 500),
+        "max_samples": getattr(config, "MAX_SAMPLES", 2000),
+        "stability_reference_points": getattr(config, "STABILITY_REFERENCE_POINTS", 2000),
+        "stability_history_length": getattr(config, "STABILITY_HISTORY_LENGTH", 50),
+        "stability_hysteresis": getattr(config, "STABILITY_HYSTERESIS", (0.40, 0.60)),
+        "stability_shift_threshold": getattr(config, "STABILITY_SHIFT_THRESHOLD", 0.01),
+        "stability_required_streak": getattr(config, "STABILITY_REQUIRED_STREAK", 3),
+        "step2_max_exploration": getattr(config, "STEP2_MAX_EXPLORATION", 500),
+        "margin_range": getattr(config, "MARGIN_RANGE", (0.3, 0.48)),
+        "margin_max_uncertainty": getattr(config, "MARGIN_MAX_UNCERTAINTY", 0.05),
+        "focus_points": list(getattr(config, "FOCUS_POINTS", [])),
+        "focus_noise": getattr(config, "FOCUS_NOISE", 0.05),
+        "dkw_target_metric": getattr(config, "DKW_TARGET_METRIC", "min_ttc"),
+        "dkw_target_metrics": list(getattr(config, "DKW_TARGET_METRICS", ["min_ttc", "min_distance"])),
+        "binomial_ci_target": getattr(config, "BINOMIAL_CI_TARGET", "c_collision"),
+        "binomial_ci_method": getattr(config, "BINOMIAL_CI_METHOD", "wilson"),
+        "binomial_ci_confidence": getattr(config, "BINOMIAL_CI_CONFIDENCE", 0.95),
+        "binomial_ci_target_width": getattr(config, "BINOMIAL_CI_TARGET_WIDTH", 0.02),
+        "binomial_ci_min_samples": getattr(config, "BINOMIAL_CI_MIN_SAMPLES", 100),
+    }
 
 class ActiveLearningStrategist:
     def __init__(
@@ -40,50 +102,61 @@ class ActiveLearningStrategist:
         self.dkw_region = dkw_region
         self.dkw_pure_smc = dkw_pure_smc
         self.dkw_simultaneous = dkw_simultaneous
-        self.binomial_target = binomial_target or getattr(config, "BINOMIAL_CI_TARGET", "c_collision")
-        self.binomial_method = binomial_method or getattr(config, "BINOMIAL_CI_METHOD", "wilson")
+        self.case_definition = _load_case_definition_from_config(config, scenario_name)
+        self.strategy_settings = _load_strategy_settings_from_config(config)
+        self.binomial_target = (
+            binomial_target
+            or self.strategy_settings.get("binomial_ci_target", "c_collision")
+        )
+        self.binomial_method = (
+            binomial_method
+            or self.strategy_settings.get("binomial_ci_method", "wilson")
+        )
         self.binomial_confidence = (
             binomial_confidence if binomial_confidence is not None
-            else getattr(config, "BINOMIAL_CI_CONFIDENCE", 0.95)
+            else self.strategy_settings.get("binomial_ci_confidence", 0.95)
         )
         self.binomial_target_width = (
             binomial_target_width if binomial_target_width is not None
-            else getattr(config, "BINOMIAL_CI_TARGET_WIDTH", 0.02)
+            else self.strategy_settings.get("binomial_ci_target_width", 0.02)
         )
         self.binomial_min_samples = (
             binomial_min_samples if binomial_min_samples is not None
-            else getattr(config, "BINOMIAL_CI_MIN_SAMPLES", 100)
+            else self.strategy_settings.get("binomial_ci_min_samples", 100)
         )
         
-        self.estimator = SafetyEstimator(scenario_name, config)
-        self.param_names = list(self.config.PARAM_RANGES.keys())
+        self.param_ranges = dict(self.case_definition["param_ranges"])
+        self.param_names = list(self.param_ranges.keys())
+        self.dataset_repository = StrategyDatasetRepository(scenario_name)
+        self.boundary_model_service = GPBoundaryService(feature_names=self.param_names)
+        self.statistics_service = StatisticalEvaluationService(feature_names=self.param_names)
         self.dim = len(self.param_names)
 
         # --- 設定ファイル(config)から戦略パラメータを動的に取得 ---
-        self.target_priorities = getattr(self.config, 'TARGET_PRIORITIES', [])
-        self.INITIAL_EXPLORATION_LIMIT = getattr(self.config, 'INITIAL_EXPLORATION_LIMIT', 100)
-        self.MIN_SAMPLES = getattr(self.config, 'MIN_SAMPLES', 500)
-        self.MAX_SAMPLES = getattr(self.config, 'MAX_SAMPLES', 2000)
+        self.target_priorities = list(self.strategy_settings.get("target_priorities", []))
+        self.INITIAL_EXPLORATION_LIMIT = self.strategy_settings.get("initial_exploration_limit", 100)
+        self.MIN_SAMPLES = self.strategy_settings.get("min_samples", 500)
+        self.MAX_SAMPLES = self.strategy_settings.get("max_samples", 2000)
         self.max_samples = max_samples or self.MAX_SAMPLES
 
         # [変更] フェーズ移行・終了条件の新しいパラメータ
-        self.STABILITY_REFERENCE_POINTS = getattr(self.config, 'STABILITY_REFERENCE_POINTS', 2000)
-        self.STABILITY_HISTORY_LENGTH = getattr(self.config, 'STABILITY_HISTORY_LENGTH', 50)
-        self.STABILITY_HYSTERESIS = getattr(self.config, 'STABILITY_HYSTERESIS', (0.40, 0.60))
-        self.STABILITY_SHIFT_THRESHOLD = getattr(self.config, 'STABILITY_SHIFT_THRESHOLD', 0.01)
-        self.STABILITY_REQUIRED_STREAK = getattr(self.config, 'STABILITY_REQUIRED_STREAK', 3)
-        self.STEP2_MAX_EXPLORATION = getattr(self.config, 'STEP2_MAX_EXPLORATION', 500)
-        self.MARGIN_RANGE = getattr(self.config, 'MARGIN_RANGE', (0.3, 0.48))
-        self.MARGIN_MAX_UNCERTAINTY = getattr(self.config, 'MARGIN_MAX_UNCERTAINTY', 0.05)
+        self.STABILITY_REFERENCE_POINTS = self.strategy_settings.get("stability_reference_points", 2000)
+        self.STABILITY_HISTORY_LENGTH = self.strategy_settings.get("stability_history_length", 50)
+        self.STABILITY_HYSTERESIS = tuple(self.strategy_settings.get("stability_hysteresis", (0.40, 0.60)))
+        self.STABILITY_SHIFT_THRESHOLD = self.strategy_settings.get("stability_shift_threshold", 0.01)
+        self.STABILITY_REQUIRED_STREAK = self.strategy_settings.get("stability_required_streak", 3)
+        self.STEP2_MAX_EXPLORATION = self.strategy_settings.get("step2_max_exploration", 500)
+        self.MARGIN_RANGE = tuple(self.strategy_settings.get("margin_range", (0.3, 0.48)))
+        self.MARGIN_MAX_UNCERTAINTY = self.strategy_settings.get("margin_max_uncertainty", 0.05)
         
         # コマンドライン引数で渡された focus_points を使用 (Configに依存しない)
         self.FOCUS_POINTS = focus_points
-        self.FOCUS_NOISE = getattr(self.config, 'FOCUS_NOISE', 0.05)
+        self.FOCUS_NOISE = self.strategy_settings.get("focus_noise", 0.05)
 
         # --- [変更] 抽出ロジックを外部モジュールに委譲 ---
         if self.run_mode in point_extractors.EXTRACTORS:
             extractor_func = point_extractors.EXTRACTORS[self.run_mode]
-            df = self.estimator.load_dataset()
+            df = self.dataset_repository.load_dataset()
             extracted_points = extractor_func(df, self.param_names, self.config)
             if extracted_points:
                 self.FOCUS_POINTS = extracted_points
@@ -98,11 +171,11 @@ class ActiveLearningStrategist:
             self.dkw_base_samples = getattr(self.config, 'DKW_BASE_SAMPLES', 50)     # 基本サンプル数 n
             self.dkw_total_delta = getattr(self.config, 'DKW_TOTAL_DELTA', 0.05)       # 最終的な信頼水準 (例: 95%)
             self.dkw_target_epsilon = getattr(self.config, 'DKW_TARGET_EPSILON', 0.15) # 求める精度 (信頼区間の幅)
-            self.dkw_target_metric = getattr(self.config, 'DKW_TARGET_METRIC', 'min_ttc')
+            self.dkw_target_metric = self.strategy_settings.get("dkw_target_metric", "min_ttc")
             
             # --- [追加] 過去データから安全領域(Bounds)を自動計算 ---
             if self.dkw_region != "custom":
-                df = self.estimator.load_dataset()
+                df = self.dataset_repository.load_dataset()
                 if df is not None and not df.empty:
                     try:
                         f_df = point_extractors.filter_by_region_and_bounds(df, region=self.dkw_region)
@@ -126,11 +199,11 @@ class ActiveLearningStrategist:
                 print(f"[Strategist] ⚠️ 純粋SMCモード有効: 過去のAI探索データは排除し、SMCサンプリングのみで評価します。")
                 
             if self.dkw_simultaneous:
-                target_metrics = getattr(self.config, 'DKW_TARGET_METRICS', ['min_ttc', 'min_distance'])
+                target_metrics = self.strategy_settings.get("dkw_target_metrics", ['min_ttc', 'min_distance'])
                 print(f"[Strategist] 🛡️ 多重指標同時保証モード有効: {target_metrics} を同時評価し、ボンフェローニ補正を適用します。")
 
             # --- [追加] 現在の有効サンプル数と目標のプレビューを表示 ---
-            df_dataset = self.estimator.load_dataset()
+            df_dataset = self.dataset_repository.load_dataset()
             if self.dkw_pure_smc:
                 if df_dataset is not None and not df_dataset.empty and 'reason' in df_dataset.columns:
                     df_dkw = df_dataset[df_dataset['reason'].str.contains('SMC', na=False)]
@@ -152,10 +225,10 @@ class ActiveLearningStrategist:
             self.dkw_random_index = 0
             self.dkw_total_delta = getattr(self.config, 'DKW_TOTAL_DELTA', 0.05)
             self.dkw_target_epsilon = getattr(self.config, 'DKW_TARGET_EPSILON', 0.15)
-            self.dkw_target_metric = getattr(self.config, 'DKW_TARGET_METRIC', 'min_ttc')
+            self.dkw_target_metric = self.strategy_settings.get("dkw_target_metric", "min_ttc")
 
             if self.dkw_region != "custom":
-                df = self.estimator.load_dataset()
+                df = self.dataset_repository.load_dataset()
                 if df is not None and not df.empty:
                     try:
                         f_df = point_extractors.filter_by_region_and_bounds(df, region=self.dkw_region)
@@ -173,7 +246,7 @@ class ActiveLearningStrategist:
             if self.dkw_bounds:
                 print(f"[Strategist] 📍 サンプリング領域: {self.dkw_bounds}")
             if self.dkw_simultaneous:
-                target_metrics = getattr(self.config, 'DKW_TARGET_METRICS', ['min_ttc', 'min_distance'])
+                target_metrics = self.strategy_settings.get("dkw_target_metrics", ['min_ttc', 'min_distance'])
                 print(f"[Strategist] 🛡️ 多重指標同時保証モード: {target_metrics}")
 
         if self.run_mode == "binomial_ci":
@@ -200,7 +273,7 @@ class ActiveLearningStrategist:
             if self.run_mode in ["dkw", "dkw_fixed", "binomial_ci"] and self.dkw_bounds and name in self.dkw_bounds:
                 self.active_bounds[name] = self.dkw_bounds[name]
             else:
-                self.active_bounds[name] = self.config.PARAM_RANGES[name]
+                self.active_bounds[name] = self.param_ranges[name]
 
         # 状態管理変数
         self.reference_points = self.generate_candidate_points(num=self.STABILITY_REFERENCE_POINTS)
@@ -222,7 +295,7 @@ class ActiveLearningStrategist:
         # [修正] 過去のデータを読み込んだ際、過去のエラーをすべてリカバリーしようとしてDKW証明が止まるのを防ぐため、
         # 起動時点の最大ループ番号を初期値として設定する
         self.last_recovered_loop = 0
-        df_init = self.estimator.load_dataset()
+        df_init = self.dataset_repository.load_dataset()
         if df_init is not None and 'loop_num' in df_init.columns:
             max_loop = df_init['loop_num'].max()
             if pd.notna(max_loop):
@@ -238,7 +311,7 @@ class ActiveLearningStrategist:
             )
 
     def _print_boundary_gap_progress(self):
-        df = self.estimator.load_dataset()
+        df = self.dataset_repository.load_dataset()
         summary = point_extractors.summarize_boundary_gap_progress(
             df,
             self.param_names,
@@ -270,7 +343,7 @@ class ActiveLearningStrategist:
         return summary
 
     def _refresh_boundary_gap_targets(self):
-        df = self.estimator.load_dataset()
+        df = self.dataset_repository.load_dataset()
         summary = self._print_boundary_gap_progress()
         extractor_func = point_extractors.EXTRACTORS.get("boundary_gap")
         next_points = extractor_func(df, self.param_names, self.config) if extractor_func else []
@@ -492,6 +565,8 @@ class ActiveLearningStrategist:
         self,
         *,
         target_repo,
+        execution_mode="legacy",
+        condition_policy="all",
         mini=False,
         max_images=None,
         tree="basic",
@@ -500,24 +575,96 @@ class ActiveLearningStrategist:
         and_rule="min",
         detect_timeout=None,
         reuse_existing_output=False,
+        master_seed=1000,
+        conditions=None,
+        salt_pepper_density_range=(0.01, 0.08),
+        occlusion_severity_range=(0.2, 0.5),
+        blur_kernel_range=(5, 11),
+        refresh_clean_baseline=False,
+        resume_batches=True,
+        max_batches=None,
+        max_total_trials=500000,
+        no_progress_patience=3,
         min_confidence=None,
+        sigma_pf_assumption_overrides=None,
     ):
-        ft4d_result = self.estimator.run_bbsl_and_evaluate_ft4d(
-            target_repo=target_repo,
-            mini=mini,
-            max_images=max_images,
-            tree=tree,
-            sigma_pf_source=sigma_pf_source,
-            sigma_pb_mode=sigma_pb_mode,
-            and_rule=and_rule,
-            detect_timeout=detect_timeout,
-            reuse_existing_output=reuse_existing_output,
+        threshold = (
+            min_confidence
+            if min_confidence is not None
+            else getattr(self.config, "FT4D_MIN_CONFIDENCE", 0.95)
         )
-        confidence_summary = self.summarize_ft4d_confidence_gaps(
-            ft4d_result,
-            min_confidence=min_confidence,
-        )
+        if execution_mode == "batch-loop" and condition_policy == "underconfident":
+            underconfident_result = run_bbsl_underconfident_loop(
+                target_repo=target_repo,
+                mini=mini,
+                tree=tree,
+                sigma_pf_source=sigma_pf_source,
+                sigma_pb_mode=sigma_pb_mode,
+                and_rule=and_rule,
+                detect_timeout=detect_timeout,
+                max_images=max_images,
+                master_seed=master_seed,
+                conditions=conditions,
+                salt_pepper_density_range=salt_pepper_density_range,
+                occlusion_severity_range=occlusion_severity_range,
+                blur_kernel_range=blur_kernel_range,
+                refresh_clean_baseline=refresh_clean_baseline,
+                resume_batches=resume_batches,
+                max_batches=max_batches,
+                max_total_trials=max_total_trials,
+                no_progress_patience=no_progress_patience,
+                min_confidence=threshold,
+                sigma_pf_assumption_overrides=sigma_pf_assumption_overrides,
+                summarize_confidence_gaps_fn=self.summarize_ft4d_confidence_gaps,
+            )
+            ft4d_result = underconfident_result["ft4d_result"]
+            confidence_summary = underconfident_result["confidence_summary"]
+        elif execution_mode == "batch-loop":
+            ft4d_result = run_bbsl_until_ft4d_confident(
+                target_repo=target_repo,
+                mini=mini,
+                max_images=max_images,
+                tree=tree,
+                sigma_pf_source=sigma_pf_source,
+                sigma_pb_mode=sigma_pb_mode,
+                and_rule=and_rule,
+                detect_timeout=detect_timeout,
+                master_seed=master_seed,
+                conditions=conditions,
+                salt_pepper_density_range=salt_pepper_density_range,
+                occlusion_severity_range=occlusion_severity_range,
+                blur_kernel_range=blur_kernel_range,
+                reuse_clean_baseline=not refresh_clean_baseline,
+                max_batches=max_batches,
+                max_total_trials=max_total_trials,
+                no_progress_patience=no_progress_patience,
+                min_confidence=threshold,
+                sigma_pf_assumption_overrides=sigma_pf_assumption_overrides,
+            )
+            confidence_summary = self.summarize_ft4d_confidence_gaps(
+                ft4d_result,
+                min_confidence=min_confidence,
+            )
+        else:
+            ft4d_result = run_bbsl_and_evaluate_ft4d(
+                target_repo=target_repo,
+                mini=mini,
+                max_images=max_images,
+                tree=tree,
+                sigma_pf_source=sigma_pf_source,
+                sigma_pb_mode=sigma_pb_mode,
+                and_rule=and_rule,
+                detect_timeout=detect_timeout,
+                reuse_existing_output=reuse_existing_output,
+                sigma_pf_assumption_overrides=sigma_pf_assumption_overrides,
+            )
+            confidence_summary = self.summarize_ft4d_confidence_gaps(
+                ft4d_result,
+                min_confidence=min_confidence,
+            )
         return {
+            "execution_mode": execution_mode,
+            "condition_policy": condition_policy,
             "ft4d_result": ft4d_result,
             "confidence_summary": confidence_summary,
         }
@@ -600,7 +747,7 @@ class ActiveLearningStrategist:
         return None
 
     def _evaluate_boundary_stability(self):
-        mean, _ = self.estimator.predict_uncertainty(self.reference_points)
+        mean, _ = self.boundary_model_service.predict_uncertainty(self.reference_points)
         if mean is None: return False, 0.0
 
         states = np.full(mean.shape, -1)
@@ -642,7 +789,7 @@ class ActiveLearningStrategist:
         # [追加] ログ出力用のプレフィックス
         log_prefix = "[FOCUS] " if self.FOCUS_POINTS else ""
             
-        df_dataset = self.estimator.load_dataset()
+        df_dataset = self.dataset_repository.load_dataset()
         
         # --- [追加] エラーの崖っぷち探索: 新しいエラーが発生していたら少しずらしてリカバリー検証する ---
         if df_dataset is not None and 'loop_num' in df_dataset.columns:
@@ -660,15 +807,15 @@ class ActiveLearningStrategist:
                 for _, err_row in new_errors.iterrows():
                     shifted_point = {}
                     for name in self.param_names:
-                        rng = self.config.PARAM_RANGES[name][1] - self.config.PARAM_RANGES[name][0]
+                        rng = self.param_ranges[name][1] - self.param_ranges[name][0]
                         # 3%の微小ノイズを加えて少しずらす (シミュレータのクラッシュ回避)
                         noise = np.random.normal(0, rng * 0.03) 
                         try:
                             val = float(err_row[name]) + noise
                         except (ValueError, TypeError, KeyError):
                             # CSVのズレ等で文字列が入っている場合は安全な中央値を使用する
-                            val = (self.config.PARAM_RANGES[name][0] + self.config.PARAM_RANGES[name][1]) / 2.0 + noise
-                        val = np.clip(val, self.config.PARAM_RANGES[name][0], self.config.PARAM_RANGES[name][1])
+                            val = (self.param_ranges[name][0] + self.param_ranges[name][1]) / 2.0 + noise
+                        val = np.clip(val, self.param_ranges[name][0], self.param_ranges[name][1])
                         shifted_point[name] = val
                     shifted_point["reason"] = f"{log_prefix}Error Recovery (Shifted from Loop {int(err_row['loop_num'])})"
                     recovery_points.append(shifted_point)
@@ -713,7 +860,7 @@ class ActiveLearningStrategist:
                 repeat_idx = (self.focus_exact_test_count % exact_repeats) + 1
                 
                 exact_point = self.FOCUS_POINTS[point_idx]
-                result = {name: exact_point.get(name, sum(self.config.PARAM_RANGES[name])/2.0) for name in self.param_names}
+                result = {name: exact_point.get(name, sum(self.param_ranges[name])/2.0) for name in self.param_names}
                 
                 if self.run_mode == "verify_consistency":
                     mode_label = "CONSISTENCY"
@@ -752,7 +899,7 @@ class ActiveLearningStrategist:
             elif self.run_mode == "verify_consistency":
                 # --- 全反復テスト完了時の自動分類とDKW評価 ---
                 print("\n[Strategist] 📊 全反復テスト完了。TTCの安定性を評価し、分類ごとのDKW証明を行います...")
-                df = self.estimator.load_dataset()
+                df = self.dataset_repository.load_dataset()
                 if df is not None and not df.empty:
                     # [修正] 全データではなく、この検証モードで実行されたデータのみを分析対象とする
                     consistency_df = df[df['reason'].str.contains('\\[CONSISTENCY\\]', na=False)]
@@ -761,7 +908,7 @@ class ActiveLearningStrategist:
                         return {"system_command": "stop", "reason": "No consistency data found"}
 
                     threshold = getattr(self.config, 'CONSISTENCY_THRESHOLD', 0.2)
-                    target_metric = getattr(self.config, 'DKW_TARGET_METRIC', 'min_ttc')
+                    target_metric = self.strategy_settings.get("dkw_target_metric", "min_ttc")
                     df_consistent, df_stochastic = point_extractors.classify_consistency(consistency_df, self.param_names, target_metric=target_metric, threshold=threshold, min_repeats=2)
                     
                     # --- [追加] 分類されたデータを個別のCSVとして保存 ---
@@ -774,9 +921,9 @@ class ActiveLearningStrategist:
                     
                     def print_dkw_result(title, target_df):
                         print(f"\n--- {title} (データ件数: {len(target_df)}) ---")
-                        summary = self.estimator.evaluate_and_summarize_dkw(
-                            target_column=getattr(self.config, 'DKW_TARGET_METRIC', 'min_ttc'),
-                            df=target_df,
+                        summary = self.statistics_service.summarize_dkw(
+                            target_df,
+                            target_column=self.strategy_settings.get("dkw_target_metric", "min_ttc"),
                             q=0.05,
                             delta=getattr(self.config, 'DKW_TOTAL_DELTA', 0.05),
                             epsilon=getattr(self.config, 'DKW_TARGET_EPSILON', 0.15)
@@ -804,7 +951,7 @@ class ActiveLearningStrategist:
                 return pt
 
             print(f"\n[Strategist] 🎯 指定回数 {self.max_samples} 回のサンプリング完了。最終DKW評価を実行します...")
-            df_dataset = self.estimator.load_dataset()
+            df_dataset = self.dataset_repository.load_dataset()
             if df_dataset is None or df_dataset.empty:
                 return {"system_command": "stop", "reason": "Empty dataset"}
 
@@ -828,9 +975,10 @@ class ActiveLearningStrategist:
             print(f"[Strategist] 📊 最終評価: {len(df_filtered)} サンプルでDKW評価を実行します。")
 
             if self.dkw_simultaneous:
-                target_metrics = getattr(self.config, 'DKW_TARGET_METRICS', ['min_ttc', 'min_distance'])
-                summary = self.estimator.evaluate_and_summarize_dkw_multiple(
-                    target_columns=target_metrics, df=df_filtered,
+                target_metrics = self.strategy_settings.get("dkw_target_metrics", ['min_ttc', 'min_distance'])
+                summary = self.statistics_service.summarize_dkw_multiple(
+                    df_filtered,
+                    target_columns=target_metrics,
                     q=0.05, delta_total=self.dkw_total_delta,
                     epsilon=self.dkw_target_epsilon, use_kde_weighting=False,
                     region="custom", bounds=None
@@ -842,8 +990,9 @@ class ActiveLearningStrategist:
                 else:
                     msg = f"DKW評価失敗: {summary.get('message', '不明')}"
             else:
-                summary = self.estimator.evaluate_and_summarize_dkw(
-                    target_column=self.dkw_target_metric, df=df_filtered,
+                summary = self.statistics_service.summarize_dkw(
+                    df_filtered,
+                    target_column=self.dkw_target_metric,
                     q=0.05, delta=self.dkw_total_delta,
                     epsilon=self.dkw_target_epsilon
                 )
@@ -860,13 +1009,13 @@ class ActiveLearningStrategist:
 
         if self.run_mode == "binomial_ci":
             reason_pattern = r"BINOMIAL_CI:"
-            summary = self.estimator.evaluate_and_summarize_binomial_ci(
+            summary = self.statistics_service.summarize_binomial_ci(
+                df_dataset,
                 target_column=self.binomial_target,
                 confidence_level=self.binomial_confidence,
                 method=self.binomial_method,
                 bounds=self.dkw_bounds,
                 region=self.dkw_region,
-                df=df_dataset,
                 reason_pattern=reason_pattern,
             )
 
@@ -935,9 +1084,10 @@ class ActiveLearningStrategist:
                 use_kde = True
                 
             if self.dkw_simultaneous:
-                target_metrics = getattr(self.config, 'DKW_TARGET_METRICS', ['min_ttc', 'min_distance'])
-                summary = self.estimator.evaluate_and_summarize_dkw_multiple(
-                    target_columns=target_metrics, df=df_dkw, q=0.05, delta_total=delta_i,
+                target_metrics = self.strategy_settings.get("dkw_target_metrics", ['min_ttc', 'min_distance'])
+                summary = self.statistics_service.summarize_dkw_multiple(
+                    df_dkw,
+                    target_columns=target_metrics, q=0.05, delta_total=delta_i,
                     epsilon=self.dkw_target_epsilon, use_kde_weighting=use_kde,
                     region=self.dkw_region, bounds=self.dkw_bounds
                 )
@@ -993,13 +1143,13 @@ class ActiveLearningStrategist:
                     current_samples = 0
                     target_n_i = self.dkw_base_samples * (self.dkw_stage ** 2)
             else:
-                bounds_result = self.estimator.calculate_quantile_with_dkw(
+                bounds_result = self.statistics_service.calculate_dkw_quantile(
+                    df_dkw,
                     target_column=self.dkw_target_metric,
                     q=0.05,
                     delta=delta_i,
                     bounds=self.dkw_bounds,
                     region=self.dkw_region,
-                    df=df_dkw,
                     use_kde_weighting=use_kde
                 )
                 
@@ -1122,9 +1272,12 @@ class ActiveLearningStrategist:
             return result
 
         # AI学習・予測
-        self.estimator.train(target_column=best_target)
+        self.boundary_model_service.train(
+            df_dataset,
+            target_column=best_target,
+        )
         candidates = self.generate_candidate_points()
-        mean, std = self.estimator.predict_uncertainty(candidates)
+        mean, std = self.boundary_model_service.predict_uncertainty(candidates)
         if mean is None:
             result = {**self.get_random_point(current_idx), "reason": "Fallback (Error)"}
             self.dispatched_task_count += 1
@@ -1228,22 +1381,22 @@ class ActiveLearningStrategist:
             num_per_point = num_points // len(self.FOCUS_POINTS)
             
             for name in self.param_names:
-                param_range = self.config.PARAM_RANGES[name][1] - self.config.PARAM_RANGES[name][0]
+                param_range = self.param_ranges[name][1] - self.param_ranges[name][0]
                 std_dev = param_range * self.FOCUS_NOISE  # パラメータの幅に応じた標準偏差
                 
                 param_candidates = []
                 for point in self.FOCUS_POINTS:
                     # 指定ポイントに該当のパラメータが無ければ範囲の中央を基準にする
-                    center = point.get(name, sum(self.config.PARAM_RANGES[name])/2.0)
+                    center = point.get(name, sum(self.param_ranges[name])/2.0)
                     samples = np.random.normal(loc=center, scale=std_dev, size=num_per_point)
                     param_candidates.extend(samples)
                 
                 # 端数合わせ
                 while len(param_candidates) < num_points:
-                    param_candidates.append(np.random.uniform(self.config.PARAM_RANGES[name][0], self.config.PARAM_RANGES[name][1]))
+                    param_candidates.append(np.random.uniform(self.param_ranges[name][0], self.param_ranges[name][1]))
                     
                 # 定義された範囲外にはみ出た値をクリップ（制限）する
-                clipped = np.clip(param_candidates[:num_points], self.config.PARAM_RANGES[name][0], self.config.PARAM_RANGES[name][1])
+                clipped = np.clip(param_candidates[:num_points], self.param_ranges[name][0], self.param_ranges[name][1])
                 cols.append(clipped)
                 
             return np.column_stack(cols)

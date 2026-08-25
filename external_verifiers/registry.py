@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 from .base import ExternalVerifier
-from .bbsl_ft4d import BBSLFT4DVerifier
+from verifiers.compatibility.legacy_bbsl_ft4d_adapter import BBSLFT4DVerifier
 
 
+# This registry is intentionally kept only for the legacy-compatible
+# external verifier CLI. Adapters registered here should stay thin and
+# forward into targets/* + evaluation/* instead of growing a second
+# execution stack beside the refactored design.
 _VERIFIERS = {
     BBSLFT4DVerifier.name: BBSLFT4DVerifier,
 }

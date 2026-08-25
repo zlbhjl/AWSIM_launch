@@ -1,0 +1,963 @@
+{
+  "timestamp": "2026-07-13T16:59:09.423657",
+  "elapsed_min": 0.2,
+  "experiment_type": "全画像 × 4条件（同一画像）",
+  "mini_mode": true,
+  "max_images": 2,
+  "tree_mode": "basic",
+  "active_conditions": [
+    "clean",
+    "salt_pepper",
+    "occlusion",
+    "blur"
+  ],
+  "sigma_pf_source": "dataset",
+  "sigma_pb_mode": "delta-clean",
+  "detect_timeout": 1500,
+  "and_rule": "min",
+  "ft4d_backend": "none",
+  "bbsl_results": {
+    "clean": {
+      "T": 7,
+      "F": 1,
+      "dataset_d": [
+        "clean/000000.png#obj0",
+        "clean/000001.png#obj0",
+        "clean/000001.png#obj1",
+        "clean/000001.png#obj2",
+        "clean/000001.png#obj3",
+        "clean/000001.png#obj4",
+        "clean/000001.png#obj5",
+        "clean/000001.png#obj6"
+      ],
+      "dataset_e": [
+        "clean/000000.png#obj0"
+      ],
+      "dataset_size": 8,
+      "sigma_pb": 0.0,
+      "sigma_pb_mode": "delta-clean",
+      "statistical_test": {
+        "n": 8,
+        "required_sample_size": 105967,
+        "has_required_sample_size": false,
+        "correct_count": 7,
+        "required_correct_count": 8,
+        "meets_correct_count": false,
+        "sample_recognition_rate": 0.875,
+        "required_sample_rate": 1.0,
+        "expected_recognition_rate": 0.95,
+        "epsilon": 0.005,
+        "delta": 0.01,
+        "confidence": 0.99,
+        "passed": false
+      },
+      "dataset_d_effective": [
+        "clean/000001.png#obj0",
+        "clean/000001.png#obj1",
+        "clean/000001.png#obj2",
+        "clean/000001.png#obj3",
+        "clean/000001.png#obj4",
+        "clean/000001.png#obj5",
+        "clean/000001.png#obj6"
+      ],
+      "dataset_e_effective": [],
+      "dataset_size_effective": 7,
+      "T_effective": 7,
+      "F_effective": 0
+    },
+    "salt_pepper": {
+      "T": 7,
+      "F": 1,
+      "dataset_d": [
+        "salt_pepper/000000.png#obj0",
+        "salt_pepper/000001.png#obj0",
+        "salt_pepper/000001.png#obj1",
+        "salt_pepper/000001.png#obj2",
+        "salt_pepper/000001.png#obj3",
+        "salt_pepper/000001.png#obj4",
+        "salt_pepper/000001.png#obj5",
+        "salt_pepper/000001.png#obj6"
+      ],
+      "dataset_e": [
+        "salt_pepper/000000.png#obj0"
+      ],
+      "dataset_size": 8,
+      "sigma_pb": 0.0,
+      "sigma_pb_mode": "delta-clean",
+      "statistical_test": {
+        "n": 8,
+        "required_sample_size": 105967,
+        "has_required_sample_size": false,
+        "correct_count": 7,
+        "required_correct_count": 8,
+        "meets_correct_count": false,
+        "sample_recognition_rate": 0.875,
+        "required_sample_rate": 1.0,
+        "expected_recognition_rate": 0.95,
+        "epsilon": 0.005,
+        "delta": 0.01,
+        "confidence": 0.99,
+        "passed": false
+      },
+      "dataset_d_effective": [
+        "salt_pepper/000001.png#obj0",
+        "salt_pepper/000001.png#obj1",
+        "salt_pepper/000001.png#obj2",
+        "salt_pepper/000001.png#obj3",
+        "salt_pepper/000001.png#obj4",
+        "salt_pepper/000001.png#obj5",
+        "salt_pepper/000001.png#obj6"
+      ],
+      "dataset_e_effective": [],
+      "dataset_size_effective": 7,
+      "T_effective": 7,
+      "F_effective": 0
+    },
+    "occlusion": {
+      "T": 7,
+      "F": 1,
+      "dataset_d": [
+        "occlusion/000000.png#obj0",
+        "occlusion/000001.png#obj0",
+        "occlusion/000001.png#obj1",
+        "occlusion/000001.png#obj2",
+        "occlusion/000001.png#obj3",
+        "occlusion/000001.png#obj4",
+        "occlusion/000001.png#obj5",
+        "occlusion/000001.png#obj6"
+      ],
+      "dataset_e": [
+        "occlusion/000000.png#obj0"
+      ],
+      "dataset_size": 8,
+      "sigma_pb": 0.0,
+      "sigma_pb_mode": "delta-clean",
+      "statistical_test": {
+        "n": 8,
+        "required_sample_size": 105967,
+        "has_required_sample_size": false,
+        "correct_count": 7,
+        "required_correct_count": 8,
+        "meets_correct_count": false,
+        "sample_recognition_rate": 0.875,
+        "required_sample_rate": 1.0,
+        "expected_recognition_rate": 0.95,
+        "epsilon": 0.005,
+        "delta": 0.01,
+        "confidence": 0.99,
+        "passed": false
+      },
+      "dataset_d_effective": [
+        "occlusion/000001.png#obj0",
+        "occlusion/000001.png#obj1",
+        "occlusion/000001.png#obj2",
+        "occlusion/000001.png#obj3",
+        "occlusion/000001.png#obj4",
+        "occlusion/000001.png#obj5",
+        "occlusion/000001.png#obj6"
+      ],
+      "dataset_e_effective": [],
+      "dataset_size_effective": 7,
+      "T_effective": 7,
+      "F_effective": 0
+    },
+    "blur": {
+      "T": 7,
+      "F": 1,
+      "dataset_d": [
+        "blur/000000.png#obj0",
+        "blur/000001.png#obj0",
+        "blur/000001.png#obj1",
+        "blur/000001.png#obj2",
+        "blur/000001.png#obj3",
+        "blur/000001.png#obj4",
+        "blur/000001.png#obj5",
+        "blur/000001.png#obj6"
+      ],
+      "dataset_e": [
+        "blur/000000.png#obj0"
+      ],
+      "dataset_size": 8,
+      "sigma_pb": 0.0,
+      "sigma_pb_mode": "delta-clean",
+      "statistical_test": {
+        "n": 8,
+        "required_sample_size": 105967,
+        "has_required_sample_size": false,
+        "correct_count": 7,
+        "required_correct_count": 8,
+        "meets_correct_count": false,
+        "sample_recognition_rate": 0.875,
+        "required_sample_rate": 1.0,
+        "expected_recognition_rate": 0.95,
+        "epsilon": 0.005,
+        "delta": 0.01,
+        "confidence": 0.99,
+        "passed": false
+      },
+      "dataset_d_effective": [
+        "blur/000001.png#obj0",
+        "blur/000001.png#obj1",
+        "blur/000001.png#obj2",
+        "blur/000001.png#obj3",
+        "blur/000001.png#obj4",
+        "blur/000001.png#obj5",
+        "blur/000001.png#obj6"
+      ],
+      "dataset_e_effective": [],
+      "dataset_size_effective": 7,
+      "T_effective": 7,
+      "F_effective": 0
+    }
+  },
+  "universal_dataset_size": 32,
+  "universal_dataset": [
+    "blur/000000.png#obj0",
+    "blur/000001.png#obj0",
+    "blur/000001.png#obj1",
+    "blur/000001.png#obj2",
+    "blur/000001.png#obj3",
+    "blur/000001.png#obj4",
+    "blur/000001.png#obj5",
+    "blur/000001.png#obj6",
+    "clean/000000.png#obj0",
+    "clean/000001.png#obj0",
+    "clean/000001.png#obj1",
+    "clean/000001.png#obj2",
+    "clean/000001.png#obj3",
+    "clean/000001.png#obj4",
+    "clean/000001.png#obj5",
+    "clean/000001.png#obj6",
+    "occlusion/000000.png#obj0",
+    "occlusion/000001.png#obj0",
+    "occlusion/000001.png#obj1",
+    "occlusion/000001.png#obj2",
+    "occlusion/000001.png#obj3",
+    "occlusion/000001.png#obj4",
+    "occlusion/000001.png#obj5",
+    "occlusion/000001.png#obj6",
+    "salt_pepper/000000.png#obj0",
+    "salt_pepper/000001.png#obj0",
+    "salt_pepper/000001.png#obj1",
+    "salt_pepper/000001.png#obj2",
+    "salt_pepper/000001.png#obj3",
+    "salt_pepper/000001.png#obj4",
+    "salt_pepper/000001.png#obj5",
+    "salt_pepper/000001.png#obj6"
+  ],
+  "universal_dataset_records": [
+    {
+      "sample_id": "clean/000000.png#obj0",
+      "condition_name": "clean",
+      "image_name": "000000.png",
+      "object_index": 0,
+      "in_dataset_d": true,
+      "in_dataset_e": true,
+      "is_correct": false
+    },
+    {
+      "sample_id": "clean/000001.png#obj0",
+      "condition_name": "clean",
+      "image_name": "000001.png",
+      "object_index": 0,
+      "in_dataset_d": true,
+      "in_dataset_e": false,
+      "is_correct": true
+    },
+    {
+      "sample_id": "clean/000001.png#obj1",
+      "condition_name": "clean",
+      "image_name": "000001.png",
+      "object_index": 1,
+      "in_dataset_d": true,
+      "in_dataset_e": false,
+      "is_correct": true
+    },
+    {
+      "sample_id": "clean/000001.png#obj2",
+      "condition_name": "clean",
+      "image_name": "000001.png",
+      "object_index": 2,
+      "in_dataset_d": true,
+      "in_dataset_e": false,
+      "is_correct": true
+    },
+    {
+      "sample_id": "clean/000001.png#obj3",
+      "condition_name": "clean",
+      "image_name": "000001.png",
+      "object_index": 3,
+      "in_dataset_d": true,
+      "in_dataset_e": false,
+      "is_correct": true
+    },
+    {
+      "sample_id": "clean/000001.png#obj4",
+      "condition_name": "clean",
+      "image_name": "000001.png",
+      "object_index": 4,
+      "in_dataset_d": true,
+      "in_dataset_e": false,
+      "is_correct": true
+    },
+    {
+      "sample_id": "clean/000001.png#obj5",
+      "condition_name": "clean",
+      "image_name": "000001.png",
+      "object_index": 5,
+      "in_dataset_d": true,
+      "in_dataset_e": false,
+      "is_correct": true
+    },
+    {
+      "sample_id": "clean/000001.png#obj6",
+      "condition_name": "clean",
+      "image_name": "000001.png",
+      "object_index": 6,
+      "in_dataset_d": true,
+      "in_dataset_e": false,
+      "is_correct": true
+    },
+    {
+      "sample_id": "salt_pepper/000000.png#obj0",
+      "condition_name": "salt_pepper",
+      "image_name": "000000.png",
+      "object_index": 0,
+      "in_dataset_d": true,
+      "in_dataset_e": true,
+      "is_correct": false
+    },
+    {
+      "sample_id": "salt_pepper/000001.png#obj0",
+      "condition_name": "salt_pepper",
+      "image_name": "000001.png",
+      "object_index": 0,
+      "in_dataset_d": true,
+      "in_dataset_e": false,
+      "is_correct": true
+    },
+    {
+      "sample_id": "salt_pepper/000001.png#obj1",
+      "condition_name": "salt_pepper",
+      "image_name": "000001.png",
+      "object_index": 1,
+      "in_dataset_d": true,
+      "in_dataset_e": false,
+      "is_correct": true
+    },
+    {
+      "sample_id": "salt_pepper/000001.png#obj2",
+      "condition_name": "salt_pepper",
+      "image_name": "000001.png",
+      "object_index": 2,
+      "in_dataset_d": true,
+      "in_dataset_e": false,
+      "is_correct": true
+    },
+    {
+      "sample_id": "salt_pepper/000001.png#obj3",
+      "condition_name": "salt_pepper",
+      "image_name": "000001.png",
+      "object_index": 3,
+      "in_dataset_d": true,
+      "in_dataset_e": false,
+      "is_correct": true
+    },
+    {
+      "sample_id": "salt_pepper/000001.png#obj4",
+      "condition_name": "salt_pepper",
+      "image_name": "000001.png",
+      "object_index": 4,
+      "in_dataset_d": true,
+      "in_dataset_e": false,
+      "is_correct": true
+    },
+    {
+      "sample_id": "salt_pepper/000001.png#obj5",
+      "condition_name": "salt_pepper",
+      "image_name": "000001.png",
+      "object_index": 5,
+      "in_dataset_d": true,
+      "in_dataset_e": false,
+      "is_correct": true
+    },
+    {
+      "sample_id": "salt_pepper/000001.png#obj6",
+      "condition_name": "salt_pepper",
+      "image_name": "000001.png",
+      "object_index": 6,
+      "in_dataset_d": true,
+      "in_dataset_e": false,
+      "is_correct": true
+    },
+    {
+      "sample_id": "occlusion/000000.png#obj0",
+      "condition_name": "occlusion",
+      "image_name": "000000.png",
+      "object_index": 0,
+      "in_dataset_d": true,
+      "in_dataset_e": true,
+      "is_correct": false
+    },
+    {
+      "sample_id": "occlusion/000001.png#obj0",
+      "condition_name": "occlusion",
+      "image_name": "000001.png",
+      "object_index": 0,
+      "in_dataset_d": true,
+      "in_dataset_e": false,
+      "is_correct": true
+    },
+    {
+      "sample_id": "occlusion/000001.png#obj1",
+      "condition_name": "occlusion",
+      "image_name": "000001.png",
+      "object_index": 1,
+      "in_dataset_d": true,
+      "in_dataset_e": false,
+      "is_correct": true
+    },
+    {
+      "sample_id": "occlusion/000001.png#obj2",
+      "condition_name": "occlusion",
+      "image_name": "000001.png",
+      "object_index": 2,
+      "in_dataset_d": true,
+      "in_dataset_e": false,
+      "is_correct": true
+    },
+    {
+      "sample_id": "occlusion/000001.png#obj3",
+      "condition_name": "occlusion",
+      "image_name": "000001.png",
+      "object_index": 3,
+      "in_dataset_d": true,
+      "in_dataset_e": false,
+      "is_correct": true
+    },
+    {
+      "sample_id": "occlusion/000001.png#obj4",
+      "condition_name": "occlusion",
+      "image_name": "000001.png",
+      "object_index": 4,
+      "in_dataset_d": true,
+      "in_dataset_e": false,
+      "is_correct": true
+    },
+    {
+      "sample_id": "occlusion/000001.png#obj5",
+      "condition_name": "occlusion",
+      "image_name": "000001.png",
+      "object_index": 5,
+      "in_dataset_d": true,
+      "in_dataset_e": false,
+      "is_correct": true
+    },
+    {
+      "sample_id": "occlusion/000001.png#obj6",
+      "condition_name": "occlusion",
+      "image_name": "000001.png",
+      "object_index": 6,
+      "in_dataset_d": true,
+      "in_dataset_e": false,
+      "is_correct": true
+    },
+    {
+      "sample_id": "blur/000000.png#obj0",
+      "condition_name": "blur",
+      "image_name": "000000.png",
+      "object_index": 0,
+      "in_dataset_d": true,
+      "in_dataset_e": true,
+      "is_correct": false
+    },
+    {
+      "sample_id": "blur/000001.png#obj0",
+      "condition_name": "blur",
+      "image_name": "000001.png",
+      "object_index": 0,
+      "in_dataset_d": true,
+      "in_dataset_e": false,
+      "is_correct": true
+    },
+    {
+      "sample_id": "blur/000001.png#obj1",
+      "condition_name": "blur",
+      "image_name": "000001.png",
+      "object_index": 1,
+      "in_dataset_d": true,
+      "in_dataset_e": false,
+      "is_correct": true
+    },
+    {
+      "sample_id": "blur/000001.png#obj2",
+      "condition_name": "blur",
+      "image_name": "000001.png",
+      "object_index": 2,
+      "in_dataset_d": true,
+      "in_dataset_e": false,
+      "is_correct": true
+    },
+    {
+      "sample_id": "blur/000001.png#obj3",
+      "condition_name": "blur",
+      "image_name": "000001.png",
+      "object_index": 3,
+      "in_dataset_d": true,
+      "in_dataset_e": false,
+      "is_correct": true
+    },
+    {
+      "sample_id": "blur/000001.png#obj4",
+      "condition_name": "blur",
+      "image_name": "000001.png",
+      "object_index": 4,
+      "in_dataset_d": true,
+      "in_dataset_e": false,
+      "is_correct": true
+    },
+    {
+      "sample_id": "blur/000001.png#obj5",
+      "condition_name": "blur",
+      "image_name": "000001.png",
+      "object_index": 5,
+      "in_dataset_d": true,
+      "in_dataset_e": false,
+      "is_correct": true
+    },
+    {
+      "sample_id": "blur/000001.png#obj6",
+      "condition_name": "blur",
+      "image_name": "000001.png",
+      "object_index": 6,
+      "in_dataset_d": true,
+      "in_dataset_e": false,
+      "is_correct": true
+    }
+  ],
+  "condition_datasets": {
+    "clean": {
+      "dataset_u": [
+        "clean/000000.png#obj0",
+        "clean/000001.png#obj0",
+        "clean/000001.png#obj1",
+        "clean/000001.png#obj2",
+        "clean/000001.png#obj3",
+        "clean/000001.png#obj4",
+        "clean/000001.png#obj5",
+        "clean/000001.png#obj6"
+      ],
+      "dataset_d": [
+        "clean/000000.png#obj0",
+        "clean/000001.png#obj0",
+        "clean/000001.png#obj1",
+        "clean/000001.png#obj2",
+        "clean/000001.png#obj3",
+        "clean/000001.png#obj4",
+        "clean/000001.png#obj5",
+        "clean/000001.png#obj6"
+      ],
+      "dataset_e": [
+        "clean/000000.png#obj0"
+      ],
+      "correct_count": 7,
+      "error_count": 1,
+      "sample_records": [
+        {
+          "sample_id": "clean/000000.png#obj0",
+          "condition_name": "clean",
+          "image_name": "000000.png",
+          "object_index": 0,
+          "in_dataset_d": true,
+          "in_dataset_e": true,
+          "is_correct": false
+        },
+        {
+          "sample_id": "clean/000001.png#obj0",
+          "condition_name": "clean",
+          "image_name": "000001.png",
+          "object_index": 0,
+          "in_dataset_d": true,
+          "in_dataset_e": false,
+          "is_correct": true
+        },
+        {
+          "sample_id": "clean/000001.png#obj1",
+          "condition_name": "clean",
+          "image_name": "000001.png",
+          "object_index": 1,
+          "in_dataset_d": true,
+          "in_dataset_e": false,
+          "is_correct": true
+        },
+        {
+          "sample_id": "clean/000001.png#obj2",
+          "condition_name": "clean",
+          "image_name": "000001.png",
+          "object_index": 2,
+          "in_dataset_d": true,
+          "in_dataset_e": false,
+          "is_correct": true
+        },
+        {
+          "sample_id": "clean/000001.png#obj3",
+          "condition_name": "clean",
+          "image_name": "000001.png",
+          "object_index": 3,
+          "in_dataset_d": true,
+          "in_dataset_e": false,
+          "is_correct": true
+        },
+        {
+          "sample_id": "clean/000001.png#obj4",
+          "condition_name": "clean",
+          "image_name": "000001.png",
+          "object_index": 4,
+          "in_dataset_d": true,
+          "in_dataset_e": false,
+          "is_correct": true
+        },
+        {
+          "sample_id": "clean/000001.png#obj5",
+          "condition_name": "clean",
+          "image_name": "000001.png",
+          "object_index": 5,
+          "in_dataset_d": true,
+          "in_dataset_e": false,
+          "is_correct": true
+        },
+        {
+          "sample_id": "clean/000001.png#obj6",
+          "condition_name": "clean",
+          "image_name": "000001.png",
+          "object_index": 6,
+          "in_dataset_d": true,
+          "in_dataset_e": false,
+          "is_correct": true
+        }
+      ]
+    },
+    "salt_pepper": {
+      "dataset_u": [
+        "salt_pepper/000000.png#obj0",
+        "salt_pepper/000001.png#obj0",
+        "salt_pepper/000001.png#obj1",
+        "salt_pepper/000001.png#obj2",
+        "salt_pepper/000001.png#obj3",
+        "salt_pepper/000001.png#obj4",
+        "salt_pepper/000001.png#obj5",
+        "salt_pepper/000001.png#obj6"
+      ],
+      "dataset_d": [
+        "salt_pepper/000000.png#obj0",
+        "salt_pepper/000001.png#obj0",
+        "salt_pepper/000001.png#obj1",
+        "salt_pepper/000001.png#obj2",
+        "salt_pepper/000001.png#obj3",
+        "salt_pepper/000001.png#obj4",
+        "salt_pepper/000001.png#obj5",
+        "salt_pepper/000001.png#obj6"
+      ],
+      "dataset_e": [
+        "salt_pepper/000000.png#obj0"
+      ],
+      "correct_count": 7,
+      "error_count": 1,
+      "sample_records": [
+        {
+          "sample_id": "salt_pepper/000000.png#obj0",
+          "condition_name": "salt_pepper",
+          "image_name": "000000.png",
+          "object_index": 0,
+          "in_dataset_d": true,
+          "in_dataset_e": true,
+          "is_correct": false
+        },
+        {
+          "sample_id": "salt_pepper/000001.png#obj0",
+          "condition_name": "salt_pepper",
+          "image_name": "000001.png",
+          "object_index": 0,
+          "in_dataset_d": true,
+          "in_dataset_e": false,
+          "is_correct": true
+        },
+        {
+          "sample_id": "salt_pepper/000001.png#obj1",
+          "condition_name": "salt_pepper",
+          "image_name": "000001.png",
+          "object_index": 1,
+          "in_dataset_d": true,
+          "in_dataset_e": false,
+          "is_correct": true
+        },
+        {
+          "sample_id": "salt_pepper/000001.png#obj2",
+          "condition_name": "salt_pepper",
+          "image_name": "000001.png",
+          "object_index": 2,
+          "in_dataset_d": true,
+          "in_dataset_e": false,
+          "is_correct": true
+        },
+        {
+          "sample_id": "salt_pepper/000001.png#obj3",
+          "condition_name": "salt_pepper",
+          "image_name": "000001.png",
+          "object_index": 3,
+          "in_dataset_d": true,
+          "in_dataset_e": false,
+          "is_correct": true
+        },
+        {
+          "sample_id": "salt_pepper/000001.png#obj4",
+          "condition_name": "salt_pepper",
+          "image_name": "000001.png",
+          "object_index": 4,
+          "in_dataset_d": true,
+          "in_dataset_e": false,
+          "is_correct": true
+        },
+        {
+          "sample_id": "salt_pepper/000001.png#obj5",
+          "condition_name": "salt_pepper",
+          "image_name": "000001.png",
+          "object_index": 5,
+          "in_dataset_d": true,
+          "in_dataset_e": false,
+          "is_correct": true
+        },
+        {
+          "sample_id": "salt_pepper/000001.png#obj6",
+          "condition_name": "salt_pepper",
+          "image_name": "000001.png",
+          "object_index": 6,
+          "in_dataset_d": true,
+          "in_dataset_e": false,
+          "is_correct": true
+        }
+      ]
+    },
+    "occlusion": {
+      "dataset_u": [
+        "occlusion/000000.png#obj0",
+        "occlusion/000001.png#obj0",
+        "occlusion/000001.png#obj1",
+        "occlusion/000001.png#obj2",
+        "occlusion/000001.png#obj3",
+        "occlusion/000001.png#obj4",
+        "occlusion/000001.png#obj5",
+        "occlusion/000001.png#obj6"
+      ],
+      "dataset_d": [
+        "occlusion/000000.png#obj0",
+        "occlusion/000001.png#obj0",
+        "occlusion/000001.png#obj1",
+        "occlusion/000001.png#obj2",
+        "occlusion/000001.png#obj3",
+        "occlusion/000001.png#obj4",
+        "occlusion/000001.png#obj5",
+        "occlusion/000001.png#obj6"
+      ],
+      "dataset_e": [
+        "occlusion/000000.png#obj0"
+      ],
+      "correct_count": 7,
+      "error_count": 1,
+      "sample_records": [
+        {
+          "sample_id": "occlusion/000000.png#obj0",
+          "condition_name": "occlusion",
+          "image_name": "000000.png",
+          "object_index": 0,
+          "in_dataset_d": true,
+          "in_dataset_e": true,
+          "is_correct": false
+        },
+        {
+          "sample_id": "occlusion/000001.png#obj0",
+          "condition_name": "occlusion",
+          "image_name": "000001.png",
+          "object_index": 0,
+          "in_dataset_d": true,
+          "in_dataset_e": false,
+          "is_correct": true
+        },
+        {
+          "sample_id": "occlusion/000001.png#obj1",
+          "condition_name": "occlusion",
+          "image_name": "000001.png",
+          "object_index": 1,
+          "in_dataset_d": true,
+          "in_dataset_e": false,
+          "is_correct": true
+        },
+        {
+          "sample_id": "occlusion/000001.png#obj2",
+          "condition_name": "occlusion",
+          "image_name": "000001.png",
+          "object_index": 2,
+          "in_dataset_d": true,
+          "in_dataset_e": false,
+          "is_correct": true
+        },
+        {
+          "sample_id": "occlusion/000001.png#obj3",
+          "condition_name": "occlusion",
+          "image_name": "000001.png",
+          "object_index": 3,
+          "in_dataset_d": true,
+          "in_dataset_e": false,
+          "is_correct": true
+        },
+        {
+          "sample_id": "occlusion/000001.png#obj4",
+          "condition_name": "occlusion",
+          "image_name": "000001.png",
+          "object_index": 4,
+          "in_dataset_d": true,
+          "in_dataset_e": false,
+          "is_correct": true
+        },
+        {
+          "sample_id": "occlusion/000001.png#obj5",
+          "condition_name": "occlusion",
+          "image_name": "000001.png",
+          "object_index": 5,
+          "in_dataset_d": true,
+          "in_dataset_e": false,
+          "is_correct": true
+        },
+        {
+          "sample_id": "occlusion/000001.png#obj6",
+          "condition_name": "occlusion",
+          "image_name": "000001.png",
+          "object_index": 6,
+          "in_dataset_d": true,
+          "in_dataset_e": false,
+          "is_correct": true
+        }
+      ]
+    },
+    "blur": {
+      "dataset_u": [
+        "blur/000000.png#obj0",
+        "blur/000001.png#obj0",
+        "blur/000001.png#obj1",
+        "blur/000001.png#obj2",
+        "blur/000001.png#obj3",
+        "blur/000001.png#obj4",
+        "blur/000001.png#obj5",
+        "blur/000001.png#obj6"
+      ],
+      "dataset_d": [
+        "blur/000000.png#obj0",
+        "blur/000001.png#obj0",
+        "blur/000001.png#obj1",
+        "blur/000001.png#obj2",
+        "blur/000001.png#obj3",
+        "blur/000001.png#obj4",
+        "blur/000001.png#obj5",
+        "blur/000001.png#obj6"
+      ],
+      "dataset_e": [
+        "blur/000000.png#obj0"
+      ],
+      "correct_count": 7,
+      "error_count": 1,
+      "sample_records": [
+        {
+          "sample_id": "blur/000000.png#obj0",
+          "condition_name": "blur",
+          "image_name": "000000.png",
+          "object_index": 0,
+          "in_dataset_d": true,
+          "in_dataset_e": true,
+          "is_correct": false
+        },
+        {
+          "sample_id": "blur/000001.png#obj0",
+          "condition_name": "blur",
+          "image_name": "000001.png",
+          "object_index": 0,
+          "in_dataset_d": true,
+          "in_dataset_e": false,
+          "is_correct": true
+        },
+        {
+          "sample_id": "blur/000001.png#obj1",
+          "condition_name": "blur",
+          "image_name": "000001.png",
+          "object_index": 1,
+          "in_dataset_d": true,
+          "in_dataset_e": false,
+          "is_correct": true
+        },
+        {
+          "sample_id": "blur/000001.png#obj2",
+          "condition_name": "blur",
+          "image_name": "000001.png",
+          "object_index": 2,
+          "in_dataset_d": true,
+          "in_dataset_e": false,
+          "is_correct": true
+        },
+        {
+          "sample_id": "blur/000001.png#obj3",
+          "condition_name": "blur",
+          "image_name": "000001.png",
+          "object_index": 3,
+          "in_dataset_d": true,
+          "in_dataset_e": false,
+          "is_correct": true
+        },
+        {
+          "sample_id": "blur/000001.png#obj4",
+          "condition_name": "blur",
+          "image_name": "000001.png",
+          "object_index": 4,
+          "in_dataset_d": true,
+          "in_dataset_e": false,
+          "is_correct": true
+        },
+        {
+          "sample_id": "blur/000001.png#obj5",
+          "condition_name": "blur",
+          "image_name": "000001.png",
+          "object_index": 5,
+          "in_dataset_d": true,
+          "in_dataset_e": false,
+          "is_correct": true
+        },
+        {
+          "sample_id": "blur/000001.png#obj6",
+          "condition_name": "blur",
+          "image_name": "000001.png",
+          "object_index": 6,
+          "in_dataset_d": true,
+          "in_dataset_e": false,
+          "is_correct": true
+        }
+      ]
+    }
+  },
+  "sigma_pf_assumptions": {
+    "SALT_PEPPER": 0.1,
+    "OCCLUSION": 0.05,
+    "BLUR": 0.08,
+    "SP_OCC": 0.03,
+    "SP_BLUR": 0.03,
+    "OCC_BLUR": 0.03,
+    "ALL_THREE": 0.02
+  },
+  "statistical_test_config": {
+    "epsilon": 0.005,
+    "delta": 0.01,
+    "confidence": 0.99,
+    "root_delta": 0.01,
+    "root_confidence": 0.99,
+    "basic_event_error_target": 0.05,
+    "expected_recognition_rate": 0.95,
+    "recommended_sample_size": 105967
+  }
+}

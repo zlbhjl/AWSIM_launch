@@ -1,5 +1,21 @@
 # AWSIM Adaptive Safety Testing Framework
 
+## この README の位置づけ
+この README は、主に**現行実装の使い方と運用方法**をまとめた文書です。
+
+新しい汎用検証フレームへの分解方針、tree、contracts、移行順、責務分離ルールは
+[docs/refactor_design.md](/home/passd/AWSIM_launch/docs/refactor_design.md)
+を参照してください。
+
+使い分け:
+
+- `README.md`
+  現行コードの実行方法、前提環境、運用上の入口
+- `docs/refactor_design.md`
+  新設計、移行方針、共通契約、責務分離
+- `docs/implementation_rules.md`
+  実装ルール、テストルール、回帰確認ルール
+
 ## 概要
 本プロジェクトは、AWSIM (自動運転シミュレータ) および Autoware を対象としたシナリオベースの安全性テスト自動化フレームワークです。
 AI (ガウス過程回帰モデル) を用いた **アクティブラーニング (能動学習)** を採用しており、過去のテスト実行結果から安全性（TTCや衝突など）の境界を学習・予測することで、限られたシミュレーション回数で効率的に危険なエッジケースを探索・特定します。
@@ -25,7 +41,7 @@ AI (ガウス過程回帰モデル) を用いた **アクティブラーニン�
 - **フォーカス (集中) モード**: 特定のパラメータの周辺に絞ってテストを反復するピンポイント検証機能。
 - **リアルタイム進捗監視**: 司令塔の画面で、各ワーカーが「待機中」「実行中」「タイムアウト」など、何をしているかをリアルタイムで1行にまとめて表示します。
 - **JAMA物理モデルに基づく理論値算出**: シミュレーションの入力パラメータから、物理限界（空走時間・ブレーキ性能）に基づく理論上の停止距離と安全マージン（Zone）を同時算出・記録し、AIの学習特徴量として活用 (`theoretical_calculator.py`)。
-- **外部検証器アダプタ**: AWSIM_launch の外側にある検証器を、対象システムと切り離したまま起動できる汎用入口を追加。第一段階として `BBSL-test` の実験を AWSIM_launch 側から起動できます (`run_external_verifier.py`, `external_verifiers/`)。
+- **外部検証器の legacy 互換入口**: AWSIM_launch の外側にある検証器を、対象システムと切り離したまま起動できる互換CLIを保持しています。現在の `run_external_verifier.py` は互換 adapter の入口だけを残し、中では `targets/bbsl/*` と `evaluation/ft4d_service.py` の新経路を直接呼びます。
 - **内部 FT4D コア**: FT4D を `verification_core/ft4d` として AWSIM_launch 内へ保持し、`estimator.py` から実行できます。BBSL 側は raw result を出力し、FT4D の計算本体と信頼度再構成は AWSIM_launch 側へ寄せています。
 - **BBSL raw result 連携**: `BBSL-test/examples/run_full_experiment_all.py` / `run_full_experiment.py` は `--ft4d-backend none` で raw result のみを保存でき、AWSIM_launch 側が `U / D(n) / E(n)`、`recognition_test`、信頼度伝播を再構成します。
 - **FT4D ベースの司令塔補助**: `strategist.py` は FT4D 結果を読み、信頼度不足ノードの列挙だけでなく、`node_id` 単位の集約、不足理由分類、推奨アクション生成まで行えます。
@@ -37,9 +53,9 @@ AWSIM_launch/
 ├── local_worker.py           # 【ホストワーカー】--with_host_worker 時の run_manager.py のプロセス起動・管理。
 ├── master_orchestrator.py    # 【司令塔】システム全体の起動、クラスター構築、AIタスクのキュー管理/停止判断。
 ├── run_manager.py            # 【ワーカー】各ノードのメインプロセス。司令塔からのタスク受信、process_controller.py を介したシミュレーション実行を管理。
-├── run_external_verifier.py  # 【外部検証器入口】AWSIM_launch から外部検証器を起動する汎用CLI。
-├── run_ft4d_smoke.py         # 【内部FT4D疎通確認】AWSIM_launch 内部の FT4D コアを単独実行するCLI。
-├── run_bbsl_local_ft4d.py    # BBSL raw result を AWSIM_launch 側 FT4D で再計算するCLI。
+├── run_external_verifier.py  # 【外部検証器入口】legacy 互換CLI。互換入口だけを残し、中では新しい BBSL target 経路を直接束ねる。
+├── run_ft4d_smoke.py         # 【内部FT4D疎通確認】AWSIM trace fixture を新経路で流して FT4D を確認するCLI。
+├── run_bbsl_local_ft4d.py    # BBSL raw result を AWSIM_launch 側の新経路で FT4D 再計算するCLI。
 ├── run_scenario.py           # 単一のシミュレーションを実行するスクリプト。動的パラメータを受け取りシナリオを構築。
 ├── strategist.py             # AIの探索戦略を司る頭脳。現在のフェーズを判断し、次に検証すべきパラメータを決定。FT4D の confidence gap 集約も担当。
 ├── estimator.py              # 【内部モジュール】ガウス過程回帰やDKW不等式など、統計的な評価・計算を行う数学エンジン。BBSL raw result からの FT4D 実行APIも保持。
@@ -47,8 +63,8 @@ AWSIM_launch/
 ├── param_logger.py           # テスト実行時のパラメータを一時的に共有金庫のバッファへ送信。
 ├── theoretical_calculator.py # JAMA物理モデルに基づく理論的安全領域(Zone)とマージンを計算するモジュール。
 ├── point_extractors.py       # 【内部モジュール】データセットから探索候補点(JAMAエッジ等)を抽出・分類する共通アルゴリズム群。
-├── extract_region_data.py    # 【CLIツール】コマンドで抽出条件を指定し、結果をCSVとして出力させるためのユーザー操作用スクリプト。
-├── analyze_ttc_consistency.py # 【CLIツール】反復テストデータからTTCのばらつきを分析し、確実/偶然リスクに分類してDKW評価を出力するスクリプト。
+├── extract_region_data.py    # 【互換CLI】tools/analysis/extract_region_data.py への薄いラッパー。
+├── analyze_ttc_consistency.py # 【互換CLI】tools/analysis/analyze_ttc_consistency.py への薄いラッパー。
 ├── fix_dataset_labels.py     # 過去のデータセットを最新の抽出ロジックで全号機から並列再解析し、安全に修復(更新)するスクリプト。
 ├── dataset_repo.py           # データセットCSVの読み書き、--resume_from による過去データ復元
 ├── verification_core/
@@ -57,9 +73,15 @@ AWSIM_launch/
 │   ├── awsim/                # AWSIM 用の U/D/E 構築アダプタ骨格
 │   └── bbsl/                 # BBSL raw result を AWSIM_launch 側 FT4D 入力へ変換するアダプタ
 ├── external_verifiers/
-│   ├── base.py               # 検証器/検証対象を分離する共通インターフェース
-│   ├── registry.py           # 検証器アダプタの登録
-│   └── bbsl_ft4d.py          # BBSL-test FT4D 実験を外部検証器として呼ぶアダプタ
+│   ├── base.py               # 旧互換CLI用の共通インターフェース。
+│   ├── registry.py           # 旧互換CLI用アダプタの登録。
+│   └── bbsl_ft4d.py          # 旧 import 互換 wrapper。実体は verifiers/compatibility/legacy_bbsl_ft4d_adapter.py。
+├── verifiers/
+│   ├── compatibility/
+│   │   └── legacy_bbsl_ft4d_adapter.py # BBSL legacy 互換入口の実体。内部では targets/bbsl/* + evaluation/ft4d_service.py を呼ぶ。
+│   └── maude/
+│       ├── backend.py        # Maude 実行境界
+│       └── evaluator.py      # Maude 結果の評価器
 ├── redis_cluster/
 │   ├── cluster_config.py     # ワーカーPCのIPやコンテナ名、通信割り当て設定などを一元管理。
 │   ├── cluster_manager.py    # 各PCにSSH接続し、Dockerコンテナを自動起動・同期するクラスター構築スクリプト。
@@ -68,15 +90,36 @@ AWSIM_launch/
 │   └── shared_store.py       # 【共有金庫】非同期で送られてくるパラメータと結果を結合し、単一のCSVに記録するスレッドセーフなRay Actor。メモリリーク防止機能付き。
 ├── configs/                  # シナリオごとの設定ファイルを格納するディレクトリ。
 │   └── uturn.py              # Uターンシナリオ用の設定 (探索範囲、ターゲット優先度、タイムアウト秒数など)。
-├── visualize_traces.py       # 実行結果のCSVデータを読み込み、3Dグラフとして可視化するスクリプト。
-├── visualize_traces_split.py # ホスト(21号機)とコンテナ(22・23号機)の実行結果を分割し、それぞれ独立した3Dグラフとして可視化するスクリプト。
-├── visualize_worker_stats.py # ワーカー別（ホスト vs コンテナ）の衝突やTTC違反の発生確率を棒グラフで比較・可視化するスクリプト。
-├── visualize_min_ttc_3d.py   # Maudeの論理フラグではなく、AW_Kinematics_Extractorが計算した連続値のmin_ttcを基準に危険度を色分けして3D可視化するスクリプト。
-├── visualize_jama_zones.py   # JAMA物理モデルに基づく理論的な安全領域(Zone)の分布をグラフ化して可視化・分析するスクリプト。
-├── visualize_risk_matrix.py  # 衝突、最小TTC、最小接近距離を組み合わせて、安全性を4段階のリスクレベルで総合的に評価・可視化するスクリプト。
-├── visualize_collision_regions.py  # 衝突セル/非衝突セルを3Dボクセルで表示し、AI学習領域とJAMA面を比較するスクリプト。
-├── visualize_collision_surfaces.py # 実データの衝突外縁とAI学習境界を滑らかな曲面として可視化するスクリプト。
-├── analyze_boundary_gap.py         # boundary_gap 用に、境界セルのサンプル不足状況と優先候補を集計するスクリプト。
+├── visualize_traces.py       # 【legacy plot wrapper】tools/plot/visualize_traces.py を呼ぶ互換入口。
+├── visualize_traces_split.py # 【legacy plot wrapper】tools/plot/visualize_traces_split.py を呼ぶ互換入口。
+├── visualize_worker_stats.py # 【legacy plot wrapper】tools/plot/visualize_worker_stats.py を呼ぶ互換入口。
+├── visualize_min_ttc.py      # 【legacy plot wrapper】tools/plot/visualize_min_ttc.py を呼ぶ互換入口。
+├── visualize_min_ttc_3d.py   # 【legacy plot wrapper】tools/plot/visualize_min_ttc_3d.py を呼ぶ互換入口。
+├── visualize_jama_zones.py   # 【legacy plot wrapper】tools/plot/visualize_jama_zones.py を呼ぶ互換入口。
+├── visualize_risk_matrix.py  # 【legacy plot wrapper】tools/plot/visualize_risk_matrix.py を呼ぶ互換入口。
+├── visualize_collision_regions.py  # 【legacy plot wrapper】tools/plot/visualize_collision_regions.py を呼ぶ互換入口。
+├── visualize_collision_surfaces.py # 【legacy plot wrapper】tools/plot/visualize_collision_surfaces.py を呼ぶ互換入口。
+├── visualize_worker_failure_clusters.py # 【legacy plot wrapper】tools/plot/visualize_worker_failure_clusters.py を呼ぶ互換入口。
+├── analyze_boundary_gap.py         # 【互換CLI】tools/analysis/analyze_boundary_gap.py への薄いラッパー。
+├── tools/
+│   ├── analysis/
+│   │   ├── extract_region_data.py           # 条件式や bounds で dataset を切り出す本体CLI。
+│   │   ├── analyze_ttc_consistency.py       # 反復テストデータからTTCのばらつきを分析し、確実/偶然リスクに分類してDKW評価を出力する本体CLI。
+│   │   ├── analyze_boundary_gap.py          # boundary_gap 用に、境界セルのサンプル不足状況と優先候補を集計する本体CLI。
+│   │   ├── consistency_summary.py           # verify_consistency の DKW summary CSV を読む本体CLI。
+│   │   └── bbsl_confidence_gap_summary.py   # BBSL confidence-gap JSON を読む閲覧用CLI。
+│   └── plot/
+│       ├── common.py                        # plot 系共通の dataset path / output path 解決。
+│       ├── visualize_traces.py              # 実行結果CSVの3D可視化の本体CLI。
+│       ├── visualize_traces_split.py        # worker ごとの分割3D可視化の本体CLI。
+│       ├── visualize_worker_stats.py        # worker 別の衝突/TTC発生率比較の本体CLI。
+│       ├── visualize_min_ttc.py             # min_ttc 段階表示の本体CLI。
+│       ├── visualize_min_ttc_3d.py          # min_ttc 連続値ベース3D可視化の本体CLI。
+│       ├── visualize_jama_zones.py          # JAMA理論安全領域可視化の本体CLI。
+│       ├── visualize_risk_matrix.py         # 衝突/TTC/距離を合わせたリスク可視化の本体CLI。
+│       ├── visualize_collision_regions.py   # 衝突/非衝突セルのボクセル表示の本体CLI。
+│       ├── visualize_collision_surfaces.py  # 衝突外縁とAI境界面の可視化の本体CLI。
+│       └── visualize_worker_failure_clusters.py # timeout / shifted success 可視化の本体CLI。
 ```
 
 ## 前提環境 (Dependencies)
@@ -143,7 +186,7 @@ python3 master_orchestrator.py --type uturn --mode worst_ttc
 python3 master_orchestrator.py --type uturn --mode boundary_gap
 
 # いまのデータセットで、boundary_gap の未解消セルを単独集計する場合
-python3 analyze_boundary_gap.py ~/simulation_traces
+python3 tools/analysis/analyze_boundary_gap.py ~/simulation_traces
 
 # 【二項信頼区間モード】純粋ランダム標本だけで c_collision の95%信頼区間を Wilson で直接評価する場合
 python3 master_orchestrator.py --type uturn --mode binomial_ci --binomial_target c_collision --binomial_method wilson --binomial_confidence 0.95 --binomial_target_width 0.02
@@ -193,15 +236,20 @@ python3 master_orchestrator.py --type uturn --mode ttc_edge --resume_from ~/simu
 ```
 
 ### 2. 外部検証器を AWSIM_launch から起動する
-この入口は、検証器と検証対象を切り離したまま扱うための土台です。
-現時点では AWSIM のシミュレーション結果そのものを BBSL-test に流し込む統合までは行わず、
-まずは AWSIM_launch 側のフレームワークから外部検証器を起動できることを示します。
+この入口は、旧構成との互換を保つための legacy CLI です。
+新設計では BBSL の本体は `targets/bbsl/` 側へ寄せ、ここは移行期の互換入口として残します。
+現在の `bbsl_ft4d` アダプタは、BBSL 側の古い実験スクリプトを直接たたくのではなく、
+legacy 入口の形を保ったまま AWSIM_launch 側の新経路を in-process で呼びます。
+つまり実際の FT4D 評価は AWSIM_launch 側の
+`targets/bbsl/result_interpreter.py -> targets/bbsl/verification_input.py -> evaluation/ft4d_service.py`
+で行います。
 
 ```bash
-# BBSL-test の FT4D 実験を AWSIM_launch 側から起動
+# BBSL-test の FT4D 実験を AWSIM_launch 側から legacy 互換CLIで起動
 python3 run_external_verifier.py \
   --verifier bbsl_ft4d \
   --target-repo /home/passd/BBSL-test \
+  --reuse-existing-output \
   --tree basic \
   --sigma-pf-source dataset \
   --sigma-pb-mode delta-clean \
@@ -211,6 +259,7 @@ python3 run_external_verifier.py \
 python3 run_external_verifier.py \
   --verifier bbsl_ft4d \
   --target-repo /home/passd/BBSL-test \
+  --reuse-existing-output \
   --mini \
   --max-images 3 \
   --tree basic \
@@ -220,23 +269,26 @@ python3 run_external_verifier.py \
 ```
 
 このコマンドは AWSIM_launch 内に正規化済みの結果 JSON を保存しつつ、
-実際の検証本体は `BBSL-test/examples/run_full_experiment_all.py` を呼び出します。
+内部では `run_bbsl_local_ft4d.py` を呼びます。
 つまりこの経路は、
 
-- AWSIM_launch = 検証器を起動・管理するフレーム
-- BBSL-test = 実験エンジン
+- AWSIM_launch = legacy 互換入口として検証器を起動し、新経路で FT4D を評価するフレーム
+- BBSL-test = raw result を生成する実験エンジン
 
 という役割分担です。
 
 ### 3. BBSL の出力を AWSIM_launch 側で読み直し、ローカル FT4D コアで再計算する
 こちらが現在の推奨経路です。外部の `BBSL-test` でノイズ生成・推論・BBSL判定を行い、
-その raw result JSON を AWSIM_launch 側の `adapters/bbsl/` で読み直して
-`verification_core/ft4d` で計算し直します。
+その raw result JSON を AWSIM_launch 側で
+`targets/bbsl/result_interpreter.py -> targets/bbsl/verification_input.py -> evaluation/ft4d_service.py`
+へ流して FT4D を計算し直します。
 
 ```bash
 # 軽い確認
 python3 run_bbsl_local_ft4d.py \
   --target-repo /home/passd/BBSL-test \
+  --reuse-existing-output \
+  --execution-mode legacy \
   --mini \
   --max-images 3 \
   --tree basic \
@@ -244,19 +296,68 @@ python3 run_bbsl_local_ft4d.py \
   --sigma-pb-mode delta-clean \
   --and-rule min
 
-# 既存の BBSL raw result を再利用して FT4D だけ AWSIM_launch 側で回す
+# batch-loop を fresh で最初から回す
+python3 run_bbsl_local_ft4d.py \
+  --target-repo /home/passd/BBSL-test \
+  --execution-mode batch-loop \
+  --run-mode fresh \
+  --mini \
+  --max-images 3 \
+  --tree basic \
+  --sigma-pf-source dataset \
+  --sigma-pb-mode delta-clean \
+  --and-rule min
+
+# 既存 clean baseline / noisy batch を引き継いで続きから確認
 python3 run_bbsl_local_ft4d.py \
   --target-repo /home/passd/BBSL-test \
   --mini \
+  --execution-mode batch-loop \
+  --run-mode resume \
   --tree basic \
   --sigma-pf-source dataset \
   --sigma-pb-mode delta-clean \
   --and-rule min \
-  --reuse-existing-output
+  --max-batches 1
+
+# sigma_pf を外部設定で与える例
+python3 run_bbsl_local_ft4d.py \
+  --target-repo /home/passd/BBSL-test \
+  --execution-mode batch-loop \
+  --run-mode fresh \
+  --tree basic \
+  --sigma-pf-value SALT_PEPPER=0.12 \
+  --sigma-pf-value OCCLUSION=0.03 \
+  --sigma-pf-value BLUR=0.08 \
+  --sigma-pb-mode delta-clean \
+  --and-rule min
 ```
 
-この経路では、BBSL 側は raw result を保存するだけで、
-`U / D(n) / E(n)` の構築、Bonferroni に基づく `recognition_test` の再計算、FT4D の計算本体、confidence gap の集約は AWSIM_launch 側で実行します。
+この batch-loop 経路では:
+
+- `clean` は最初に1回だけ実行
+- `clean` で成功した画像だけに noisy 条件をかける
+- `BBSL-test/output/batches/` に baseline / batch raw result を保存
+- `--run-mode fresh` のときは、開始前に `output/batches/*.json` と
+  `output/*.png` と `data/kitti/ft4d_batches/` の生成済みノイズ画像を削除する
+- `--run-mode resume` のときは、既存の baseline / noisy batch を見て続きから再開する
+- `--sigma-pf-value EVENT_ID=value` または `--sigma-pf-json path.json` を渡すと、
+  AWSIM_launch 側の FT4D 再計算で `sigma_pf` 仮定値を上書きできる
+- `AWSIM_launch` 側で複数 batch を束ねて `U / D(n) / E(n)` を再構成
+- Chernoff-Hoeffding の必要サンプル数や信頼度が足りなければ次 batch を追加
+
+`sigma_pf` 上書きが指定された場合は、`--sigma-pf-source dataset` を指定していても
+AWSIM_launch 側では `assumption` 扱いで再計算します。
+
+現在は
+
+- `--execution-mode legacy`
+- `--execution-mode batch-loop --condition-policy all`
+- `--execution-mode batch-loop --condition-policy underconfident`
+
+の主要経路が、最終的に AWSIM_launch 側の新評価経路へそろっています。
+FT4D の計算本体、Bonferroni に基づく `recognition_test` の再計算、
+confidence gap の集約は AWSIM_launch 側で実行します。
 
 役割分担は次のとおりです。
 
@@ -275,6 +376,19 @@ python3 run_bbsl_local_ft4d.py \
 AWSIM_launch へ渡す前段として、BBSL 側単独でも次のように raw result を作れます。
 
 ```bash
+# clean baseline
+python3 /home/passd/BBSL-test/examples/run_ft4d_batch_experiment.py \
+  --mode clean-baseline \
+  --mini \
+  --max-images 4
+
+# noisy batch
+python3 /home/passd/BBSL-test/examples/run_ft4d_batch_experiment.py \
+  --mode noisy-batch \
+  --mini \
+  --batch-id 1 \
+  --master-seed 1000
+
 # 同一画像で全条件比較する経路
 python3 /home/passd/BBSL-test/examples/run_full_experiment_all.py \
   --mini \
@@ -298,12 +412,17 @@ python3 /home/passd/BBSL-test/examples/run_full_experiment.py \
 
 生成される主なファイルは次です。
 
+- `output/batches/clean_baseline.json`
+- `output/batches/clean_success_image_ids.json`
+- `output/batches/noisy_batch_0001.json`
 - `output/experiment_all_raw_result.json`
 - `output/experiment_all_raw_result_mini.json`
 - `output/experiment_full_raw_result.json`
 - `output/experiment_full_raw_result_mini.json`
 
-`run_bbsl_local_ft4d.py` は既定でこれらの raw result を優先して読みます。
+`run_bbsl_local_ft4d.py --execution-mode batch-loop` は
+`output/batches/` を使い、`--execution-mode legacy` では
+`experiment_*_raw_result*.json` を読みます。
 
 ### 4. AWSIM_launch 内部の FT4D コアを単独で確認する
 このコマンドは、まず AWSIM_launch 内だけで FT4D コアが成立しているかを確認するためのものです。
@@ -312,9 +431,11 @@ python3 /home/passd/BBSL-test/examples/run_full_experiment.py \
 python3 run_ft4d_smoke.py
 ```
 
-これは AWSIM 風の小さなダミーデータフレームから `U / D(n) / E(n)` を作り、
-`verification_core/ft4d/config/awsim_demo_tree.json` を用いて FT4D を計算します。
-現在はこの内部コアが `estimator.py` に統合されており、`strategist.py` はその結果を集約・分類できます。
+これは `tests/fixtures/awsim/normal_trace_maude.json` を
+`targets/awsim/result_interpreter.py -> targets/awsim/verification_input.py -> evaluation/ft4d_service.py`
+へ通し、`verification_core/ft4d/config/awsim_demo_tree.json` を用いて FT4D を計算します。
+現在は AWSIM の `EvaluationRecord.output` に `c_collision`, `c_ttc_*` などの Maude 判定値が入り、
+その値を使って smoke を確認します。
 
 ### 5. チェッカープロセスの起動 (別ターミナル)
 生成されたシミュレーションデータ (JSON)を手動で安全性を判定するために、ターミナルでチェッカーを使ってくださいしてください。
@@ -333,10 +454,47 @@ python3 awchecker.py --type uturn
 - `awsim.log` / `autoware.log`: インフラ側の生ログ (エラー調査用)。
 
 ## 新しいシナリオの追加方法
-1. `configs/` ディレクトリに新しいシナリオの設定ファイル (例: `cutin.py`) を作成します。
-2. 探索したい `PARAM_RANGES` や `FIXED_PARAMS` を定義します。
-3. `run_scenario.py` 内のロジックにシナリオ生成の分岐 (例: `elif args.type == "cutin":`) を追加します。
-4. `--type cutin` を指定して実行します。
+いまの形では、新しい AWSIM シナリオを足すときの基本修正点は次の 4 か所です。
+
+1. `targets/awsim/case_kinds/<new_case>.py`
+2. `targets/awsim/scenario_builders/<new_case>_builder.py`
+3. `targets/awsim/scenario_runner.py`
+4. `configs/<new_case>.py`
+
+役割は次のとおりです。
+
+- `targets/awsim/case_kinds/<new_case>.py`
+  - 探索範囲、固定値、結果ラベル、式、timeout などの「実験定義」を置きます。
+- `targets/awsim/scenario_builders/<new_case>_builder.py`
+  - lane / offset / speed などを組み立てて、旧 `AWSIMScriptPy` のシナリオ関数へ接続します。
+- `targets/awsim/scenario_runner.py`
+  - `scenario_type == "<new_case>"` の分岐を 1 本追加して、新しい builder を呼びます。
+- `configs/<new_case>.py`
+  - 旧互換の入口です。実体は `case_kind` を再 export するだけで構いません。
+
+追加で必要になるのは次の場合だけです。
+
+- 専用 theory が必要な場合
+  - `targets/awsim/theory_specs/<new_case>.py` を追加します。
+- 既存の 3 軸前提を外れる可視化が必要な場合
+  - `tools/plot/*` 側を調整します。
+
+いまは下流の `dkw` / `binomial_ci` / `jama_edge` / `result_sink` は
+`case_kind + build_theory_metrics(...)` を見る形になっているため、
+新しいシナリオを足すたびにそこを毎回修正する必要はありません。
+
+### 新しいシナリオ設計時の注意
+
+- `FIXED_PARAMS` に初期位置や加速度を一度置いて終わりにしないでください。
+- 新しいシナリオでは、`ego_speed` / `npc_speed` の帯ごとに
+  - `ego_init_offset`
+  - `npc_init_offset`
+  - `goal_offset`
+  - `acceleration`
+  が本当に十分かを確認してください。
+- `uturn` は `SCENARIO_PROFILES` で速度帯ごとに開始位置や加速度を切り替える設計にしてあり、単純な固定値より安定して動かせるようにしています。
+- `cutin` のように全ケースで同じ `FIXED_PARAMS` を使う形は、最初の移植としてはよいですが、「全速度帯で十分距離がある」「車が確実に動ける」「route / operation mode が安定する」ことをまだ保証しません。
+- したがって、新しいシナリオを実験基盤へ正式に入れるときは、必要に応じて `uturn` と同様に速度帯プロファイルを導入し、シナリオごとに十分距離・十分加速度を設計してください。
 
 ## 技術的な工夫・トラブルシューティング (分散自動化に関する解決策)
 
@@ -344,11 +502,12 @@ python3 awchecker.py --type uturn
 
 1. **対話型シェル (`bash -i`) による完全なROS/DDS環境ロード (`cluster_manager.py` / `run_manager.py`)**
    コンテナを起動してバックグラウンドでコマンドを実行する際、通常の `bash -c` ではUbuntuの仕様により `~/.bashrc` の読み込みが途中でキャンセルされます。これによりCycloneDDS等の大容量通信向けのチューニング設定がAutowareに適用されず、通信詰まりやレーダーデータが消失する問題がありました。これを `bash -i -c` を用いて対話モードを偽装することで、手動ログイン時と全く同じROS通信環境を確立しています。
+   - **重要**: コンテナ内で `docker exec` を使って手動デバッグするときも、この原則を崩さないでください。`docker exec ... bash -c ...` や `docker exec ... bash -lc ...` で直接起動すると、`run_manager.py` / `cluster_manager.py` と同じ環境にならず、`README` 通りの手順でも「車が動かない」「route が入らない」「点群やDDS通信が不安定になる」といった切り分けしづらい差分が入ります。手動実行時も `bash -i -c` を使い、必要ならその中で `source /home/passd/autoware/install/setup.bash` まで明示してください。
 2. **マスター・リモート間のROS通信の分離 (`cluster_manager.py`)**
    複数台のコンピュータで同時にシミュレーションを実行する際、ROS 2の通信がネットワーク上で混線しないよう、コンテナ起動時に `ROS_DOMAIN_ID` を号機ごとに割り当て、完全に独立した通信環境を構築しています。
 3. **リモート環境 (ヘッドレス) での仮想ディスプレイ(Xvfb)とGPU連携 (`cluster_manager.py`)**
    物理ディスプレイが接続されていないリモートPC (22, 23号機) では、画面を描画できないためにRVizが無限クラッシュしたり、AWSIMのLiDAR点群が生成されなくなる問題が発生します。これを以下の3つの連携で解決しています。
-   - **Xvfbの自動起動**: コンテナ内で `Xvfb :99` を立ち上げ、`DISPLAY=:99` を指定することで、すべてのGUIアプリケーションの描画先を仮想モニターに向け、画面エラーによるクラッシュを防ぎます。
+   - **Xvfbの自動起動**: まずコンテナ内で `Xvfb :99` を立ち上げ、その上で `DISPLAY=:99` を指定してGUIアプリケーションの描画先を仮想モニターへ向けます。`DISPLAY=:99` は描画先の指定だけであり、Xvfb 本体を起動するわけではありません。
    - **NVIDIA GPUの強制認識**: 通常、Xvfb環境ではGPUが使われませんが、AWSIMのLiDAR計算はGPU(Vulkan)に依存しています。そこで環境変数 `VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/nvidia_icd.json` を注入し、仮想画面下でも強制的にGPUを認識させて点群データを正常に生成させています。
    - **AWSIMの通常起動**: AWSIMの `-batchmode` (画面なしモード) はセンサーデータ欠損を引き起こすため使用せず、Xvfbに向かって「通常起動」させることで正常なシミュレーションを実現しています。
 4. **ログの隔離とハングアップの防止 (`run_manager.py`)**
@@ -385,24 +544,28 @@ python3 archive_results.py
 ```
 
 ### 実行結果の3D可視化
+
+可視化系の正本は現在 `tools/plot/*` です。
+root 直下の `visualize_*.py` は legacy wrapper として残してあり、内部では `tools/plot/*` を呼びます。
+
 ```bash
 # 最新の実験結果を可視化する場合
-python3 visualize_traces.py ~/simulation_traces
+python3 tools/plot/visualize_traces.py ~/simulation_traces
 
 # 過去に退避させた特定のデータを可視化する場合
-python3 visualize_traces.py ~/simulation_traces_shared_20260512_144346
+python3 tools/plot/visualize_traces.py ~/simulation_traces_shared_20260512_144346
 
 # MIN_TTCの連続値に基づく深刻度の3D可視化 (Maudeのフラグではなく抽出器の数値を優先)
-python3 visualize_min_ttc_3d.py ~/simulation_traces
+python3 tools/plot/visualize_min_ttc_3d.py ~/simulation_traces
 
 # リスク評価マトリックスの3D可視化
-python3 visualize_risk_matrix.py ~/simulation_traces
+python3 tools/plot/visualize_risk_matrix.py ~/simulation_traces
 
 # 衝突セル/非衝突セルをボクセル領域として可視化
-python3 visualize_collision_regions.py ~/simulation_traces
+python3 tools/plot/visualize_collision_regions.py ~/simulation_traces
 
 # 実データの衝突外縁とAI学習境界を滑らかな面として可視化
-python3 visualize_collision_surfaces.py ~/simulation_traces
+python3 tools/plot/visualize_collision_surfaces.py ~/simulation_traces
 ```
 
 # 対象のフォルダ（ディレクトリ）を指定する場合
@@ -445,13 +608,14 @@ ssh tomita2@150.65.227.23 "docker exec sim_worker_23 tail -f /home/passd/simulat
 もし特定の号機でシミュレーションがうまく動かない場合、以下の手順でシステムと全く同じ環境設定のコンテナに手動で入り、どこでエラーが起きているか検証することができます。
 
 ```bash
-# コンテナの中に入る
-docker exec -it sim_worker_21 /bin/bash
+# `docker exec` の中でも `bash -i -c` を徹底する
+docker exec -it sim_worker_21 bash -i -c 'cd /home/passd/awsim_labs && ./awsim_labs.x86_64 -noise false'
 
-# コンテナ内で手動起動テスト
-cd /home/passd/awsim_labs && ./awsim_labs.x86_64 -noise false &
-cd /home/passd/autoware && source install/setup.bash && ros2 launch autoware_launch e2e_simulator.launch.xml vehicle_model:=awsim_labs_vehicle sensor_model:=awsim_labs_sensor_kit map_path:=/home/passd/autoware_map/nishishinjuku_autoware_map launch_vehicle_interface:=true
+# Autoware も同様に対話型シェルで起動する
+docker exec -it sim_worker_21 bash -i -c 'source /home/passd/autoware/install/setup.bash && cd /home/passd/autoware && ros2 launch autoware_launch e2e_simulator.launch.xml vehicle_model:=awsim_labs_vehicle sensor_model:=awsim_labs_sensor_kit map_path:=/home/passd/autoware_map/nishishinjuku_autoware_map launch_vehicle_interface:=true'
 ```
+
+`bash -c` や `bash -lc` で十分そうに見えても、コンテナ運用では `bash -i -c` を正本にしてください。
 
 ## 今後の拡張性
 新しくワーカーPC（例：24号機）を追加したい場合は、`redis_cluster/cluster_config.py` に新しいIPアドレスやコンテナ名、`ROS_DOMAIN_ID` を追記するだけで、システムが全自動でコンテナを構築し、クラスターの計算力（スループット）を向上させます。

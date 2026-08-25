@@ -1,0 +1,44 @@
+{
+  "groundtruth_size": {
+    "vehicle_sizes": [
+      {
+        "name": "ego",
+        "center": {
+          "x": 1.424,
+          "y": -0.0,
+          "z": 0.973
+        },
+        "size": {
+          "x": 4.886,
+          "y": 2.186,
+          "z": 1.421
+        }
+      },
+      {
+        "name": "npc1",
+        "center": {
+          "x": 1.12,
+          "y": -0.0,
+          "z": 0.85
+        },
+        "size": {
+          "x": 4.64,
+          "y": 1.94,
+          "z": 1.64
+        }
+      }
+    ],
+    "camera_screen_width": 1920.0,
+    "camera_screen_height": 1080.0,
+    "other_note": ""
+  },
+  "groundtruth_kinematic": [],
+  "perception_objects": [],
+  "boundingbox_perception_objects": [],
+  "ego_estimated_kinematic": [],
+  "control_cmds": [],
+  "planning_trajectory": [],
+  "metadata": {
+    "waypoints": []
+  }
+}

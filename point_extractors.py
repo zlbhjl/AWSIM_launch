@@ -7,6 +7,21 @@ import os
 import numpy as np
 
 
+REGION_MACROS = {
+    "emp_safe": "(c_collision == 0)",
+    "jama_safe": "(theory_margin_a_human >= 0.0)",
+    "intersect_safe": "((c_collision == 0) and (theory_margin_a_human >= 0.0))",
+    "union_safe": "((c_collision == 0) or (theory_margin_a_human >= 0.0))",
+}
+
+REGION_REQUIRED_COLUMNS = {
+    "c_collision": ("c_collision",),
+    "theory_margin_a_human": ("theory_margin_a_human",),
+}
+
+STRING_QUERY_COLUMNS = {"reason", "theory_zone_a", "theory_zone_b", "worker_id", "filename", "npc_id"}
+
+
 def _build_boundary_gap_binning(df, param_names, config):
     grid_size = getattr(config, 'BOUNDARY_GAP_GRID_SIZE', 8)
     bounds = getattr(config, 'PARAM_RANGES', {})
@@ -199,15 +214,36 @@ def _clean_dataframe(df, required_cols):
     """指定された列が存在するかチェックし、数値に変換して欠損値を除外する共通処理"""
     if df is None or df.empty:
         return None
-    for col in required_cols:
-        if col not in df.columns:
-            return None
+    missing_cols = [col for col in required_cols if col not in df.columns]
+    if missing_cols:
+        return None
     
     clean_df = df.copy()
         
     for col in required_cols:
         clean_df[col] = pd.to_numeric(clean_df[col], errors='coerce')
     return clean_df.dropna(subset=required_cols)
+
+
+def _required_region_columns(region):
+    required = set()
+    for token, columns in REGION_REQUIRED_COLUMNS.items():
+        if token in region:
+            required.update(columns)
+    return sorted(required)
+
+
+def _empty_like(df):
+    if df is None:
+        return pd.DataFrame()
+    return df.iloc[0:0].copy()
+
+
+def _expand_region_macros(region):
+    query_str = region
+    for key, val in REGION_MACROS.items():
+        query_str = re.sub(rf'\b{key}\b', val, query_str)
+    return query_str
 
 def _extract_points(df, param_names, max_cases=None):
     """データフレームからパラメータの辞書リストを抽出する共通処理"""
@@ -302,21 +338,16 @@ def filter_by_region_and_bounds(df, region="custom", bounds=None):
     filtered_df = df.copy()
 
     if region and region != "custom":
-        MACROS = {
-            "emp_safe": "(c_collision == 0)",
-            "jama_safe": "(theory_margin_a_human >= 0.0)",
-            "intersect_safe": "((c_collision == 0) and (theory_margin_a_human >= 0.0))",
-            "union_safe": "((c_collision == 0) or (theory_margin_a_human >= 0.0))"
-        }
-        query_str = region
-        for key, val in MACROS.items():
-            query_str = re.sub(rf'\b{key}\b', val, query_str)
-            
+        query_str = _expand_region_macros(region)
+        required_cols = _required_region_columns(query_str)
+        missing_cols = [col for col in required_cols if col not in filtered_df.columns]
+        if missing_cols:
+            return _empty_like(filtered_df)
+
         try:
             # 評価指標やパラメータの列は強制的に数値化する。純粋な文字列の列は保護する
-            string_cols = {'reason', 'theory_zone_a', 'theory_zone_b', 'worker_id', 'filename', 'npc_id'}
             for col in filtered_df.columns:
-                if col not in string_cols:
+                if col not in STRING_QUERY_COLUMNS:
                     # errors='coerce' により、空文字("")等の不正な値はNaNになり安全に計算できる
                     # .loc を使って明示的に代入することで SettingWithCopyWarning を防ぐ
                     filtered_df.loc[:, col] = pd.to_numeric(filtered_df[col], errors='coerce')
