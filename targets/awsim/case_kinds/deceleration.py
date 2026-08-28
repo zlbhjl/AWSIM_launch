@@ -1,13 +1,7 @@
 from __future__ import annotations
 
-NPC_START_TRIGGER_EGO_ACCELERATION = 2.0
-NPC_START_TRIGGER_MARGIN_SEC = 0.3
-NPC_START_TRIGGER_EXTRA_MARGIN_RATIO = 0.03
-NPC_START_TRIGGER_RATIO_RANGE = (0.85, 0.98)
+SCENARIO_TYPE = "deceleration"
 
-SCENARIO_TYPE = "uturn"
-
-# Legacy worker loops still read this upper bound while the v2 path migrates.
 REPEAT_COUNT = 10000
 TIMEOUT_SEC = 200
 
@@ -54,9 +48,7 @@ TARGET_PRIORITIES = [
 ]
 
 PARAM_RANGES = {
-    "dx0": (10.0, 25.0),
     "ego_speed": (30.0, 40.0),
-    "npc_speed": (10.0, 25.0),
 }
 
 INITIAL_EXPLORATION_LIMIT = 100
@@ -74,110 +66,134 @@ MARGIN_RANGE = (0.3, 0.48)
 MARGIN_MAX_UNCERTAINTY = 0.05
 
 FIXED_PARAMS = {
-    "ego_init_lane": "514",
-    "ego_init_offset": 38,
-    "ego_goal_lane": "516",
-    "ego_goal_offset": 20,
-    "npc_init_lane": "521",
-    "npc_init_offset": 32,
-    "uturn_next_lane": "511",
-    "acceleration": 7.0,
+    "ego_init_lane": "111",
+    "ego_init_offset": 0.0,
+    "ego_goal_lane": "111",
+    "ego_goal_offset": 210.0,
+    "spawn_headway_sec": 2.0,
+    "spawn_trigger_speed_ratio": 1.0,
+    "npc_cruise_acceleration": 500.0,
+    "npc_deceleration": 9.8,
+    "decel_trigger_speed_ratio": 1.0,
 }
 
+SPAWN_TRIGGER_EGO_ACCELERATION = 2.0
+SPAWN_TRIGGER_MARGIN_SEC = 0.3
+SPAWN_TRIGGER_EXTRA_MARGIN_RATIO = 0.03
+SPAWN_TRIGGER_RATIO_RANGE = (0.90, 1.00)
 
-def _estimate_npc_start_speed_ratio(
+DECEL_TRIGGER_SPEED_MARGIN_MPS = 0.15
+DECEL_TRIGGER_RATIO_RANGE = (0.97, 1.00)
+
+EGO_GOAL_ACCELERATION = 2.0
+EGO_GOAL_EVENT_BUFFER_SEC = 20.0
+EGO_GOAL_STATIC_MARGIN_M = 23.0
+EGO_GOAL_ROUND_STEP_M = 10.0
+EGO_GOAL_LEGACY_MINIMUMS = (
+    (32.5, 210.0),
+    (37.5, 240.0),
+    (float("inf"), 280.0),
+)
+
+
+def _estimate_ego_goal_offset(
     *,
-    ego_speed: float,
-    ego_acceleration: float = NPC_START_TRIGGER_EGO_ACCELERATION,
-    margin_sec: float = NPC_START_TRIGGER_MARGIN_SEC,
-    extra_margin_ratio: float = NPC_START_TRIGGER_EXTRA_MARGIN_RATIO,
+    ego_speed_kmh: float,
+    ego_acceleration: float = EGO_GOAL_ACCELERATION,
+    event_buffer_sec: float = EGO_GOAL_EVENT_BUFFER_SEC,
+    static_margin_m: float = EGO_GOAL_STATIC_MARGIN_M,
+    round_step_m: float = EGO_GOAL_ROUND_STEP_M,
+    ego_init_offset: float = float(FIXED_PARAMS["ego_init_offset"]),
 ) -> float:
-    v_target = ego_speed / 3.6
+    v_ego = ego_speed_kmh / 3.6
+    if v_ego <= 0.0:
+        return float(FIXED_PARAMS["ego_goal_offset"])
+
+    warmup_distance = (v_ego * v_ego) / max(2.0 * ego_acceleration, 1e-5)
+    event_distance = v_ego * event_buffer_sec
+    goal_offset = ego_init_offset + warmup_distance + event_distance + static_margin_m
+    rounded_goal_offset = round(goal_offset / max(round_step_m, 1e-5)) * round_step_m
+    return max(rounded_goal_offset, _legacy_minimum_ego_goal_offset(ego_speed_kmh=ego_speed_kmh))
+
+
+def _legacy_minimum_ego_goal_offset(*, ego_speed_kmh: float) -> float:
+    for max_ego_speed, goal_offset in EGO_GOAL_LEGACY_MINIMUMS:
+        if ego_speed_kmh < max_ego_speed:
+            return goal_offset
+    return float(FIXED_PARAMS["ego_goal_offset"])
+
+
+def _estimate_spawn_trigger_speed_ratio(
+    *,
+    ego_speed_kmh: float,
+    ego_acceleration: float = SPAWN_TRIGGER_EGO_ACCELERATION,
+    npc_cruise_acceleration: float = float(FIXED_PARAMS["npc_cruise_acceleration"]),
+    margin_sec: float = SPAWN_TRIGGER_MARGIN_SEC,
+    extra_margin_ratio: float = SPAWN_TRIGGER_EXTRA_MARGIN_RATIO,
+) -> float:
+    v_target = ego_speed_kmh / 3.6
     if v_target <= 0.0:
         return 1.0
 
-    ratio = 1.0 - (ego_acceleration * margin_sec / v_target) - extra_margin_ratio
-    lower, upper = NPC_START_TRIGGER_RATIO_RANGE
+    npc_ready_time = v_target / max(npc_cruise_acceleration, 1e-5)
+    ratio = 1.0 - (ego_acceleration * (npc_ready_time + margin_sec) / v_target)
+    ratio -= extra_margin_ratio
+    lower, upper = SPAWN_TRIGGER_RATIO_RANGE
     return round(min(max(ratio, lower), upper), 4)
+
+
+def _estimate_decel_trigger_speed_ratio(
+    *,
+    ego_speed_kmh: float,
+    speed_margin_mps: float = DECEL_TRIGGER_SPEED_MARGIN_MPS,
+) -> float:
+    v_target = ego_speed_kmh / 3.6
+    if v_target <= 0.0:
+        return 1.0
+
+    ratio = 1.0 - (speed_margin_mps / v_target)
+    lower, upper = DECEL_TRIGGER_RATIO_RANGE
+    return round(min(max(ratio, lower), upper), 4)
+
+
+def _build_speed_band(
+    *,
+    max_ego_speed: float,
+    ego_speed_design: float,
+) -> dict[str, object]:
+    return {
+        "max_ego_speed": max_ego_speed,
+        "ego_init_lane": "111",
+        "ego_init_offset": 0.0,
+        "ego_goal_lane": "111",
+        "ego_goal_offset": _estimate_ego_goal_offset(ego_speed_kmh=ego_speed_design),
+        "spawn_headway_sec": 2.0,
+        "spawn_trigger_speed_ratio": _estimate_spawn_trigger_speed_ratio(
+            ego_speed_kmh=ego_speed_design,
+        ),
+        "npc_cruise_acceleration": 500.0,
+        "npc_deceleration": 9.8,
+        "decel_trigger_speed_ratio": _estimate_decel_trigger_speed_ratio(
+            ego_speed_kmh=ego_speed_design,
+        ),
+    }
+
 
 SCENARIO_PROFILES = [
     {
-        "profile_id": "right_10",
-        "npc_speed": 10.0,
-        "npc_init_lane": "521",
-        "npc_init_offset": 32.0,
-        "uturn_next_lane": "511",
-        "acceleration": 7.0,
+        "profile_id": "default",
         "ego_speed_bands": [
-            {
-                "max_ego_speed": 32.5,
-                "ego_init_lane": "514",
-                "ego_init_offset": 30.0,
-                "ego_goal_lane": "516",
-                "ego_goal_offset": 20.0,
-                "npc_start_speed_ratio": _estimate_npc_start_speed_ratio(ego_speed=30.0),
-            },
-            {
-                "max_ego_speed": 37.5,
-                "ego_init_lane": "514",
-                "ego_init_offset": 17.0,
-                "ego_goal_lane": "516",
-                "ego_goal_offset": 20.0,
-                "npc_start_speed_ratio": _estimate_npc_start_speed_ratio(ego_speed=35.0),
-            },
-            {
-                "max_ego_speed": float("inf"),
-                "ego_init_lane": "282",
-                "ego_init_offset": 4.0,
-                "ego_goal_lane": "124",
-                "ego_goal_offset": 18.0,
-                "npc_start_speed_ratio": _estimate_npc_start_speed_ratio(ego_speed=40.0),
-            },
+            _build_speed_band(max_ego_speed=32.5, ego_speed_design=30.0),
+            _build_speed_band(max_ego_speed=37.5, ego_speed_design=35.0),
+            _build_speed_band(max_ego_speed=float("inf"), ego_speed_design=40.0),
         ],
-    },
-    {
-        "profile_id": "right_15",
-        "npc_speed": 15.0,
-        "npc_init_lane": "521",
-        "npc_init_offset": 32.0,
-        "uturn_next_lane": "511",
-        "acceleration": 7.0,
-        "ego_speed_bands": [
-            {
-                "max_ego_speed": 32.5,
-                "ego_init_lane": "514",
-                "ego_init_offset": 38.0,
-                "ego_goal_lane": "516",
-                "ego_goal_offset": 20.0,
-                "npc_start_speed_ratio": _estimate_npc_start_speed_ratio(ego_speed=30.0),
-            },
-            {
-                "max_ego_speed": 37.5,
-                "ego_init_lane": "514",
-                "ego_init_offset": 17.0,
-                "ego_goal_lane": "516",
-                "ego_goal_offset": 20.0,
-                "npc_start_speed_ratio": _estimate_npc_start_speed_ratio(ego_speed=35.0),
-            },
-            {
-                "max_ego_speed": float("inf"),
-                "ego_init_lane": "282",
-                "ego_init_offset": 4.0,
-                "ego_goal_lane": "124",
-                "ego_goal_offset": 18.0,
-                "npc_start_speed_ratio": _estimate_npc_start_speed_ratio(ego_speed=40.0),
-            },
-        ],
-    },
+    }
 ]
 
 FOCUS_POINTS = [
-    {"dx0": 10.09, "ego_speed": 37.98, "npc_speed": 14.20},
-    {"dx0": 14.81, "ego_speed": 39.80, "npc_speed": 13.49},
-    {"dx0": 10.23, "ego_speed": 35.96, "npc_speed": 17.80},
-    {"dx0": 13.29, "ego_speed": 39.33, "npc_speed": 13.95},
-    {"dx0": 14.16, "ego_speed": 35.43, "npc_speed": 10.02},
-    {"dx0": 11.17, "ego_speed": 31.90, "npc_speed": 11.91},
+    {"ego_speed": 30.0},
+    {"ego_speed": 35.0},
+    {"ego_speed": 40.0},
 ]
 FOCUS_NOISE = 0.05
 
@@ -236,11 +252,6 @@ CASE_DEFINITION = {
     "scenario_profiles": [
         {
             "profile_id": profile["profile_id"],
-            "npc_speed": profile["npc_speed"],
-            "npc_init_lane": profile["npc_init_lane"],
-            "npc_init_offset": profile["npc_init_offset"],
-            "uturn_next_lane": profile["uturn_next_lane"],
-            "acceleration": profile["acceleration"],
             "ego_speed_bands": [dict(band) for band in profile["ego_speed_bands"]],
         }
         for profile in SCENARIO_PROFILES
@@ -293,11 +304,6 @@ def get_case_definition() -> dict[str, object]:
         "scenario_profiles": [
             {
                 "profile_id": profile["profile_id"],
-                "npc_speed": profile["npc_speed"],
-                "npc_init_lane": profile["npc_init_lane"],
-                "npc_init_offset": profile["npc_init_offset"],
-                "uturn_next_lane": profile["uturn_next_lane"],
-                "acceleration": profile["acceleration"],
                 "ego_speed_bands": [dict(band) for band in profile["ego_speed_bands"]],
             }
             for profile in CASE_DEFINITION["scenario_profiles"]
@@ -342,6 +348,7 @@ def get_strategy_settings() -> dict[str, object]:
         "binomial_ci_min_samples": STRATEGY_SETTINGS["binomial_ci_min_samples"],
     }
 
+
 __all__ = [
     "SCENARIO_TYPE",
     "REPEAT_COUNT",
@@ -351,22 +358,12 @@ __all__ = [
     "TARGET_NPCS",
     "TARGET_PRIORITIES",
     "PARAM_RANGES",
-    "INITIAL_EXPLORATION_LIMIT",
-    "MIN_SAMPLES",
-    "MAX_SAMPLES",
-    "STABILITY_REFERENCE_POINTS",
-    "STABILITY_HISTORY_LENGTH",
-    "STABILITY_HYSTERESIS",
-    "STABILITY_SHIFT_THRESHOLD",
-    "STABILITY_REQUIRED_STREAK",
-    "STEP2_MAX_EXPLORATION",
-    "MARGIN_RANGE",
-    "MARGIN_MAX_UNCERTAINTY",
     "FIXED_PARAMS",
-    "NPC_START_TRIGGER_EGO_ACCELERATION",
-    "NPC_START_TRIGGER_MARGIN_SEC",
-    "NPC_START_TRIGGER_EXTRA_MARGIN_RATIO",
-    "NPC_START_TRIGGER_RATIO_RANGE",
+    "EGO_GOAL_ACCELERATION",
+    "EGO_GOAL_EVENT_BUFFER_SEC",
+    "EGO_GOAL_STATIC_MARGIN_M",
+    "EGO_GOAL_ROUND_STEP_M",
+    "EGO_GOAL_LEGACY_MINIMUMS",
     "SCENARIO_PROFILES",
     "FOCUS_POINTS",
     "FOCUS_NOISE",

@@ -38,6 +38,7 @@ def test_build_uturn_scenario_uses_nearest_legacy_profile_for_npc_speed() -> Non
                         "ego_init_offset": 30.0,
                         "ego_goal_lane": "516",
                         "ego_goal_offset": 20.0,
+                        "npc_start_speed_ratio": 0.898,
                     }
                 ],
             },
@@ -55,6 +56,7 @@ def test_build_uturn_scenario_uses_nearest_legacy_profile_for_npc_speed() -> Non
                         "ego_init_offset": 38.0,
                         "ego_goal_lane": "516",
                         "ego_goal_offset": 20.0,
+                        "npc_start_speed_ratio": 0.898,
                     }
                 ],
             },
@@ -67,6 +69,7 @@ def test_build_uturn_scenario_uses_nearest_legacy_profile_for_npc_speed() -> Non
     assert captured["ego_init_laneoffset"] == {"lane_id": "514", "offset": 30.0}
     assert captured["_ego_speed"] == 31.0 / 3.6
     assert captured["_npc_speed"] == 10.2 / 3.6
+    assert captured["npc_start_speed_ratio"] == 0.898
 
 
 def test_build_uturn_scenario_uses_high_speed_lane_switch_for_legacy_profile() -> None:
@@ -103,6 +106,7 @@ def test_build_uturn_scenario_uses_high_speed_lane_switch_for_legacy_profile() -
                         "ego_init_offset": 38.0,
                         "ego_goal_lane": "516",
                         "ego_goal_offset": 20.0,
+                        "npc_start_speed_ratio": 0.898,
                     },
                     {
                         "max_ego_speed": 37.5,
@@ -110,6 +114,7 @@ def test_build_uturn_scenario_uses_high_speed_lane_switch_for_legacy_profile() -
                         "ego_init_offset": 17.0,
                         "ego_goal_lane": "516",
                         "ego_goal_offset": 20.0,
+                        "npc_start_speed_ratio": 0.9083,
                     },
                     {
                         "max_ego_speed": float("inf"),
@@ -117,6 +122,7 @@ def test_build_uturn_scenario_uses_high_speed_lane_switch_for_legacy_profile() -
                         "ego_init_offset": 4.0,
                         "ego_goal_lane": "124",
                         "ego_goal_offset": 18.0,
+                        "npc_start_speed_ratio": 0.916,
                     },
                 ],
             }
@@ -129,6 +135,7 @@ def test_build_uturn_scenario_uses_high_speed_lane_switch_for_legacy_profile() -
     assert captured["ego_goal_laneoffset"] == ("124", 18.0)
     assert captured["npc_init_laneoffset"] == ("521", 32.0)
     assert captured["acceleration"] == 7.0
+    assert captured["npc_start_speed_ratio"] == 0.916
 
 
 def test_build_uturn_scenario_rejects_missing_params() -> None:

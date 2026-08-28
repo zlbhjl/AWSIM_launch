@@ -28,6 +28,20 @@ def test_resolve_case_kind_module_loads_new_cutout_module() -> None:
     assert module.SCENARIO_TYPE == "cutout"
 
 
+def test_resolve_case_kind_module_loads_new_deceleration_module() -> None:
+    module = resolve_case_kind_module(case_kind="deceleration")
+
+    assert module.__name__ == "targets.awsim.case_kinds.deceleration"
+    assert module.SCENARIO_TYPE == "deceleration"
+
+
+def test_resolve_case_kind_module_loads_new_swerve_module() -> None:
+    module = resolve_case_kind_module(case_kind="swerve")
+
+    assert module.__name__ == "targets.awsim.case_kinds.swerve"
+    assert module.SCENARIO_TYPE == "swerve"
+
+
 def test_load_rule_spec_supports_new_and_legacy_module_names() -> None:
     new_result_labels, new_formulas, new_invalid_conditions = load_rule_spec(
         case_kind="uturn",
@@ -86,4 +100,31 @@ def test_load_case_definition_reads_cutout_case_definition() -> None:
     assert definition["fixed_params"]["cutout_next_lane"] == "112"
     assert set(definition["param_ranges"].keys()) == {"ego_speed", "cutout_vy", "dx_f"}
     assert len(definition["scenario_profiles"]) == 1
-    assert definition["scenario_profiles"][0]["ego_speed_bands"][0]["ego_goal_offset"] == 180.0
+    assert definition["scenario_profiles"][0]["ego_speed_bands"][0]["ego_goal_offset"] == 210.0
+    assert definition["scenario_profiles"][0]["ego_speed_bands"][0]["spawn_trigger_speed_ratio"] < 1.0
+
+
+def test_load_case_definition_reads_deceleration_case_definition() -> None:
+    definition = load_case_definition(case_kind="deceleration")
+
+    assert definition["scenario_type"] == "deceleration"
+    assert definition["timeout_sec"] == 200.0
+    assert definition["fixed_params"]["spawn_headway_sec"] == 2.0
+    assert definition["fixed_params"]["npc_deceleration"] == 9.8
+    assert set(definition["param_ranges"].keys()) == {"ego_speed"}
+    assert len(definition["scenario_profiles"]) == 1
+    assert definition["scenario_profiles"][0]["ego_speed_bands"][0]["ego_goal_offset"] == 210.0
+    assert definition["scenario_profiles"][0]["ego_speed_bands"][0]["spawn_trigger_speed_ratio"] < 1.0
+    assert definition["scenario_profiles"][0]["ego_speed_bands"][0]["decel_trigger_speed_ratio"] < 1.0
+
+
+def test_load_case_definition_reads_swerve_case_definition() -> None:
+    definition = load_case_definition(case_kind="swerve")
+
+    assert definition["scenario_type"] == "swerve"
+    assert definition["timeout_sec"] == 200.0
+    assert definition["fixed_params"]["swerve_vy"] == 1.2
+    assert definition["fixed_params"]["swerve_right"] is True
+    assert set(definition["param_ranges"].keys()) == {"dx0", "ego_speed", "npc_speed"}
+    assert len(definition["scenario_profiles"]) == 2
+    assert definition["scenario_profiles"][0]["ego_speed_bands"][0]["npc_init_offset"] == 60.0

@@ -45,6 +45,7 @@ def build_uturn_scenario(
         _npc_speed=v_npc,
         dx0=dynamic_params["dx0"],
         acceleration=float(resolved_params["acceleration"]),
+        npc_start_speed_ratio=float(resolved_params.get("npc_start_speed_ratio", 1.0)),
     )
 
 
@@ -84,6 +85,7 @@ def _resolve_uturn_params(
         "npc_init_offset": profile["npc_init_offset"],
         "uturn_next_lane": profile["uturn_next_lane"],
         "acceleration": profile["acceleration"],
+        "npc_start_speed_ratio": band.get("npc_start_speed_ratio", 1.0),
     }
 
 

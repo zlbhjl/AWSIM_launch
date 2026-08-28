@@ -231,11 +231,61 @@ def test_build_scenario_creates_cutout_variant() -> None:
     assert manager.network == "fake-network"
     assert scenario == {"scenario": "cutout"}
     assert captured["ego_init_laneoffset"] == ("111", 0.0)
-    assert captured["ego_goal_laneoffset"] == ("111", 180.0)
+    assert captured["ego_goal_laneoffset"] == ("111", 210.0)
     assert captured["cutout_next_lane"] == "112"
     assert captured["_speed"] == 30.0 / 3.6
     assert captured["vy"] == 1.5
     assert captured["dx_f"] == 10.0
+    assert captured["spawn_trigger_speed_ratio"] < 1.0
+
+
+def test_build_scenario_creates_deceleration_variant() -> None:
+    captured: dict[str, object] = {}
+
+    def fake_deceleration_builder(**kwargs):
+        captured.update(kwargs)
+        return {"scenario": "deceleration"}
+
+    manager, scenario = build_scenario(
+        "deceleration",
+        {"ego_speed": 30.0},
+        case_kind_module_name="targets.awsim.case_kinds.deceleration",
+        scenario_manager=SimpleNamespace(network="fake-network"),
+        lane_offset_factory=lambda lane_id, offset: (lane_id, offset),
+        scenario_builders={"deceleration": fake_deceleration_builder},
+    )
+
+    assert manager.network == "fake-network"
+    assert scenario == {"scenario": "deceleration"}
+    assert captured["ego_init_laneoffset"] == ("111", 0.0)
+    assert captured["ego_goal_laneoffset"] == ("111", 210.0)
+    assert captured["_speed"] == 30.0 / 3.6
+    assert captured["spawn_headway_sec"] == 2.0
+    assert captured["deceleration"] == 9.8
+    assert captured["spawn_trigger_speed_ratio"] < 1.0
+    assert captured["decel_trigger_speed_ratio"] < 1.0
+
+
+def test_build_scenario_creates_deceleration_high_speed_profile_variant() -> None:
+    captured: dict[str, object] = {}
+
+    def fake_deceleration_builder(**kwargs):
+        captured.update(kwargs)
+        return {"scenario": "deceleration"}
+
+    _, scenario = build_scenario(
+        "deceleration",
+        {"ego_speed": 39.0},
+        case_kind_module_name="targets.awsim.case_kinds.deceleration",
+        scenario_manager=SimpleNamespace(network="fake-network"),
+        lane_offset_factory=lambda lane_id, offset: (lane_id, offset),
+        scenario_builders={"deceleration": fake_deceleration_builder},
+    )
+
+    assert scenario == {"scenario": "deceleration"}
+    assert captured["ego_goal_laneoffset"] == ("111", 280.0)
+    assert captured["spawn_trigger_speed_ratio"] < 1.0
+    assert captured["decel_trigger_speed_ratio"] < 1.0
 
 
 def test_build_scenario_creates_cutout_high_speed_profile_variant() -> None:
@@ -255,8 +305,9 @@ def test_build_scenario_creates_cutout_high_speed_profile_variant() -> None:
     )
 
     assert scenario == {"scenario": "cutout"}
-    assert captured["ego_goal_laneoffset"] == ("111", 240.0)
+    assert captured["ego_goal_laneoffset"] == ("111", 280.0)
     assert captured["cutout_next_lane"] == "112"
+    assert captured["spawn_trigger_speed_ratio"] < 1.0
 
 
 def test_run_scenario_case_runs_manager_once_for_cutout() -> None:
@@ -286,6 +337,112 @@ def test_run_scenario_case_runs_manager_once_for_cutout() -> None:
     assert outputs == [">>> [Runner] Starting 'cutout' simulation..."]
     assert len(fake_manager.runs) == 1
     assert fake_manager.runs[0][0].kind == "cutout"
+
+
+def test_run_scenario_case_runs_manager_once_for_deceleration() -> None:
+    outputs: list[str] = []
+
+    class FakeManager:
+        def __init__(self) -> None:
+            self.network = "fake-network"
+            self.runs: list[list[object]] = []
+
+        def run(self, scenarios: list[object]) -> None:
+            self.runs.append(list(scenarios))
+
+    fake_manager = FakeManager()
+
+    exit_code = run_scenario_case(
+        "deceleration",
+        {"ego_speed": 30.0},
+        case_kind_module_name="targets.awsim.case_kinds.deceleration",
+        scenario_manager=fake_manager,
+        lane_offset_factory=lambda lane_id, offset: (lane_id, offset),
+        scenario_builders={"deceleration": lambda **kwargs: SimpleNamespace(kind="deceleration", kwargs=kwargs)},
+        printer=outputs.append,
+    )
+
+    assert exit_code == 0
+    assert outputs == [">>> [Runner] Starting 'deceleration' simulation..."]
+    assert len(fake_manager.runs) == 1
+    assert fake_manager.runs[0][0].kind == "deceleration"
+
+
+def test_build_scenario_creates_swerve_variant() -> None:
+    captured: dict[str, object] = {}
+
+    def fake_swerve_builder(**kwargs):
+        captured.update(kwargs)
+        return {"scenario": "swerve"}
+
+    manager, scenario = build_scenario(
+        "swerve",
+        {"dx0": 27.0, "ego_speed": 30.0, "npc_speed": 10.0},
+        case_kind_module_name="targets.awsim.case_kinds.swerve",
+        scenario_manager=SimpleNamespace(network="fake-network"),
+        lane_offset_factory=lambda lane_id, offset: (lane_id, offset),
+        scenario_builders={"swerve": fake_swerve_builder},
+    )
+
+    assert manager.network == "fake-network"
+    assert scenario == {"scenario": "swerve"}
+    assert captured["ego_init_laneoffset"] == ("355", 10.0)
+    assert captured["ego_goal_laneoffset"] == ("214", 10.0)
+    assert captured["npc_init_laneoffset"] == ("205", 60.0)
+    assert captured["swerve_vy"] == 1.2
+    assert captured["npc_start_speed_ratio"] < 1.0
+
+
+def test_build_scenario_creates_swerve_high_speed_profile_variant() -> None:
+    captured: dict[str, object] = {}
+
+    def fake_swerve_builder(**kwargs):
+        captured.update(kwargs)
+        return {"scenario": "swerve"}
+
+    _, scenario = build_scenario(
+        "swerve",
+        {"dx0": 35.0, "ego_speed": 39.0, "npc_speed": 14.9},
+        case_kind_module_name="targets.awsim.case_kinds.swerve",
+        scenario_manager=SimpleNamespace(network="fake-network"),
+        lane_offset_factory=lambda lane_id, offset: (lane_id, offset),
+        scenario_builders={"swerve": fake_swerve_builder},
+    )
+
+    assert scenario == {"scenario": "swerve"}
+    assert captured["ego_init_laneoffset"] == ("268", 0.0)
+    assert captured["ego_goal_laneoffset"] == ("214", 26.0)
+    assert captured["npc_init_laneoffset"] == ("205", 62.0)
+    assert captured["acceleration"] == 7.0
+
+
+def test_run_scenario_case_runs_manager_once_for_swerve() -> None:
+    outputs: list[str] = []
+
+    class FakeManager:
+        def __init__(self) -> None:
+            self.network = "fake-network"
+            self.runs: list[list[object]] = []
+
+        def run(self, scenarios: list[object]) -> None:
+            self.runs.append(list(scenarios))
+
+    fake_manager = FakeManager()
+
+    exit_code = run_scenario_case(
+        "swerve",
+        {"dx0": 27.0, "ego_speed": 30.0, "npc_speed": 10.0},
+        case_kind_module_name="targets.awsim.case_kinds.swerve",
+        scenario_manager=fake_manager,
+        lane_offset_factory=lambda lane_id, offset: (lane_id, offset),
+        scenario_builders={"swerve": lambda **kwargs: SimpleNamespace(kind="swerve", kwargs=kwargs)},
+        printer=outputs.append,
+    )
+
+    assert exit_code == 0
+    assert outputs == [">>> [Runner] Starting 'swerve' simulation..."]
+    assert len(fake_manager.runs) == 1
+    assert fake_manager.runs[0][0].kind == "swerve"
 
 
 def test_install_scenario_goal_timeout_marks_timeout_and_returns() -> None:

@@ -42,6 +42,7 @@ def test_build_cutin_scenario_maps_dynamic_and_fixed_params() -> None:
     assert captured["_cutin_vy"] == 1.4
     assert captured["dx0"] == 12.0
     assert captured["acceleration"] == 7.0
+    assert captured["npc_start_speed_ratio"] == 1.0
 
 
 def test_build_cutin_scenario_forwards_optional_body_style() -> None:
@@ -165,6 +166,7 @@ def test_build_cutin_scenario_uses_speed_profile_offsets() -> None:
                         "ego_goal_lane": "111",
                         "ego_goal_offset": 150.0,
                         "npc_init_offset": 80.0,
+                        "npc_start_speed_ratio": 0.898,
                     }
                 ],
             }
@@ -178,3 +180,4 @@ def test_build_cutin_scenario_uses_speed_profile_offsets() -> None:
     assert captured["npc_init_laneoffset"] == ("112", 80.0)
     assert captured["cutin_next_lane"] == "111"
     assert captured["acceleration"] == 7.0
+    assert captured["npc_start_speed_ratio"] == 0.898

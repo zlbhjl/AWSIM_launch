@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 
 
-def build_cutout_scenario(
+def build_deceleration_scenario(
     *,
     network: object,
     dynamic_params: Mapping[str, float],
@@ -14,7 +14,7 @@ def build_cutout_scenario(
 ) -> object:
     _validate_required_params(dynamic_params)
 
-    resolved_params = _resolve_cutout_params(
+    resolved_params = _resolve_deceleration_params(
         dynamic_params=dynamic_params,
         fixed_params=fixed_params,
         scenario_profiles=scenario_profiles,
@@ -30,11 +30,12 @@ def build_cutout_scenario(
             str(resolved_params["ego_goal_lane"]),
             float(resolved_params["ego_goal_offset"]),
         ),
-        "cutout_next_lane": str(resolved_params["cutout_next_lane"]),
         "_speed": float(dynamic_params["ego_speed"]) / 3.6,
-        "vy": float(dynamic_params["cutout_vy"]),
-        "dx_f": float(dynamic_params["dx_f"]),
-        "spawn_trigger_speed_ratio": float(resolved_params.get("spawn_trigger_speed_ratio", 1.0)),
+        "spawn_headway_sec": float(resolved_params["spawn_headway_sec"]),
+        "spawn_trigger_speed_ratio": float(resolved_params["spawn_trigger_speed_ratio"]),
+        "npc_cruise_acceleration": float(resolved_params["npc_cruise_acceleration"]),
+        "deceleration": float(resolved_params["npc_deceleration"]),
+        "decel_trigger_speed_ratio": float(resolved_params["decel_trigger_speed_ratio"]),
     }
 
     if "body_style" in resolved_params:
@@ -44,16 +45,11 @@ def build_cutout_scenario(
 
 
 def _validate_required_params(dynamic_params: Mapping[str, float]) -> None:
-    missing = [
-        key
-        for key in ("ego_speed", "cutout_vy", "dx_f")
-        if key not in dynamic_params
-    ]
-    if missing:
-        raise KeyError(f"Missing dynamic params: {', '.join(missing)}")
+    if "ego_speed" not in dynamic_params:
+        raise KeyError("Missing dynamic params: ego_speed")
 
 
-def _resolve_cutout_params(
+def _resolve_deceleration_params(
     *,
     dynamic_params: Mapping[str, float],
     fixed_params: Mapping[str, object],
@@ -75,8 +71,20 @@ def _resolve_cutout_params(
             "ego_init_offset": band["ego_init_offset"],
             "ego_goal_lane": band["ego_goal_lane"],
             "ego_goal_offset": band["ego_goal_offset"],
-            "cutout_next_lane": profile["cutout_next_lane"],
-            "spawn_trigger_speed_ratio": band.get("spawn_trigger_speed_ratio", 1.0),
+            "spawn_headway_sec": band.get("spawn_headway_sec", fixed_params["spawn_headway_sec"]),
+            "spawn_trigger_speed_ratio": band.get(
+                "spawn_trigger_speed_ratio",
+                fixed_params["spawn_trigger_speed_ratio"],
+            ),
+            "npc_cruise_acceleration": band.get(
+                "npc_cruise_acceleration",
+                fixed_params["npc_cruise_acceleration"],
+            ),
+            "npc_deceleration": band.get("npc_deceleration", fixed_params["npc_deceleration"]),
+            "decel_trigger_speed_ratio": band.get(
+                "decel_trigger_speed_ratio",
+                fixed_params["decel_trigger_speed_ratio"],
+            ),
         }
     )
     return resolved

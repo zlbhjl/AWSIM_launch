@@ -1,13 +1,14 @@
 from __future__ import annotations
 
+import math
+
 NPC_START_TRIGGER_EGO_ACCELERATION = 2.0
 NPC_START_TRIGGER_MARGIN_SEC = 0.3
 NPC_START_TRIGGER_EXTRA_MARGIN_RATIO = 0.03
 NPC_START_TRIGGER_RATIO_RANGE = (0.85, 0.98)
 
-SCENARIO_TYPE = "uturn"
+SCENARIO_TYPE = "swerve"
 
-# Legacy worker loops still read this upper bound while the v2 path migrates.
 REPEAT_COUNT = 10000
 TIMEOUT_SEC = 200
 
@@ -54,9 +55,9 @@ TARGET_PRIORITIES = [
 ]
 
 PARAM_RANGES = {
-    "dx0": (10.0, 25.0),
+    "dx0": (24.0, 43.0),
     "ego_speed": (30.0, 40.0),
-    "npc_speed": (10.0, 25.0),
+    "npc_speed": (10.0, 15.0),
 }
 
 INITIAL_EXPLORATION_LIMIT = 100
@@ -74,15 +75,26 @@ MARGIN_RANGE = (0.3, 0.48)
 MARGIN_MAX_UNCERTAINTY = 0.05
 
 FIXED_PARAMS = {
-    "ego_init_lane": "514",
-    "ego_init_offset": 38,
-    "ego_goal_lane": "516",
-    "ego_goal_offset": 20,
-    "npc_init_lane": "521",
-    "npc_init_offset": 32,
-    "uturn_next_lane": "511",
+    "ego_init_lane": "355",
+    "ego_init_offset": 10.0,
+    "ego_goal_lane": "214",
+    "ego_goal_offset": 10.0,
+    "npc_init_lane": "205",
+    "npc_init_offset": 60.0,
+    "swerve_vy": 1.2,
+    "swerve_ny": 1.8,
+    "swerve_dis": 2.0,
+    "swerve_right": True,
     "acceleration": 7.0,
 }
+
+NPC_INIT_EGO_ACCELERATION = 2.0
+NPC_INIT_MARGIN_SEC = 0.3
+NPC_INIT_ROUND_STEP_M = 1.0
+
+EGO_GOAL_ACCELERATION = 2.0
+EGO_GOAL_STATIC_MARGIN_M = 5.0
+EGO_GOAL_ROUND_STEP_M = 1.0
 
 
 def _estimate_npc_start_speed_ratio(
@@ -100,84 +112,239 @@ def _estimate_npc_start_speed_ratio(
     lower, upper = NPC_START_TRIGGER_RATIO_RANGE
     return round(min(max(ratio, lower), upper), 4)
 
+
+def _estimate_npc_init_offset(
+    *,
+    ego_speed: float,
+    npc_speed: float,
+    swerve_vy: float = float(FIXED_PARAMS["swerve_vy"]),
+    swerve_ny: float = float(FIXED_PARAMS["swerve_ny"]),
+    swerve_dis: float = float(FIXED_PARAMS["swerve_dis"]),
+    ego_acceleration: float = NPC_INIT_EGO_ACCELERATION,
+    npc_acceleration: float = float(FIXED_PARAMS["acceleration"]),
+    margin_sec: float = NPC_INIT_MARGIN_SEC,
+    round_step_m: float = NPC_INIT_ROUND_STEP_M,
+) -> float:
+    legacy_minimum = _legacy_minimum_npc_init_offset(
+        ego_speed=ego_speed,
+        npc_speed=npc_speed,
+    )
+    reference_ego_speed, reference_npc_speed = _reference_speed_pair(
+        ego_speed=ego_speed,
+        npc_speed=npc_speed,
+    )
+    required_gap = _estimate_required_initial_gap(
+        ego_speed=ego_speed,
+        npc_speed=npc_speed,
+        swerve_vy=swerve_vy,
+        swerve_ny=swerve_ny,
+        swerve_dis=swerve_dis,
+        ego_acceleration=ego_acceleration,
+        npc_acceleration=npc_acceleration,
+        margin_sec=margin_sec,
+    )
+    reference_gap = _estimate_required_initial_gap(
+        ego_speed=reference_ego_speed,
+        npc_speed=reference_npc_speed,
+        swerve_vy=swerve_vy,
+        swerve_ny=swerve_ny,
+        swerve_dis=swerve_dis,
+        ego_acceleration=ego_acceleration,
+        npc_acceleration=npc_acceleration,
+        margin_sec=margin_sec,
+    )
+    extra_gap = max(required_gap - reference_gap, 0.0)
+    rounded_extra_gap = round(extra_gap / max(round_step_m, 1e-5)) * round_step_m
+    return round(legacy_minimum + rounded_extra_gap, 1)
+
+
+def _estimate_required_initial_gap(
+    *,
+    ego_speed: float,
+    npc_speed: float,
+    swerve_vy: float,
+    swerve_ny: float,
+    swerve_dis: float,
+    ego_acceleration: float,
+    npc_acceleration: float,
+    margin_sec: float,
+) -> float:
+    v_ego = ego_speed / 3.6
+    v_npc = npc_speed / 3.6
+    v_npc_long = _npc_longitudinal_speed(v_npc=v_npc, swerve_vy=swerve_vy)
+    ego_warmup_distance = (v_ego * v_ego) / max(2.0 * ego_acceleration, 1e-5)
+    npc_ready_time = (v_npc / max(npc_acceleration, 1e-5)) + margin_sec
+    swerve_entry_time = _estimate_swerve_event_time(
+        npc_speed=npc_speed,
+        swerve_vy=swerve_vy,
+        swerve_ny=swerve_ny,
+        swerve_dis=swerve_dis,
+    )
+    closing_speed = v_ego + v_npc_long
+    return ego_warmup_distance + closing_speed * (npc_ready_time + swerve_entry_time)
+
+
+def _estimate_ego_goal_offset(
+    *,
+    ego_speed: float,
+    npc_speed: float,
+    swerve_vy: float = float(FIXED_PARAMS["swerve_vy"]),
+    swerve_ny: float = float(FIXED_PARAMS["swerve_ny"]),
+    swerve_dis: float = float(FIXED_PARAMS["swerve_dis"]),
+    ego_acceleration: float = EGO_GOAL_ACCELERATION,
+    static_margin_m: float = EGO_GOAL_STATIC_MARGIN_M,
+    round_step_m: float = EGO_GOAL_ROUND_STEP_M,
+) -> float:
+    legacy_minimum = _legacy_minimum_ego_goal_offset(ego_speed=ego_speed)
+    reference_ego_speed, reference_npc_speed = _reference_speed_pair(
+        ego_speed=ego_speed,
+        npc_speed=npc_speed,
+    )
+    required_distance = _estimate_required_goal_distance(
+        ego_speed=ego_speed,
+        npc_speed=npc_speed,
+        swerve_vy=swerve_vy,
+        swerve_ny=swerve_ny,
+        swerve_dis=swerve_dis,
+        ego_acceleration=ego_acceleration,
+        static_margin_m=static_margin_m,
+    )
+    reference_distance = _estimate_required_goal_distance(
+        ego_speed=reference_ego_speed,
+        npc_speed=reference_npc_speed,
+        swerve_vy=swerve_vy,
+        swerve_ny=swerve_ny,
+        swerve_dis=swerve_dis,
+        ego_acceleration=ego_acceleration,
+        static_margin_m=static_margin_m,
+    )
+    extra_distance = max(required_distance - reference_distance, 0.0)
+    rounded_extra_distance = round(extra_distance / max(round_step_m, 1e-5)) * round_step_m
+    return round(legacy_minimum + rounded_extra_distance, 1)
+
+
+def _estimate_required_goal_distance(
+    *,
+    ego_speed: float,
+    npc_speed: float,
+    swerve_vy: float,
+    swerve_ny: float,
+    swerve_dis: float,
+    ego_acceleration: float,
+    static_margin_m: float,
+) -> float:
+    v_ego = ego_speed / 3.6
+    warmup_distance = (v_ego * v_ego) / max(2.0 * ego_acceleration, 1e-5)
+    event_time = _estimate_swerve_event_time(
+        npc_speed=npc_speed,
+        swerve_vy=swerve_vy,
+        swerve_ny=swerve_ny,
+        swerve_dis=swerve_dis,
+    )
+    return warmup_distance + (v_ego * event_time) + static_margin_m
+
+
+def _estimate_swerve_event_time(
+    *,
+    npc_speed: float,
+    swerve_vy: float,
+    swerve_ny: float,
+    swerve_dis: float,
+) -> float:
+    if swerve_vy <= 0.0:
+        return 0.0
+    v_npc_long = _npc_longitudinal_speed(v_npc=npc_speed / 3.6, swerve_vy=swerve_vy)
+    if v_npc_long <= 0.0:
+        return 0.0
+    return (2.0 * swerve_ny / swerve_vy) + (swerve_dis / v_npc_long)
+
+
+def _npc_longitudinal_speed(*, v_npc: float, swerve_vy: float) -> float:
+    return math.sqrt(max((v_npc * v_npc) - (swerve_vy * swerve_vy), 0.0))
+
+
+def _legacy_minimum_npc_init_offset(*, ego_speed: float, npc_speed: float) -> float:
+    if ego_speed < 35.0:
+        if npc_speed < 12.5:
+            return 60.0
+        return 55.0
+    return 62.0
+
+
+def _legacy_minimum_ego_goal_offset(*, ego_speed: float) -> float:
+    if ego_speed < 35.0:
+        return 10.0
+    return 26.0
+
+
+def _reference_speed_pair(*, ego_speed: float, npc_speed: float) -> tuple[float, float]:
+    reference_ego_speed = 30.0 if ego_speed < 35.0 else 40.0
+    reference_npc_speed = 10.0 if npc_speed < 12.5 else 15.0
+    return reference_ego_speed, reference_npc_speed
+
+
+def _build_swerve_profile(
+    *,
+    profile_id: str,
+    npc_speed: float,
+    acceleration: float = 7.0,
+) -> dict[str, object]:
+    return {
+        "profile_id": profile_id,
+        "npc_speed": npc_speed,
+        "npc_init_lane": "205",
+        "acceleration": acceleration,
+        "ego_speed_bands": [
+            {
+                "max_ego_speed": 35.0,
+                "ego_init_lane": "355",
+                "ego_init_offset": 10.0,
+                "ego_goal_lane": "214",
+                "ego_goal_offset": _estimate_ego_goal_offset(
+                    ego_speed=30.0,
+                    npc_speed=npc_speed,
+                ),
+                "npc_init_offset": _estimate_npc_init_offset(
+                    ego_speed=30.0,
+                    npc_speed=npc_speed,
+                ),
+                "npc_start_speed_ratio": _estimate_npc_start_speed_ratio(ego_speed=30.0),
+            },
+            {
+                "max_ego_speed": float("inf"),
+                "ego_init_lane": "268",
+                "ego_init_offset": 0.0,
+                "ego_goal_lane": "214",
+                "ego_goal_offset": _estimate_ego_goal_offset(
+                    ego_speed=40.0,
+                    npc_speed=npc_speed,
+                ),
+                "npc_init_offset": _estimate_npc_init_offset(
+                    ego_speed=40.0,
+                    npc_speed=npc_speed,
+                ),
+                "npc_start_speed_ratio": _estimate_npc_start_speed_ratio(ego_speed=40.0),
+            },
+        ],
+    }
+
+
 SCENARIO_PROFILES = [
-    {
-        "profile_id": "right_10",
-        "npc_speed": 10.0,
-        "npc_init_lane": "521",
-        "npc_init_offset": 32.0,
-        "uturn_next_lane": "511",
-        "acceleration": 7.0,
-        "ego_speed_bands": [
-            {
-                "max_ego_speed": 32.5,
-                "ego_init_lane": "514",
-                "ego_init_offset": 30.0,
-                "ego_goal_lane": "516",
-                "ego_goal_offset": 20.0,
-                "npc_start_speed_ratio": _estimate_npc_start_speed_ratio(ego_speed=30.0),
-            },
-            {
-                "max_ego_speed": 37.5,
-                "ego_init_lane": "514",
-                "ego_init_offset": 17.0,
-                "ego_goal_lane": "516",
-                "ego_goal_offset": 20.0,
-                "npc_start_speed_ratio": _estimate_npc_start_speed_ratio(ego_speed=35.0),
-            },
-            {
-                "max_ego_speed": float("inf"),
-                "ego_init_lane": "282",
-                "ego_init_offset": 4.0,
-                "ego_goal_lane": "124",
-                "ego_goal_offset": 18.0,
-                "npc_start_speed_ratio": _estimate_npc_start_speed_ratio(ego_speed=40.0),
-            },
-        ],
-    },
-    {
-        "profile_id": "right_15",
-        "npc_speed": 15.0,
-        "npc_init_lane": "521",
-        "npc_init_offset": 32.0,
-        "uturn_next_lane": "511",
-        "acceleration": 7.0,
-        "ego_speed_bands": [
-            {
-                "max_ego_speed": 32.5,
-                "ego_init_lane": "514",
-                "ego_init_offset": 38.0,
-                "ego_goal_lane": "516",
-                "ego_goal_offset": 20.0,
-                "npc_start_speed_ratio": _estimate_npc_start_speed_ratio(ego_speed=30.0),
-            },
-            {
-                "max_ego_speed": 37.5,
-                "ego_init_lane": "514",
-                "ego_init_offset": 17.0,
-                "ego_goal_lane": "516",
-                "ego_goal_offset": 20.0,
-                "npc_start_speed_ratio": _estimate_npc_start_speed_ratio(ego_speed=35.0),
-            },
-            {
-                "max_ego_speed": float("inf"),
-                "ego_init_lane": "282",
-                "ego_init_offset": 4.0,
-                "ego_goal_lane": "124",
-                "ego_goal_offset": 18.0,
-                "npc_start_speed_ratio": _estimate_npc_start_speed_ratio(ego_speed=40.0),
-            },
-        ],
-    },
+    _build_swerve_profile(
+        profile_id="swerve_10",
+        npc_speed=10.0,
+    ),
+    _build_swerve_profile(
+        profile_id="swerve_15",
+        npc_speed=15.0,
+    ),
 ]
 
 FOCUS_POINTS = [
-    {"dx0": 10.09, "ego_speed": 37.98, "npc_speed": 14.20},
-    {"dx0": 14.81, "ego_speed": 39.80, "npc_speed": 13.49},
-    {"dx0": 10.23, "ego_speed": 35.96, "npc_speed": 17.80},
-    {"dx0": 13.29, "ego_speed": 39.33, "npc_speed": 13.95},
-    {"dx0": 14.16, "ego_speed": 35.43, "npc_speed": 10.02},
-    {"dx0": 11.17, "ego_speed": 31.90, "npc_speed": 11.91},
+    {"dx0": 27.0, "ego_speed": 30.0, "npc_speed": 10.0},
+    {"dx0": 29.0, "ego_speed": 30.0, "npc_speed": 15.0},
+    {"dx0": 34.0, "ego_speed": 40.0, "npc_speed": 10.0},
+    {"dx0": 35.0, "ego_speed": 40.0, "npc_speed": 15.0},
 ]
 FOCUS_NOISE = 0.05
 
@@ -238,8 +405,6 @@ CASE_DEFINITION = {
             "profile_id": profile["profile_id"],
             "npc_speed": profile["npc_speed"],
             "npc_init_lane": profile["npc_init_lane"],
-            "npc_init_offset": profile["npc_init_offset"],
-            "uturn_next_lane": profile["uturn_next_lane"],
             "acceleration": profile["acceleration"],
             "ego_speed_bands": [dict(band) for band in profile["ego_speed_bands"]],
         }
@@ -295,8 +460,6 @@ def get_case_definition() -> dict[str, object]:
                 "profile_id": profile["profile_id"],
                 "npc_speed": profile["npc_speed"],
                 "npc_init_lane": profile["npc_init_lane"],
-                "npc_init_offset": profile["npc_init_offset"],
-                "uturn_next_lane": profile["uturn_next_lane"],
                 "acceleration": profile["acceleration"],
                 "ego_speed_bands": [dict(band) for band in profile["ego_speed_bands"]],
             }
@@ -342,6 +505,7 @@ def get_strategy_settings() -> dict[str, object]:
         "binomial_ci_min_samples": STRATEGY_SETTINGS["binomial_ci_min_samples"],
     }
 
+
 __all__ = [
     "SCENARIO_TYPE",
     "REPEAT_COUNT",
@@ -351,17 +515,6 @@ __all__ = [
     "TARGET_NPCS",
     "TARGET_PRIORITIES",
     "PARAM_RANGES",
-    "INITIAL_EXPLORATION_LIMIT",
-    "MIN_SAMPLES",
-    "MAX_SAMPLES",
-    "STABILITY_REFERENCE_POINTS",
-    "STABILITY_HISTORY_LENGTH",
-    "STABILITY_HYSTERESIS",
-    "STABILITY_SHIFT_THRESHOLD",
-    "STABILITY_REQUIRED_STREAK",
-    "STEP2_MAX_EXPLORATION",
-    "MARGIN_RANGE",
-    "MARGIN_MAX_UNCERTAINTY",
     "FIXED_PARAMS",
     "NPC_START_TRIGGER_EGO_ACCELERATION",
     "NPC_START_TRIGGER_MARGIN_SEC",

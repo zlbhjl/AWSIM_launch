@@ -35,6 +35,7 @@ def test_build_cutout_scenario_maps_dynamic_and_fixed_params() -> None:
     assert captured["_speed"] == 30.0 / 3.6
     assert captured["vy"] == 1.5
     assert captured["dx_f"] == 10.0
+    assert captured["spawn_trigger_speed_ratio"] == 1.0
 
 
 def test_build_cutout_scenario_forwards_optional_body_style() -> None:
@@ -113,6 +114,7 @@ def test_build_cutout_scenario_uses_speed_profile_goal_offset() -> None:
                         "ego_init_offset": 0.0,
                         "ego_goal_lane": "111",
                         "ego_goal_offset": 180.0,
+                        "spawn_trigger_speed_ratio": 0.94,
                     },
                     {
                         "max_ego_speed": 37.5,
@@ -120,6 +122,7 @@ def test_build_cutout_scenario_uses_speed_profile_goal_offset() -> None:
                         "ego_init_offset": 0.0,
                         "ego_goal_lane": "111",
                         "ego_goal_offset": 210.0,
+                        "spawn_trigger_speed_ratio": 0.93,
                     },
                     {
                         "max_ego_speed": float("inf"),
@@ -127,6 +130,7 @@ def test_build_cutout_scenario_uses_speed_profile_goal_offset() -> None:
                         "ego_init_offset": 0.0,
                         "ego_goal_lane": "111",
                         "ego_goal_offset": 240.0,
+                        "spawn_trigger_speed_ratio": 0.92,
                     },
                 ],
             }
@@ -138,3 +142,4 @@ def test_build_cutout_scenario_uses_speed_profile_goal_offset() -> None:
     assert captured["ego_init_laneoffset"] == ("111", 0.0)
     assert captured["ego_goal_laneoffset"] == ("111", 240.0)
     assert captured["cutout_next_lane"] == "112"
+    assert captured["spawn_trigger_speed_ratio"] == 0.92

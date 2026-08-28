@@ -9,8 +9,10 @@ from typing import Callable, Mapping, Sequence
 
 from targets.awsim.case_kinds import load_case_definition
 from targets.awsim.scenario_builders import (
+    build_deceleration_scenario,
     build_cutin_scenario,
     build_cutout_scenario,
+    build_swerve_scenario,
     build_uturn_scenario,
 )
 
@@ -33,7 +35,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--type",
         type=str,
         required=True,
-        help="Scenario type (e.g., uturn, cutin, cutout)",
+        help="Scenario type (e.g., uturn, cutin, cutout, swerve, deceleration)",
     )
     parser.add_argument(
         "--config-module",
@@ -104,6 +106,30 @@ def build_scenario(
     if scenario_type == "cutout":
         builder = resolved_scenario_builders.get("cutout") or _load_cutout_builder()
         scenario = build_cutout_scenario(
+            network=resolved_manager.network,
+            dynamic_params=dynamic_params,
+            fixed_params=fixed_params,
+            scenario_profiles=case_definition.get("scenario_profiles"),
+            lane_offset_factory=resolved_lane_offset_factory,
+            scenario_builder=builder,
+        )
+        return resolved_manager, scenario
+
+    if scenario_type == "deceleration":
+        builder = resolved_scenario_builders.get("deceleration") or _load_deceleration_builder()
+        scenario = build_deceleration_scenario(
+            network=resolved_manager.network,
+            dynamic_params=dynamic_params,
+            fixed_params=fixed_params,
+            scenario_profiles=case_definition.get("scenario_profiles"),
+            lane_offset_factory=resolved_lane_offset_factory,
+            scenario_builder=builder,
+        )
+        return resolved_manager, scenario
+
+    if scenario_type == "swerve":
+        builder = resolved_scenario_builders.get("swerve") or _load_swerve_builder()
+        scenario = build_swerve_scenario(
             network=resolved_manager.network,
             dynamic_params=dynamic_params,
             fixed_params=fixed_params,
@@ -218,6 +244,20 @@ def _load_cutout_builder() -> Callable[..., object]:
     from scenarios.cutout.dynamic_spawn import make_cutout_scenario
 
     return make_cutout_scenario
+
+
+def _load_deceleration_builder() -> Callable[..., object]:
+    ensure_runtime_paths()
+    from scenarios.deceleration.dynamic_spawn import make_deceleration_scenario
+
+    return make_deceleration_scenario
+
+
+def _load_swerve_builder() -> Callable[..., object]:
+    ensure_runtime_paths()
+    from scenarios.swerve.base import make_swerve_scenario
+
+    return make_swerve_scenario
 
 
 def _resolve_scenario_timeout_sec(

@@ -40,6 +40,7 @@ def build_cutin_scenario(
         "_cutin_vy": float(dynamic_params.get("cutin_vy", resolved_params["cutin_vy"])),
         "dx0": float(dynamic_params["dx0"]),
         "acceleration": float(resolved_params.get("acceleration", 7.0)),
+        "npc_start_speed_ratio": float(resolved_params.get("npc_start_speed_ratio", 1.0)),
     }
 
     if "body_style" in resolved_params:
@@ -87,6 +88,7 @@ def _resolve_cutin_params(
             "npc_init_offset": band["npc_init_offset"],
             "cutin_next_lane": profile["cutin_next_lane"],
             "acceleration": profile["acceleration"],
+            "npc_start_speed_ratio": band.get("npc_start_speed_ratio", 1.0),
         }
     )
     return resolved

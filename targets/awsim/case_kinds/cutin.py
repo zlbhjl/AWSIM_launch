@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+NPC_START_TRIGGER_EGO_ACCELERATION = 2.0
+NPC_START_TRIGGER_MARGIN_SEC = 0.3
+NPC_START_TRIGGER_EXTRA_MARGIN_RATIO = 0.03
+NPC_START_TRIGGER_RATIO_RANGE = (0.85, 0.98)
 
 SCENARIO_TYPE = "cutin"
 
@@ -81,6 +85,22 @@ FIXED_PARAMS = {
 }
 
 
+def _estimate_npc_start_speed_ratio(
+    *,
+    ego_speed: float,
+    ego_acceleration: float = NPC_START_TRIGGER_EGO_ACCELERATION,
+    margin_sec: float = NPC_START_TRIGGER_MARGIN_SEC,
+    extra_margin_ratio: float = NPC_START_TRIGGER_EXTRA_MARGIN_RATIO,
+) -> float:
+    v_target = ego_speed / 3.6
+    if v_target <= 0.0:
+        return 1.0
+
+    ratio = 1.0 - (ego_acceleration * margin_sec / v_target) - extra_margin_ratio
+    lower, upper = NPC_START_TRIGGER_RATIO_RANGE
+    return round(min(max(ratio, lower), upper), 4)
+
+
 def _build_cutin_profile(
     *,
     profile_id: str,
@@ -119,6 +139,7 @@ def _build_ego_speed_band(
         "ego_goal_lane": "111",
         "ego_goal_offset": _estimate_ego_goal_offset(ego_speed=ego_speed_design),
         "npc_init_offset": npc_init_offset,
+        "npc_start_speed_ratio": _estimate_npc_start_speed_ratio(ego_speed=ego_speed_design),
     }
 
 
@@ -336,6 +357,10 @@ __all__ = [
     "MARGIN_RANGE",
     "MARGIN_MAX_UNCERTAINTY",
     "FIXED_PARAMS",
+    "NPC_START_TRIGGER_EGO_ACCELERATION",
+    "NPC_START_TRIGGER_MARGIN_SEC",
+    "NPC_START_TRIGGER_EXTRA_MARGIN_RATIO",
+    "NPC_START_TRIGGER_RATIO_RANGE",
     "SCENARIO_PROFILES",
     "FOCUS_POINTS",
     "FOCUS_NOISE",

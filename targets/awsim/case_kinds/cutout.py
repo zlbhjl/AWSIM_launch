@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+
 
 SCENARIO_TYPE = "cutout"
 
@@ -76,32 +78,109 @@ FIXED_PARAMS = {
     "cutout_next_lane": "112",
 }
 
+SPAWN_TRIGGER_EGO_ACCELERATION = 2.0
+SPAWN_TRIGGER_NPC_ACCELERATION = 500.0
+SPAWN_TRIGGER_MARGIN_SEC = 0.3
+SPAWN_TRIGGER_EXTRA_MARGIN_RATIO = 0.05
+SPAWN_TRIGGER_RATIO_RANGE = (0.85, 0.98)
+LANE_CHANGE_TRIGGER_SPEED_RATIO = 1.0
+
+EGO_GOAL_ACCELERATION = 2.0
+EGO_GOAL_EVENT_BUFFER_SEC = 20.0
+EGO_GOAL_STATIC_MARGIN_M = 23.0
+EGO_GOAL_ROUND_STEP_M = 10.0
+EGO_GOAL_LEGACY_MINIMUMS = (
+    (32.5, 180.0),
+    (37.5, 210.0),
+    (float("inf"), 240.0),
+)
+
+
+def _estimate_spawn_trigger_speed_ratio(
+    *,
+    ego_speed_kmh: float,
+    ego_acceleration: float = SPAWN_TRIGGER_EGO_ACCELERATION,
+    npc_acceleration: float = SPAWN_TRIGGER_NPC_ACCELERATION,
+    lane_change_speed_ratio: float = LANE_CHANGE_TRIGGER_SPEED_RATIO,
+    margin_sec: float = SPAWN_TRIGGER_MARGIN_SEC,
+    extra_margin_ratio: float = SPAWN_TRIGGER_EXTRA_MARGIN_RATIO,
+) -> float:
+    v_target = ego_speed_kmh / 3.6
+    if v_target <= 0.0:
+        return 1.0
+
+    npc_ready_time = (lane_change_speed_ratio * v_target) / max(npc_acceleration, 1e-5)
+    r_s_min = 1.0 - (ego_acceleration * (npc_ready_time + margin_sec) / v_target)
+    ratio = r_s_min - extra_margin_ratio
+    return round(
+        min(max(ratio, SPAWN_TRIGGER_RATIO_RANGE[0]), SPAWN_TRIGGER_RATIO_RANGE[1]),
+        4,
+    )
+
+
+def _estimate_ego_goal_offset(
+    *,
+    ego_speed_kmh: float,
+    ego_acceleration: float = EGO_GOAL_ACCELERATION,
+    event_buffer_sec: float = EGO_GOAL_EVENT_BUFFER_SEC,
+    static_margin_m: float = EGO_GOAL_STATIC_MARGIN_M,
+    round_step_m: float = EGO_GOAL_ROUND_STEP_M,
+    ego_init_offset: float = float(FIXED_PARAMS["ego_init_offset"]),
+) -> float:
+    v_ego = ego_speed_kmh / 3.6
+    if v_ego <= 0.0:
+        return float(FIXED_PARAMS["ego_goal_offset"])
+
+    warmup_distance = (v_ego * v_ego) / max(2.0 * ego_acceleration, 1e-5)
+    event_distance = v_ego * event_buffer_sec
+    goal_offset = ego_init_offset + warmup_distance + event_distance + static_margin_m
+    rounded_goal_offset = round(goal_offset / max(round_step_m, 1e-5)) * round_step_m
+    return max(rounded_goal_offset, _legacy_minimum_ego_goal_offset(ego_speed_kmh=ego_speed_kmh))
+
+
+def _legacy_minimum_ego_goal_offset(*, ego_speed_kmh: float) -> float:
+    for max_ego_speed, goal_offset in EGO_GOAL_LEGACY_MINIMUMS:
+        if ego_speed_kmh < max_ego_speed:
+            return goal_offset
+    return float(FIXED_PARAMS["ego_goal_offset"])
+
+
+def _build_cutout_speed_band(
+    *,
+    max_ego_speed: float,
+    ego_speed_design: float,
+) -> dict[str, object]:
+    return {
+        "max_ego_speed": max_ego_speed,
+        "ego_init_lane": "111",
+        "ego_init_offset": 0.0,
+        "ego_goal_lane": "111",
+        "ego_goal_offset": _estimate_ego_goal_offset(
+            ego_speed_kmh=ego_speed_design,
+        ),
+        "spawn_trigger_speed_ratio": _estimate_spawn_trigger_speed_ratio(
+            ego_speed_kmh=ego_speed_design,
+        ),
+    }
+
+
 SCENARIO_PROFILES = [
     {
         "profile_id": "default",
         "cutout_next_lane": "112",
         "ego_speed_bands": [
-            {
-                "max_ego_speed": 32.5,
-                "ego_init_lane": "111",
-                "ego_init_offset": 0.0,
-                "ego_goal_lane": "111",
-                "ego_goal_offset": 180.0,
-            },
-            {
-                "max_ego_speed": 37.5,
-                "ego_init_lane": "111",
-                "ego_init_offset": 0.0,
-                "ego_goal_lane": "111",
-                "ego_goal_offset": 210.0,
-            },
-            {
-                "max_ego_speed": float("inf"),
-                "ego_init_lane": "111",
-                "ego_init_offset": 0.0,
-                "ego_goal_lane": "111",
-                "ego_goal_offset": 240.0,
-            },
+            _build_cutout_speed_band(
+                max_ego_speed=32.5,
+                ego_speed_design=30.0,
+            ),
+            _build_cutout_speed_band(
+                max_ego_speed=37.5,
+                ego_speed_design=35.0,
+            ),
+            _build_cutout_speed_band(
+                max_ego_speed=float("inf"),
+                ego_speed_design=40.0,
+            ),
         ],
     }
 ]
@@ -278,6 +357,15 @@ __all__ = [
     "TARGET_PRIORITIES",
     "PARAM_RANGES",
     "FIXED_PARAMS",
+    "SPAWN_TRIGGER_EGO_ACCELERATION",
+    "SPAWN_TRIGGER_NPC_ACCELERATION",
+    "SPAWN_TRIGGER_MARGIN_SEC",
+    "SPAWN_TRIGGER_EXTRA_MARGIN_RATIO",
+    "SPAWN_TRIGGER_RATIO_RANGE",
+    "LANE_CHANGE_TRIGGER_SPEED_RATIO",
+    "EGO_GOAL_ACCELERATION",
+    "EGO_GOAL_STATIC_MARGIN_M",
+    "EGO_GOAL_ROUND_STEP_M",
     "SCENARIO_PROFILES",
     "FOCUS_POINTS",
     "FOCUS_NOISE",

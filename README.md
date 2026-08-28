@@ -461,14 +461,23 @@ python3 awchecker.py --type uturn
 3. `targets/awsim/scenario_runner.py`
 4. `configs/<new_case>.py`
 
-役割は次のとおりです。
+一言でいうと、役割分離は次のルールです。
+
+- `case_kind = 何を探索するか`
+- `builder = どう組み立てるか`
+- `runner = どれを呼ぶか`
+
+### 4 か所の役割
 
 - `targets/awsim/case_kinds/<new_case>.py`
-  - 探索範囲、固定値、結果ラベル、式、timeout などの「実験定義」を置きます。
+  - 「実験定義」を置きます。
+  - 基本は `PARAM_RANGES`, `FIXED_PARAMS`, `RESULT_LABELS`, `FORMULAS`, `TIMEOUT_SEC` です。
+  - 必要なら `SCENARIO_PROFILES`, `FOCUS_POINTS` もここへ置きます。
 - `targets/awsim/scenario_builders/<new_case>_builder.py`
-  - lane / offset / speed などを組み立てて、旧 `AWSIMScriptPy` のシナリオ関数へ接続します。
+  - lane / offset / speed などを組み立てます。
+  - 動的パラメータから必要値を解決し、最後に旧 `AWSIMScriptPy` のシナリオ関数へ接続します。
 - `targets/awsim/scenario_runner.py`
-  - `scenario_type == "<new_case>"` の分岐を 1 本追加して、新しい builder を呼びます。
+  - `scenario_type == "<new_case>"` の分岐を 1 本追加して、新しい builder を呼ぶだけにします。
 - `configs/<new_case>.py`
   - 旧互換の入口です。実体は `case_kind` を再 export するだけで構いません。
 
@@ -483,7 +492,15 @@ python3 awchecker.py --type uturn
 `case_kind + build_theory_metrics(...)` を見る形になっているため、
 新しいシナリオを足すたびにそこを毎回修正する必要はありません。
 
-### 新しいシナリオ設計時の注意
+### 設計ルール
+
+- `case_kind` にシミュレータ組み立て処理は入れないでください。
+- `runner` に個別ロジックを溜め込まないでください。
+- 速度帯で挙動が変わるなら `SCENARIO_PROFILES` を使ってください。
+- 手動実行でも `bash -i -c` と `source /home/passd/autoware/install/setup.bash` を崩さないでください。
+- 旧 `AWSIMScriptPy` 側の scenario 本体も最新化されていることを確認してください。
+
+### 新しいシナリオ設計時の注意と調整アルゴリズム
 
 - `FIXED_PARAMS` に初期位置や加速度を一度置いて終わりにしないでください。
 - 新しいシナリオでは、`ego_speed` / `npc_speed` の帯ごとに
@@ -495,6 +512,63 @@ python3 awchecker.py --type uturn
 - `uturn` は `SCENARIO_PROFILES` で速度帯ごとに開始位置や加速度を切り替える設計にしてあり、単純な固定値より安定して動かせるようにしています。
 - `cutin` のように全ケースで同じ `FIXED_PARAMS` を使う形は、最初の移植としてはよいですが、「全速度帯で十分距離がある」「車が確実に動ける」「route / operation mode が安定する」ことをまだ保証しません。
 - したがって、新しいシナリオを実験基盤へ正式に入れるときは、必要に応じて `uturn` と同様に速度帯プロファイルを導入し、シナリオごとに十分距離・十分加速度を設計してください。
+- `ego_goal_offset` は「目標速度に達する最低距離」だけで決めないでください。基本は `加速距離 + イベント区間 + 余裕` で見積もり、さらに少なくとも旧来の安定値を下回らないようにしてください。
+- `npc_init_offset` も単なる固定値ではなく、必要なら `ego_speed` / `npc_speed` / `lateral velocity` / `event time` から必要 gap を式で見積もり、そのうえで旧来の安定値を下回らないようにしてください。
+- `NPC が動かない` 問題に備えて、`npc_start_speed_ratio` や `spawn_trigger_speed_ratio` のような始動条件を `SCENARIO_PROFILES` で持てるようにしておくと安全です。
+- 実運用上の調整アルゴリズムは次の形を基本にしてください。
+  - `ego_goal_offset`
+    - `warmup_distance = v^2 / (2a)`
+    - `event_distance = v * event_time`
+    - `goal_offset = init_offset + warmup_distance + event_distance + static_margin`
+    - 最後に `max(calculated_value, legacy_minimum)` を取る
+  - `npc_init_offset`
+    - `ego` と `npc` の速度、必要なら `lateral velocity` から trigger までの必要 gap を見積もる
+    - 旧アンカーケースとの差分だけを offset に足す
+    - 最後に `max(calculated_value, legacy_minimum)` を取る
+  - `npc_start_speed_ratio` / `spawn_trigger_speed_ratio`
+    - `ego` が目標速度ぴったりに届く前でも NPC が前進開始できるようにする
+    - `av_speed >= ratio * target_speed` の形で使う
+    - ただし緩めすぎず、実機で `route` と `operation_mode` が安定する値にする
+
+### `cutout` 移植時の注意
+
+- `cutout` は旧 `AWSIMScriptPy` 側に `dynamic_spawn.py` のロジックがあり、新フレーム側の `case_kind` / `builder` だけ直しても、コンテナ内の `AWSIMScriptPy/scenarios/cutout/dynamic_spawn.py` が古いままだと期待どおりに動きません。手動検証時は、`targets/awsim/case_kinds/cutout.py` だけでなく、`AWSIMScriptPy/scenarios/cutout/dynamic_spawn.py` も最新化されていることを確認してください。
+- `cutout` の `ego_goal_offset` は「目標速度に達する最低距離」だけで決めると短すぎます。`加速距離 + イベント区間 + 余裕` を見た上で、少なくとも旧来の安定値を下回らないようにしてください。`2026-08-28` 時点の実運用値は `30/35/40 km/h -> 210/240/280 m` です。
+- `cutout` の動的 spawn では、`npc1` / `npc2` の出現条件は `av_speed >= spawn_trigger_speed_ratio * _speed` です。さらに `npc1` の lane change 条件を厳しくしすぎると、「spawn はするが動かない」状態になります。
+- `2026-08-28` の実機調整では、`npc1` の `FollowLane` は無条件、`ChangeLane` は `actor_speed >= spawn_trigger_speed` まで緩めることで安定しました。以前の `actor_speed >= _speed` は厳しすぎて、`npc1` が十分に加速できず cut-out に入らないことがありました。
+
+### `uturn` / `cutin` の NPC1 始動条件
+
+- `uturn` と `cutin` では、カーブ自体の開始条件は昔から変えていません。`uturn` は `longitudinal_distance_to_ego <= dx0` で `FollowWaypoints` に入り、`cutin` は `longitudinal_distance_to_ego <= dx0` で `ChangeLane` に入ります。
+- `2026-08-28` の実機確認では、問題になっていたのは「曲がる条件」ではなく、「NPC1 が前進を開始する条件」でした。旧実装ではどちらも `av_speed >= _ego_speed - 0.2` で、ego が目標速度ぴったり近くまで出ないと NPC1 が動き始めないことがありました。
+- このため新フレーム側では `npc_start_speed_ratio` を `SCENARIO_PROFILES` に持たせ、`uturn` / `cutin` の `AWSIMScriptPy` 側へ渡すようにしました。現在は `av_speed >= npc_start_speed_ratio * _ego_speed` を使います。
+- `2026-08-28` 時点の実運用値はおおむね `30/35/40 km/h -> 0.898 / 0.9083 / 0.916` です。つまり、ego が完全に目標速度へ届く前でも、NPC1 が少し早めに走り始められるようにしています。
+- 新しいシナリオでも、`NPC がときどき動かない` ときは `dx0` や lane change 条件だけを見るのではなく、まず `NPC1 の前進開始条件` が実速度に対して厳しすぎないかを確認してください。
+
+### `swerve` で入れた補正の考え方
+
+- `swerve` でも `2026-08-28` 時点で `npc_start_speed_ratio` を導入し、`av_speed >= npc_start_speed_ratio * _ego_speed` で `npc1` が前進を開始するようにしています。
+- さらに `npc_init_offset` と `ego_goal_offset` は、式で必要距離を見積もった上で、旧アンカーケース `30/10`, `30/15`, `40/10`, `40/15` の安定値を下回らないように補正しています。
+- つまり `swerve` の調整は「全部を完全に式へ置き換える」のではなく、
+  - 旧安定値を基準にする
+  - そこから必要なら増やす
+  - でも短くしすぎて旧来より不安定にはしない
+  という方針です。
+
+### `deceleration` の移植と調整
+
+- `deceleration` は旧 `AWSIMScriptPy` 側の `base.py` ではなく、`dynamic_spawn.py` を正本として新フレームへ接続しています。Autoware が前方車両を早めに警戒して速度を落としてしまうため、静的 spawn より動的 spawn の方が JAMA の意図に近いからです。
+- 新フレーム側は `targets/awsim/case_kinds/deceleration.py`, `targets/awsim/scenario_builders/deceleration_builder.py`, `targets/awsim/theory_specs/deceleration.py`, `configs/deceleration.py` を追加し、`scenario_runner.py` から実行できるようにしています。
+- `2026-08-28` 時点の `deceleration` は、まず JAMA 寄りの `ego_speed` 単軸で入れています。つまり、他シナリオのような `dx0 / ego_speed / npc_speed` の 3 軸ではなく、`spawn_headway_sec=2.0` と `npc_deceleration=9.8` を固定にした最初の移植です。
+- `ego_goal_offset` は `cutout` と同じ考え方で、`加速距離 + イベント区間 + 余裕` から見積もり、少なくとも旧来の安定値 `30/35/40 km/h -> 210/240/280 m` を下回らないようにしています。
+- `spawn_trigger_speed_ratio` と `decel_trigger_speed_ratio` も式ベースへ切り替えています。つまり
+  - `spawn_trigger_speed_ratio`
+    - ego が完全に目標速度へ届く前でも NPC を spawn できるようにする
+  - `decel_trigger_speed_ratio`
+    - NPC が `_speed` ぴったりまで安定しなくても減速へ入れるようにする
+  という役割です。
+- `2026-08-28` の代表ケース `ego_speed=30 km/h` では、21号コンテナで `bash -i -c` と `source /home/passd/autoware/install/setup.bash` 付きの手動実行を行い、`npc1` の spawn、`FollowLane`、`SetTargetSpeed` 送信まで確認済みです。
+- ただし `deceleration` でも、repo 内の `case_kind` / `builder` だけでは不十分です。手動検証時は、コンテナ内の `AWSIMScriptPy/scenarios/deceleration/dynamic_spawn.py` も最新化されていることを確認してください。
 
 ## 技術的な工夫・トラブルシューティング (分散自動化に関する解決策)
 
