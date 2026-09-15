@@ -53,6 +53,72 @@ def test_validate_args_allows_direct_param_mode() -> None:
     validate_args(Args())
 
 
+def test_prism_binomial_sampling_requires_dataset_and_max_samples() -> None:
+    parser = build_parser()
+    missing_dataset = parser.parse_args(
+        [
+            "--output",
+            "/tmp/prism.jsonl",
+            "--target",
+            "prism",
+            "--mode",
+            "binomial_ci",
+            "--param",
+            "steps=20",
+            "--max-samples",
+            "20",
+        ]
+    )
+    missing_max = parser.parse_args(
+        [
+            "--output",
+            "/tmp/prism.jsonl",
+            "--dataset-csv",
+            "/tmp/prism.csv",
+            "--target",
+            "prism",
+            "--mode",
+            "binomial_ci",
+            "--param",
+            "steps=20",
+        ]
+    )
+
+    with pytest.raises(ValueError, match="--dataset-csv"):
+        validate_args(missing_dataset)
+    with pytest.raises(ValueError, match="--max-samples"):
+        validate_args(missing_max)
+
+
+def test_prism_binomial_sampling_uses_failure_metric_and_experiment_id() -> None:
+    parser = build_parser()
+    args = parser.parse_args(
+        [
+            "--output",
+            "/tmp/prism.jsonl",
+            "--dataset-csv",
+            "/tmp/prism.csv",
+            "--target",
+            "prism",
+            "--mode",
+            "binomial_ci",
+            "--param",
+            "steps=20",
+            "--max-samples",
+            "20",
+            "--experiment-id",
+            "batch-a",
+        ]
+    )
+
+    validate_args(args)
+    normalized = normalize_args(args, argv=[])
+    config = build_orchestrator_config(normalized)
+
+    assert config.binomial_target == "c_failure"
+    assert config.experiment_id == "batch-a"
+
+
 def test_validate_args_allows_awsim_strategy_mode_with_dataset_csv() -> None:
     class Args:
         fixture = None
@@ -63,6 +129,52 @@ def test_validate_args_allows_awsim_strategy_mode_with_dataset_csv() -> None:
         mode = "focus"
 
     validate_args(Args())
+
+
+def test_replay_mode_requires_source_and_isolated_run_id() -> None:
+    parser = build_parser()
+    valid_args = parser.parse_args(
+        [
+            "--output",
+            "/tmp/replay_records.jsonl",
+            "--dataset-csv",
+            "/tmp/replay_dataset.csv",
+            "--mode",
+            "replay",
+            "--replay-csv",
+            "/tmp/source.csv",
+            "--replay-expected-count",
+            "9066",
+            "--run-id",
+            "autoware180_replay_20260911",
+        ]
+    )
+
+    validate_args(valid_args)
+    config = build_orchestrator_config(valid_args)
+
+    assert config.run_mode == "replay"
+    assert config.replay_csv == "/tmp/source.csv"
+    assert config.replay_expected_count == 9066
+
+
+def test_replay_mode_rejects_missing_run_id() -> None:
+    parser = build_parser()
+    args = parser.parse_args(
+        [
+            "--output",
+            "/tmp/replay_records.jsonl",
+            "--dataset-csv",
+            "/tmp/replay_dataset.csv",
+            "--mode",
+            "replay",
+            "--replay-csv",
+            "/tmp/source.csv",
+        ]
+    )
+
+    with pytest.raises(ValueError, match="--run-id is required"):
+        validate_args(args)
 
 
 def test_validate_args_allows_verify_consistency_mode() -> None:
@@ -201,6 +313,40 @@ def test_normalize_args_loads_focus_points_from_case_kind_module() -> None:
     assert isinstance(normalized.focus_points, list)
     assert normalized.focus_points
     assert normalized.focus_points[0]["dx0"] == 10.09
+
+
+def test_runtime_monitor_sync_is_enabled_by_default_and_can_be_disabled() -> None:
+    parser = build_parser()
+    default_args = parser.parse_args(["--output", "/tmp/records.jsonl"])
+    disabled_args = parser.parse_args(
+        [
+            "--output",
+            "/tmp/records.jsonl",
+            "--no-sync-aw-runtime-monitor",
+        ]
+    )
+
+    assert default_args.sync_aw_runtime_monitor is True
+    assert disabled_args.sync_aw_runtime_monitor is False
+
+
+def test_normalize_args_does_not_force_unsupported_scenario_profile_from_container_profile() -> None:
+    parser = build_parser()
+    args = parser.parse_args(
+        [
+            "--output",
+            "/tmp/records.jsonl",
+            "--dataset-csv",
+            "/tmp/uturn_dataset.csv",
+            "--container-profile",
+            "autoware180",
+        ]
+    )
+
+    normalized = normalize_args(args, argv=["--container-profile", "autoware180"])
+
+    assert normalized.scenario_profile is None
+    assert normalized.config_module == "targets.awsim.case_kinds.uturn"
 
 
 def test_build_orchestrator_config_keeps_strategy_fields() -> None:

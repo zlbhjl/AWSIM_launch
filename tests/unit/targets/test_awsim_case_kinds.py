@@ -14,6 +14,13 @@ def test_resolve_case_kind_module_loads_new_uturn_module() -> None:
     assert module.SCENARIO_TYPE == "uturn"
 
 
+def test_resolve_case_kind_module_loads_profiled_uturn_module() -> None:
+    module = resolve_case_kind_module(case_kind="uturn", scenario_profile="legacy")
+
+    assert module.__name__ == "targets.awsim.case_kinds.legacy.uturn"
+    assert module.SCENARIO_TYPE == "uturn"
+
+
 def test_resolve_case_kind_module_loads_new_cutin_module() -> None:
     module = resolve_case_kind_module(case_kind="cutin")
 
@@ -68,16 +75,40 @@ def test_load_event_definitions_uses_case_kind_module_mapping() -> None:
 
 
 def test_load_timeout_sec_reads_case_kind_module() -> None:
-    assert load_timeout_sec(case_kind="uturn") == 200.0
+    assert load_timeout_sec(case_kind="uturn") == 300.0
+
+
+def test_uturn_rule_spec_requires_ego_and_npc_motion() -> None:
+    labels, formulas, invalid_conditions = load_rule_spec(case_kind="uturn")
+
+    assert labels[-2:] == ["c_npc_stuck", "c_ego_stuck"]
+    assert formulas[-2:] == ['<> speed("npc1") >= 0.1', '<> speed("ego") >= 0.1']
+    assert invalid_conditions == {"c_npc_stuck": 1, "c_ego_stuck": 1}
 
 
 def test_load_case_definition_reads_grouped_case_definition() -> None:
     definition = load_case_definition(case_kind="uturn")
 
     assert definition["scenario_type"] == "uturn"
-    assert definition["timeout_sec"] == 200.0
+    assert definition["timeout_sec"] == 300.0
     assert definition["fixed_params"]["ego_init_lane"] == "514"
     assert definition["param_ranges"]["dx0"] == (10.0, 25.0)
+
+
+def test_load_case_definition_reads_profiled_uturn_case_definitions() -> None:
+    legacy_definition = load_case_definition(case_kind="uturn", scenario_profile="legacy")
+    autoware171_definition = load_case_definition(
+        case_kind="uturn",
+        scenario_profile="autoware171",
+    )
+
+    legacy_band = legacy_definition["scenario_profiles"][0]["ego_speed_bands"][0]
+    autoware171_band = autoware171_definition["scenario_profiles"][0]["ego_speed_bands"][0]
+
+    assert legacy_band["ego_init_offset"] == 30.0
+    assert legacy_band["npc_start_speed_ratio"] == autoware171_band["npc_start_speed_ratio"]
+    assert autoware171_band["ego_init_offset"] == 30.0
+    assert autoware171_band["npc_start_speed_ratio"] < 1.0
 
 
 def test_load_case_definition_reads_cutin_case_definition() -> None:
@@ -90,6 +121,19 @@ def test_load_case_definition_reads_cutin_case_definition() -> None:
     assert set(definition["param_ranges"].keys()) == {"dx0", "ego_speed", "npc_speed"}
     assert len(definition["scenario_profiles"]) == 3
     assert definition["scenario_profiles"][0]["ego_speed_bands"][0]["ego_goal_offset"] == 150.0
+
+
+def test_load_case_definition_reads_legacy_cutin_case_definition() -> None:
+    definition = load_case_definition(case_kind="cutin", scenario_profile="legacy")
+    default_definition = load_case_definition(case_kind="cutin")
+
+    low_band = definition["scenario_profiles"][0]["ego_speed_bands"][0]
+    high_band = definition["scenario_profiles"][0]["ego_speed_bands"][1]
+    default_low_band = default_definition["scenario_profiles"][0]["ego_speed_bands"][0]
+    default_high_band = default_definition["scenario_profiles"][0]["ego_speed_bands"][1]
+
+    assert low_band == default_low_band
+    assert high_band == default_high_band
 
 
 def test_load_case_definition_reads_cutout_case_definition() -> None:
@@ -128,3 +172,16 @@ def test_load_case_definition_reads_swerve_case_definition() -> None:
     assert set(definition["param_ranges"].keys()) == {"dx0", "ego_speed", "npc_speed"}
     assert len(definition["scenario_profiles"]) == 2
     assert definition["scenario_profiles"][0]["ego_speed_bands"][0]["npc_init_offset"] == 60.0
+
+
+def test_load_case_definition_reads_legacy_swerve_case_definition() -> None:
+    definition = load_case_definition(case_kind="swerve", scenario_profile="legacy")
+    default_definition = load_case_definition(case_kind="swerve")
+
+    low_band = definition["scenario_profiles"][0]["ego_speed_bands"][0]
+    high_band = definition["scenario_profiles"][1]["ego_speed_bands"][1]
+    default_low_band = default_definition["scenario_profiles"][0]["ego_speed_bands"][0]
+    default_high_band = default_definition["scenario_profiles"][1]["ego_speed_bands"][1]
+
+    assert low_band == default_low_band
+    assert high_band == default_high_band

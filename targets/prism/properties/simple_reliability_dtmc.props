@@ -1,0 +1,3 @@
+// Property order is part of targets.prism.runner.PROPERTY_IDS.
+P=? [ F "failure" ]
+P=? [ F<=STEPS "failure" ]

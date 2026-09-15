@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import signal
+import shlex
 import time
 from dataclasses import dataclass
 from typing import Callable, Iterable, Protocol
@@ -11,9 +12,9 @@ DEFAULT_PROCESS_PATTERNS = (
     "awsim_labs.x86_64",
     "run_scenario.py",
     "component_container",
+    "component_container_mt",
     "rviz2",
-    "autoware",
-    "ros2",
+    "autoware_launch",
 )
 DEFAULT_CLEANUP_COMMANDS = (
     "ros2 daemon stop > /dev/null 2>&1",
@@ -71,12 +72,16 @@ class ContainerCleanup:
     ) -> None:
         patterns = list(process_patterns)
         for pattern in patterns:
-            self.system_runner(f"pkill -15 -f {pattern} > /dev/null 2>&1")
+            self.system_runner(
+                f"pkill -15 -f {shlex.quote(pattern)} > /dev/null 2>&1"
+            )
 
         self.sleeper(1.0)
 
         for pattern in patterns:
-            self.system_runner(f"pkill -9 -f {pattern} > /dev/null 2>&1")
+            self.system_runner(
+                f"pkill -9 -f {shlex.quote(pattern)} > /dev/null 2>&1"
+            )
 
         for command in cleanup_commands:
             self.system_runner(command)

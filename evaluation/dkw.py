@@ -85,6 +85,10 @@ class DKWService:
             if "epsilon" in request.options
             else None
         )
+        minimum_value = request.options.get("minimum_value")
+        resolved_minimum_value = (
+            float(minimum_value) if minimum_value is not None else None
+        )
         df = _ensure_data_frame(data)
         result = calculate_quantile_with_dkw(
             df,
@@ -95,6 +99,7 @@ class DKWService:
             region=region,
             use_kde_weighting=use_kde_weighting,
             feature_names=self.feature_names,
+            minimum_value=resolved_minimum_value,
         )
         target_width = _resolve_target_width(request, epsilon)
         if not result:
@@ -147,6 +152,7 @@ class DKWService:
                 "region": region,
                 "use_kde_weighting": use_kde_weighting,
                 "stage_target_samples": resolved_stage_target_samples,
+                "minimum_value": resolved_minimum_value,
                 "filtered_df": result["filtered_df"],
             },
         )
@@ -228,6 +234,7 @@ def calculate_dkw_bounds(
     region: str = "custom",
     use_kde_weighting: bool = False,
     feature_names: Sequence[str] | None = None,
+    minimum_value: float | None = None,
 ) -> dict[str, object] | None:
     if df is None or df.empty or target_column not in df.columns:
         return None
@@ -241,13 +248,15 @@ def calculate_dkw_bounds(
     except Exception:
         return None
 
-    if "c_collision" in filtered_df.columns:
-        filtered_df = filtered_df[~filtered_df["c_collision"].isin([-1, "-1", -1.0])]
+    if "status" in filtered_df.columns:
+        status_series = filtered_df["status"].fillna("").astype(str).str.lower()
+        filtered_df = filtered_df[status_series.eq("success")]
 
     data = pd.to_numeric(filtered_df[target_column], errors="coerce").dropna()
-    if target_column in {"min_ttc", "min_distance", "z_margin"}:
-        data = data[data >= 0]
+    if minimum_value is not None:
+        data = data[data >= float(minimum_value)]
     data = data.replace([np.inf, -np.inf], [5.0, -5.0])
+    filtered_df = filtered_df.loc[data.index].copy()
 
     sample_size = len(data)
     if sample_size == 0:
@@ -316,6 +325,7 @@ def calculate_quantile_with_dkw(
     region: str = "custom",
     use_kde_weighting: bool = False,
     feature_names: Sequence[str] | None = None,
+    minimum_value: float | None = None,
 ) -> dict[str, object] | None:
     dkw_bounds = calculate_dkw_bounds(
         df,
@@ -325,6 +335,7 @@ def calculate_quantile_with_dkw(
         region=region,
         use_kde_weighting=use_kde_weighting,
         feature_names=feature_names,
+        minimum_value=minimum_value,
     )
     if dkw_bounds is None:
         return None

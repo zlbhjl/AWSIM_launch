@@ -9,6 +9,7 @@ from runtime.cluster.result_sink import (
     CompositeResultSink,
     JsonlResultSink,
     OptionalResultSink,
+    RaySharedStoreResultSink,
     SharedStoreResultSink,
 )
 from runtime.repository.dataset_csv import DatasetCsvRepository
@@ -207,6 +208,93 @@ def test_shared_store_result_sink_computes_actual_cutin_theory_columns(
     assert rows[0]["theory_zone_a"] in {"A", "B", "C", "D"}
     assert float(rows[0]["theory_d_total_human"]) > 0.0
     assert float(rows[0]["theory_d_total_ai"]) < float(rows[0]["theory_d_total_human"])
+
+
+def test_ray_shared_store_result_sink_uses_keywords_for_remote_actor_calls() -> None:
+    class RemoteMethod:
+        def __init__(self, return_value=None):
+            self.return_value = return_value
+            self.calls = []
+
+        def remote(self, **kwargs):
+            self.calls.append(kwargs)
+            return self.return_value
+
+    class RemoteActor:
+        def __init__(self):
+            self.buffer_parameters = RemoteMethod()
+            self.merge_result = RemoteMethod({"loop_num": 8})
+            self.flush_timeout = RemoteMethod({"loop_num": 9})
+            self.append_evaluation_record = RemoteMethod(True)
+
+    actor = RemoteActor()
+    sink = RaySharedStoreResultSink(actor, ray_get=lambda value: value)
+
+    sink.save(
+        EvaluationRecord(
+            case_id="case_remote_1",
+            target="awsim",
+            case_kind="uturn",
+            status=RunStatus.SUCCESS,
+            input={"dx0": 20.0},
+            output={"c_collision": 0},
+            meta=_meta(global_loop_num=8, task_reason="remote_success"),
+        )
+    )
+    sink.save(
+        EvaluationRecord(
+            case_id="case_remote_2",
+            target="awsim",
+            case_kind="uturn",
+            status=RunStatus.TIMEOUT,
+            input={"dx0": 25.0},
+            output={"c_collision": -1},
+            meta=_meta(global_loop_num=9, task_reason="remote_timeout"),
+        )
+    )
+
+    assert actor.buffer_parameters.calls[0]["loop_num"] == 8
+    assert actor.buffer_parameters.calls[0]["input_row"]["dx0"] == 20.0
+    assert actor.buffer_parameters.calls[0]["reason"] == "remote_success"
+    assert actor.merge_result.calls[0]["result_row"]["loop_num"] == 8
+    assert actor.flush_timeout.calls[0]["loop_num"] == 9
+    assert actor.flush_timeout.calls[0]["input_row"]["dx0"] == 25.0
+    assert actor.flush_timeout.calls[0]["reason"] == "remote_timeout [ERROR: TIMEOUT]"
+    assert [
+        call["record_payload"]["case_id"]
+        for call in actor.append_evaluation_record.calls
+    ] == ["case_remote_1", "case_remote_2"]
+
+
+def test_ray_shared_store_result_sink_accepts_legacy_actor_without_jsonl_method() -> None:
+    class LegacyActor:
+        def __init__(self):
+            self.buffered = []
+            self.merged = []
+
+        def buffer_parameters(self, loop_num, input_row, reason=""):
+            self.buffered.append((loop_num, input_row, reason))
+
+        def merge_result(self, result_row):
+            self.merged.append(result_row)
+
+    actor = LegacyActor()
+    sink = RaySharedStoreResultSink(actor)
+
+    sink.save(
+        EvaluationRecord(
+            case_id="legacy_actor_case",
+            target="awsim",
+            case_kind="uturn",
+            status=RunStatus.SUCCESS,
+            input={"dx0": 20.0},
+            output={"c_collision": 0},
+            meta=_meta(global_loop_num=10),
+        )
+    )
+
+    assert actor.buffered[0][0] == 10
+    assert actor.merged[0]["case_id"] == "legacy_actor_case"
 
 
 def test_composite_result_sink_continues_when_optional_sink_fails(tmp_path: Path) -> None:

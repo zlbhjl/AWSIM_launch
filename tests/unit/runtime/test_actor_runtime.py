@@ -94,6 +94,33 @@ def test_actor_runtime_shared_store_actor_writes_dataset_rows(tmp_path: Path) ->
     assert dataset_csv.read_text(encoding="utf-8").startswith("dx0,loop_num,status,reason")
 
 
+def test_actor_runtime_shared_store_actor_writes_central_jsonl(tmp_path: Path) -> None:
+    ray_module = FakeRayModule()
+    runtime = ActorRuntime(ray_module=ray_module)
+    dataset_csv = tmp_path / "prism_dataset.csv"
+    records_jsonl = tmp_path / "records.jsonl"
+    config = DetachedActorConfig(name="PrismSharedStoreActor", namespace="awsim_cluster")
+
+    actor = runtime.ensure_shared_store_actor(
+        config,
+        dataset_csv_path=str(dataset_csv),
+        records_jsonl_path=str(records_jsonl),
+    )
+    written = actor.append_evaluation_record(
+        {
+            "case_id": "prism_1",
+            "target": "prism",
+            "status": "success",
+        }
+    )
+
+    assert written is True
+    assert actor.get_records_jsonl_path() == str(records_jsonl.resolve())
+    assert records_jsonl.read_text(encoding="utf-8").strip() == (
+        '{"case_id": "prism_1", "target": "prism", "status": "success"}'
+    )
+
+
 def test_actor_runtime_can_stop_actor() -> None:
     ray_module = FakeRayModule()
     runtime = ActorRuntime(ray_module=ray_module)

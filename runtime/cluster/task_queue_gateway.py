@@ -57,13 +57,25 @@ class TaskQueueGateway:
         return self._build_test_case(payload)
 
     def update_worker_status(self, worker_id: str, status: str) -> Any:
-        return self._invoke("update_worker_status", worker_id, status)
+        return self._invoke(
+            "update_worker_status",
+            worker_id,
+            status,
+            worker_id=worker_id,
+            status=status,
+        )
 
     def report_completion(self, loop_num: int, status: str) -> Any:
-        return self._invoke("report_completion", loop_num, status)
+        return self._invoke(
+            "report_completion",
+            loop_num,
+            status,
+            loop_num=loop_num,
+            status=status,
+        )
 
     def add_task(self, payload: dict[str, Any]) -> Any:
-        return self._invoke("add_task", payload)
+        return self._invoke("add_task", payload, task=payload)
 
     def get_status(self) -> tuple[int, int, dict[str, str]]:
         return self._invoke("get_status")
@@ -76,16 +88,23 @@ class TaskQueueGateway:
             "queue_size": queue_size,
             "completed_count": completed_count,
             "dispatched_count": completed_count + queue_size,
+            "in_flight_count": 0,
+            "in_flight_tasks": [],
             "worker_statuses": worker_statuses,
             "stop_signal": False,
             "stop_reason": "",
         }
 
+    def get_in_flight_tasks(self) -> list[dict[str, Any]]:
+        if hasattr(self.actor, "get_in_flight_tasks"):
+            return self._invoke("get_in_flight_tasks")
+        return list(self.get_snapshot().get("in_flight_tasks", []))
+
     def set_start_counts(self, count: int) -> Any:
-        return self._invoke("set_start_counts", count)
+        return self._invoke("set_start_counts", count, count=count)
 
     def set_stop_signal(self, reason: str = "Target Reached or Master Stopped") -> Any:
-        return self._invoke("set_stop_signal", reason)
+        return self._invoke("set_stop_signal", reason, reason=reason)
 
     def _build_test_case(self, payload: dict[str, Any]) -> TestCase:
         task = dict(payload)
@@ -102,12 +121,33 @@ class TaskQueueGateway:
         target = str(task.pop("target", self.config.target))
         case_kind = str(task.pop("case_kind", self.config.case_kind))
         tags = self._normalize_tags(task.pop("tags", []))
+        config_module = task.pop("config_module", None)
+        scenario_profile = task.pop("scenario_profile", None)
+        container_profile = task.pop("container_profile", None)
+        replay_meta = {
+            key: task.pop(key)
+            for key in (
+                "replay_source_loop_num",
+                "replay_source_case_id",
+                "replay_source_collision",
+                "replay_source_reason",
+                "replay_source_csv",
+            )
+            if key in task
+        }
 
         meta = {
             "source_module": self.config.source_module,
         }
         if global_loop_num is not None:
             meta["global_loop_num"] = global_loop_num
+        if isinstance(config_module, str) and config_module:
+            meta["config_module"] = config_module
+        if isinstance(scenario_profile, str) and scenario_profile:
+            meta["scenario_profile"] = scenario_profile
+        if isinstance(container_profile, str) and container_profile:
+            meta["container_profile"] = container_profile
+        meta.update(replay_meta)
 
         return TestCase(
             case_id=case_id,
@@ -119,12 +159,12 @@ class TaskQueueGateway:
             meta=meta,
         )
 
-    def _invoke(self, method_name: str, *args: Any) -> Any:
+    def _invoke(self, method_name: str, *args: Any, **kwargs: Any) -> Any:
         method = getattr(self.actor, method_name)
         if hasattr(method, "remote"):
-            remote_result = method.remote(*args)
+            remote_result = method.remote(**kwargs) if kwargs else method.remote(*args)
             return self._resolve_remote(remote_result)
-        return method(*args)
+        return method(*args) if args else method(**kwargs)
 
     def _resolve_remote(self, remote_result: Any) -> Any:
         if self.ray_get is not None:

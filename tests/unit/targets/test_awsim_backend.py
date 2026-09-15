@@ -47,6 +47,30 @@ def test_awsim_backend_returns_timeout_for_timeout_marker() -> None:
     assert result.status is RunStatus.TIMEOUT
 
 
+def test_awsim_backend_fixture_can_preserve_timeout_status_for_saved_json_trace() -> None:
+    fixture_path = (
+        Path(__file__).resolve().parents[2]
+        / "fixtures"
+        / "awsim"
+        / "normal_trace_maude.json"
+    )
+
+    result = AWSIMBackend().run(
+        TestCase(
+            case_id="backend_fixture_timeout_json",
+            target="awsim",
+            case_kind="uturn",
+            input={
+                "fixture_path": str(fixture_path),
+                "fixture_raw_run_status": "timeout",
+            },
+        )
+    )
+
+    assert result.status is RunStatus.TIMEOUT
+    assert result.evidence["trace_json"].endswith("normal_trace_maude.json")
+
+
 def test_awsim_backend_runs_simulation_command_and_promotes_local_trace(
     tmp_path: Path,
 ) -> None:
@@ -56,10 +80,10 @@ def test_awsim_backend_runs_simulation_command_and_promotes_local_trace(
         captured["command"] = list(command)
         captured["cwd"] = cwd
         captured["env"] = dict(env)
-        local_trace = tmp_path / "uturn_test_sim5.json"
+        local_trace = tmp_path / "uturn_test_sim1.json"
         local_trace.write_text("{}", encoding="utf-8")
-        (tmp_path / "uturn_test_sim5_footage.mp4").write_text("video", encoding="utf-8")
-        (tmp_path / "uturn_test_sim5_footage.meta.json").write_text("{}", encoding="utf-8")
+        (tmp_path / "uturn_test_sim1_footage.mp4").write_text("video", encoding="utf-8")
+        (tmp_path / "uturn_test_sim1_footage.meta.json").write_text("{}", encoding="utf-8")
         return CommandResult(returncode=0, stdout="ok", stderr="")
 
     backend = AWSIMBackend(
@@ -105,8 +129,10 @@ def test_awsim_backend_runs_simulation_command_and_promotes_local_trace(
     assert result.evidence["video_meta_json"].endswith("uturn_eval_sim5_footage.meta.json")
     assert (tmp_path / "uturn_eval_sim5_footage.mp4").exists()
     assert (tmp_path / "uturn_eval_sim5_footage.meta.json").exists()
-    assert not (tmp_path / "uturn_test_sim5_footage.mp4").exists()
-    assert not (tmp_path / "uturn_test_sim5_footage.meta.json").exists()
+    assert result.meta["local_loop_num"] == 1
+    assert result.meta["global_loop_num"] == 5
+    assert not (tmp_path / "uturn_test_sim1_footage.mp4").exists()
+    assert not (tmp_path / "uturn_test_sim1_footage.meta.json").exists()
 
 
 def test_awsim_backend_forwards_non_default_config_module_to_scenario_runner(
@@ -116,7 +142,7 @@ def test_awsim_backend_forwards_non_default_config_module_to_scenario_runner(
 
     def command_runner(command, *, cwd, env, source_setup_script):
         captured["command"] = list(command)
-        local_trace = tmp_path / "uturn_test_sim6.json"
+        local_trace = tmp_path / "uturn_test_sim1.json"
         local_trace.write_text("{}", encoding="utf-8")
         return CommandResult(returncode=0, stdout="ok", stderr="")
 
@@ -215,6 +241,58 @@ def test_awsim_backend_promotes_local_trace_for_explicit_expected_trace_path(
     assert not (output_dir / "uturn_test_sim3_footage.meta.json").exists()
 
 
+def test_awsim_backend_maps_sequential_local_ids_to_nonconsecutive_global_ids(
+    tmp_path: Path,
+) -> None:
+    local_ids: list[int] = []
+
+    def command_runner(command, *, cwd, env, source_setup_script):
+        local_loop_num = len(local_ids) + 1
+        local_ids.append(local_loop_num)
+        (tmp_path / f"uturn_test_sim{local_loop_num}.json").write_text(
+            "{}",
+            encoding="utf-8",
+        )
+        return CommandResult(returncode=0, stdout="ok", stderr="")
+
+    backend = AWSIMBackend(
+        config=AWSIMBackendConfig(
+            runtime_profile=build_runtime_profile(
+                case_kind="uturn",
+                source_setup_script=None,
+            ),
+            output_dir=tmp_path,
+            timeout_sec=0.1,
+            poll_interval_sec=0.0,
+            settle_time_sec=0.0,
+        ),
+        command_runner=command_runner,
+    )
+
+    results = [
+        backend.run(
+            TestCase(
+                case_id=f"backend_global_{global_loop_num}",
+                target="awsim",
+                case_kind="uturn",
+                input={"dx0": 15.0},
+                meta={"global_loop_num": global_loop_num},
+            )
+        )
+        for global_loop_num in (5224, 5228, 5236)
+    ]
+
+    assert local_ids == [1, 2, 3]
+    assert [result.meta["local_loop_num"] for result in results] == [1, 2, 3]
+    assert [result.meta["global_loop_num"] for result in results] == [5224, 5228, 5236]
+    assert [Path(result.evidence["trace_json"]).name for result in results] == [
+        "uturn_eval_sim5224.json",
+        "uturn_eval_sim5228.json",
+        "uturn_eval_sim5236.json",
+    ]
+    assert not list(tmp_path.glob("uturn_test_sim*.json"))
+
+
 def test_awsim_backend_writes_timeout_marker_when_trace_never_appears(
     tmp_path: Path,
 ) -> None:
@@ -251,21 +329,21 @@ def test_awsim_backend_removes_stale_expected_and_local_artifacts_before_run(
     tmp_path: Path,
 ) -> None:
     expected_trace = tmp_path / "uturn_eval_sim4.json"
-    local_trace = tmp_path / "uturn_test_sim4.json"
+    local_trace = tmp_path / "uturn_test_sim1.json"
     expected_trace.write_text("stale", encoding="utf-8")
     local_trace.write_text("stale", encoding="utf-8")
     (tmp_path / "uturn_eval_sim4_footage.mp4").write_text("stale", encoding="utf-8")
     (tmp_path / "uturn_eval_sim4_footage.meta.json").write_text("stale", encoding="utf-8")
-    (tmp_path / "uturn_test_sim4_footage.mp4").write_text("stale", encoding="utf-8")
-    (tmp_path / "uturn_test_sim4_footage.meta.json").write_text("stale", encoding="utf-8")
+    (tmp_path / "uturn_test_sim1_footage.mp4").write_text("stale", encoding="utf-8")
+    (tmp_path / "uturn_test_sim1_footage.meta.json").write_text("stale", encoding="utf-8")
 
     def command_runner(command, *, cwd, env, source_setup_script):
         assert not expected_trace.exists()
         assert not local_trace.exists()
         assert not (tmp_path / "uturn_eval_sim4_footage.mp4").exists()
         assert not (tmp_path / "uturn_eval_sim4_footage.meta.json").exists()
-        assert not (tmp_path / "uturn_test_sim4_footage.mp4").exists()
-        assert not (tmp_path / "uturn_test_sim4_footage.meta.json").exists()
+        assert not (tmp_path / "uturn_test_sim1_footage.mp4").exists()
+        assert not (tmp_path / "uturn_test_sim1_footage.meta.json").exists()
         local_trace.write_text("{}", encoding="utf-8")
         return CommandResult(returncode=0, stdout="ok", stderr="")
 
@@ -319,7 +397,7 @@ def test_awsim_backend_headless_mode_applies_xvfb_env_and_stops_session(
 
     def command_runner(command, *, cwd, env, source_setup_script):
         captured["env"] = dict(env)
-        local_trace = tmp_path / "uturn_test_sim7.json"
+        local_trace = tmp_path / "uturn_test_sim1.json"
         local_trace.write_text("{}", encoding="utf-8")
         return CommandResult(returncode=0, stdout="ok", stderr="")
 

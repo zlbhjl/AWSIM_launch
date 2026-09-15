@@ -51,18 +51,28 @@ class ResultInterpreter:
     def interpret_raw_run_result(self, raw_run_result: RawRunResult) -> EvaluationRecord:
         trace_json = raw_run_result.evidence.get("trace_json")
         if not trace_json:
+            final_status = (
+                raw_run_result.status
+                if raw_run_result.status is not RunStatus.SUCCESS
+                else RunStatus.ANALYSIS_ERROR
+            )
+            meta = {
+                "execution_status": raw_run_result.status.value,
+                "analysis_status": RunStatus.ANALYSIS_ERROR.value,
+                "verifier_name": self.context.verifier_name,
+                "error_message": "missing_trace_json",
+                "raw_run_status": raw_run_result.status.value,
+                "raw_run_meta": dict(raw_run_result.meta),
+            }
+            if raw_run_result.status is RunStatus.TIMEOUT:
+                meta["timeout_reason"] = self._resolve_timeout_reason(raw_run_result)
             return EvaluationRecord(
                 case_id=raw_run_result.case_id,
                 target=raw_run_result.target,
                 case_kind=raw_run_result.case_kind,
-                status=RunStatus.ANALYSIS_ERROR,
+                status=final_status,
                 meta=ensure_evaluation_meta(
-                    {
-                        "verifier_name": self.context.verifier_name,
-                        "error_message": "missing_trace_json",
-                        "raw_run_status": raw_run_result.status.value,
-                        "raw_run_meta": dict(raw_run_result.meta),
-                    },
+                    meta,
                     source_module=self.context.source_module,
                     schema_version=self.context.schema_version,
                     created_at=datetime.now().astimezone().isoformat(timespec="seconds"),
@@ -78,7 +88,26 @@ class ResultInterpreter:
         record.evidence = merged_evidence
         record.meta.setdefault("raw_run_status", raw_run_result.status.value)
         record.meta.setdefault("raw_run_meta", dict(raw_run_result.meta))
+        record.meta.setdefault("execution_status", raw_run_result.status.value)
+        record.meta.setdefault("analysis_status", record.status.value)
+        if raw_run_result.status is RunStatus.TIMEOUT:
+            record.meta.setdefault(
+                "raw_timeout_reason",
+                self._resolve_timeout_reason(raw_run_result),
+            )
         return record
+
+    @staticmethod
+    def _resolve_timeout_reason(raw_run_result: RawRunResult) -> str:
+        """Keep artifact arrival separate from the scenario completion result."""
+        artifact_timing = str(raw_run_result.meta.get("artifact_timing", ""))
+        if artifact_timing == "missing":
+            return "artifact_timeout"
+        if artifact_timing == "late":
+            return "late_artifact"
+        if raw_run_result.meta.get("returncode") == 124:
+            return "scenario_goal_timeout"
+        return "timeout_unknown"
 
     def interpret_path(self, fixture_path: str | Path) -> EvaluationRecord:
         path = Path(fixture_path).expanduser().resolve()
@@ -197,6 +226,7 @@ class ResultInterpreter:
                         "maude_evaluator",
                     ],
                     "missing_headers": summary.missing_headers,
+                    "invalid_headers": summary.invalid_headers,
                 },
             )
 

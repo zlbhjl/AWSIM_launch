@@ -149,3 +149,23 @@ def test_dkw_service_handles_evaluation_record_sequences() -> None:
 
     assert report.sample_count == 4
     assert report.estimate == 2.0
+
+
+def test_dkw_minimum_value_is_request_policy_not_metric_name() -> None:
+    frame = pd.DataFrame(
+        {
+            "steps_to_failure_capped": [-1, 3, 5],
+            "status": ["success", "success", "timeout"],
+        }
+    )
+    request = StatisticalRequest(
+        method="dkw",
+        metric="steps_to_failure_capped",
+        options={"q": 0.5, "minimum_value": 0.0},
+    )
+
+    report = DKWService().evaluate_request(frame, request)
+
+    assert report.sample_count == 1
+    assert report.estimate == 3
+    assert report.diagnostics["minimum_value"] == 0.0

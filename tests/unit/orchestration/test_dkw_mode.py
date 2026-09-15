@@ -61,6 +61,8 @@ def _make_runner(**overrides) -> DKWModeRunner:
         config=overrides.get("config", SimpleNamespace()),
         case_kind=overrides.get("case_kind", "uturn"),
         config_module_name=overrides.get("config_module_name", None),
+        region_policy=overrides.get("region_policy"),
+        minimum_value=overrides.get("minimum_value"),
     )
 
 
@@ -106,16 +108,19 @@ def test_dkw_mode_runner_auto_derives_bounds_from_region() -> None:
     }
 
 
-def test_dkw_mode_runner_rejects_points_outside_region(monkeypatch) -> None:
-    monkeypatch.setattr(
-        "orchestration.dkw_mode.build_theory_metrics",
-        lambda **kwargs: {
-            "theory_margin_a_human": 1.0
-            if float(kwargs["values"].get("dx0", 0.0)) >= 15.0
-            else -1.0
-        },
+def test_dkw_mode_runner_rejects_points_outside_region() -> None:
+    class ThresholdRegionPolicy:
+        def build_filter_frame(self, point):
+            row = dict(point)
+            row["theory_margin_a_human"] = (
+                1.0 if float(point.get("dx0", 0.0)) >= 15.0 else -1.0
+            )
+            return pd.DataFrame([row])
+
+    runner = _make_runner(
+        region="jama_safe",
+        region_policy=ThresholdRegionPolicy(),
     )
-    runner = _make_runner(region="jama_safe")
 
     payload, random_index, dispatched_count = runner.issue_region_aware_random_task(
         reason="SMC: Sequential-DKW Sampling (Stage 1)",

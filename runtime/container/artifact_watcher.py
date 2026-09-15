@@ -10,6 +10,7 @@ from typing import Callable
 class ArtifactWatcherConfig:
     poll_interval_sec: float = 2.0
     settle_time_sec: float = 5.0
+    post_timeout_grace_sec: float = 10.0
     timeout_marker: str = "TIMEOUT"
 
 

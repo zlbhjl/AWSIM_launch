@@ -3,7 +3,11 @@ from importlib import import_module
 import numpy as np
 import pandas as pd
 
-from tools.plot import visualize_collision_regions, visualize_traces
+from tools.plot import (
+    visualize_collision_regions,
+    visualize_traces,
+    visualize_version_comparison,
+)
 
 
 PLOT_MODULES = [
@@ -15,6 +19,7 @@ PLOT_MODULES = [
     "tools.plot.visualize_risk_matrix",
     "tools.plot.visualize_traces",
     "tools.plot.visualize_traces_split",
+    "tools.plot.visualize_version_comparison",
     "tools.plot.visualize_worker_failure_clusters",
     "tools.plot.visualize_worker_stats",
 ]
@@ -180,3 +185,79 @@ def test_visualize_collision_regions_main_resolves_output_prefix(tmp_path, monke
         str(dataset_dir / "cells_empirical.png"),
         str(dataset_dir / "cells_ai.png"),
     ]
+
+
+def test_visualize_version_comparison_pairs_replay_source_ids(tmp_path):
+    source_csv = tmp_path / "source.csv"
+    replay_csv = tmp_path / "replay.csv"
+    output = tmp_path / "comparison.png"
+    source_rows = []
+    replay_rows = []
+    transitions = [(0, 0), (0, 1), (1, 0), (1, 1)]
+    for loop_num, (source_collision, replay_collision) in enumerate(transitions, start=1):
+        common = {
+            "dx0": 10.0 + loop_num,
+            "npc_speed": 20.0,
+            "ego_speed": 30.0,
+            "c_ttc_0.5": source_collision,
+        }
+        source_rows.append(
+            {
+                "loop_num": loop_num,
+                **common,
+                "c_collision": source_collision,
+                "status": "success",
+            }
+        )
+        replay_rows.append(
+            {
+                "meta_replay_source_loop_num": loop_num,
+                **common,
+                "c_collision": replay_collision,
+                "c_ttc_0.5": replay_collision,
+                "status": "success",
+            }
+        )
+    replay_rows.append(
+        {
+            "meta_replay_source_loop_num": 5,
+            "dx0": 15.0,
+            "npc_speed": 20.0,
+            "ego_speed": 30.0,
+            "c_collision": np.nan,
+            "c_ttc_0.5": np.nan,
+            "status": "timeout",
+        }
+    )
+    source_rows.append(
+        {
+            "loop_num": 5,
+            "dx0": 15.0,
+            "npc_speed": 20.0,
+            "ego_speed": 30.0,
+            "c_collision": 0,
+            "c_ttc_0.5": 0,
+            "status": "success",
+        }
+    )
+    pd.DataFrame(source_rows).to_csv(source_csv, index=False)
+    pd.DataFrame(replay_rows).to_csv(replay_csv, index=False)
+
+    summary = visualize_version_comparison.run_plot(
+        str(source_csv),
+        str(replay_csv),
+        str(output),
+    )
+
+    assert output.exists()
+    assert summary["matched_rows"] == 5
+    assert summary["complete_rows"] == 4
+    assert summary["changed_rows"] == 2
+    assert summary["unresolved_rows"] == 1
+    assert summary["transition_counts"] == {
+        "0_to_0": 1,
+        "0_to_1": 1,
+        "1_to_0": 1,
+        "1_to_1": 1,
+        "unresolved": 1,
+    }

@@ -91,6 +91,15 @@ class FakeProcessManager:
 
 
 class NoTraceProcessManager(FakeProcessManager):
+    def __init__(
+        self,
+        trace_path: Path,
+        *,
+        client_returncode: int | None = 0,
+    ) -> None:
+        super().__init__(trace_path)
+        self.client_returncode = client_returncode
+
     def launch_client(
         self,
         command,
@@ -111,6 +120,61 @@ class NoTraceProcessManager(FakeProcessManager):
                 "env": dict(env or {}),
             }
         )
+
+        class ManagedClient:
+            name = "Scenario Client"
+            process = FakeClientProcess(returncode=self.client_returncode)
+
+        return ManagedClient()
+
+
+class TimeoutTraceProcessManager(FakeProcessManager):
+    def launch_client(
+        self,
+        command,
+        *,
+        work_dir,
+        source_setup_script=None,
+        output_dir=None,
+        log_filename=None,
+        env=None,
+    ):
+        self.client_calls.append(
+            {
+                "command": list(command) if isinstance(command, list) else command,
+                "work_dir": Path(work_dir),
+                "source_setup_script": source_setup_script,
+                "output_dir": Path(output_dir) if output_dir is not None else None,
+                "log_filename": log_filename,
+                "env": dict(env or {}),
+            }
+        )
+        self.trace_path.write_text("{}", encoding="utf-8")
+
+        class ManagedClient:
+            name = "Scenario Client"
+            process = FakeClientProcess(returncode=124)
+
+        return ManagedClient()
+
+
+class TraceAfterTimeoutProcessManager(FakeProcessManager):
+    def launch_client(
+        self,
+        command,
+        *,
+        work_dir,
+        source_setup_script=None,
+        output_dir=None,
+        log_filename=None,
+        env=None,
+    ):
+        self.client_calls.append({"command": list(command)})
+        if len(self.client_calls) == 2:
+            (Path(output_dir) / "uturn_test_sim2.json").write_text(
+                "{}",
+                encoding="utf-8",
+            )
 
         class ManagedClient:
             name = "Scenario Client"
@@ -174,6 +238,43 @@ def test_awsim_backend_manage_infra_starts_processes_and_runs_async_client(
     ]
     assert process_manager.client_calls[0]["env"]["AW_OUTPUT_DIR"] == str(tmp_path)
     assert process_manager.shutdown_all_calls == 1
+
+
+def test_awsim_backend_manage_infra_uses_trace_when_client_exits_124(
+    tmp_path: Path,
+) -> None:
+    trace_path = tmp_path / "uturn_test_sim1.json"
+    process_manager = TimeoutTraceProcessManager(trace_path)
+    backend = AWSIMBackend(
+        config=AWSIMBackendConfig(
+            runtime_profile=build_runtime_profile(
+                case_kind="uturn",
+                source_setup_script=None,
+                launch_dir=tmp_path,
+            ),
+            output_dir=tmp_path,
+            timeout_sec=0.1,
+            poll_interval_sec=0.0,
+            settle_time_sec=0.0,
+            manage_infra=True,
+        ),
+        process_manager=process_manager,
+    )
+
+    result = backend.run(
+        TestCase(
+            case_id="backend_infra_timeout_with_trace",
+            target="awsim",
+            case_kind="uturn",
+            input={"dx0": 15.0, "ego_speed": 35.0, "npc_speed": 14.0},
+            meta={"global_loop_num": 6},
+        )
+    )
+
+    assert result.status is RunStatus.SUCCESS
+    assert result.meta["returncode"] == 124
+    assert result.meta["client_process_state"] == "exited"
+    assert result.evidence["trace_json"].endswith("uturn_eval_sim6.json")
 
 
 def test_awsim_backend_manage_infra_forwards_input_ext_mode_to_checker(
@@ -394,6 +495,95 @@ def test_awsim_backend_reuse_mode_cleans_up_all_on_timeout(
     assert process_manager.stop_case_scoped_processes_calls == 0
     assert process_manager.refresh_non_resident_infra_calls == 1
     assert process_manager.shutdown_all_calls == 0
+
+
+def test_awsim_backend_keeps_local_sequence_aligned_after_timeout_refresh(
+    tmp_path: Path,
+) -> None:
+    process_manager = TraceAfterTimeoutProcessManager(
+        tmp_path / "uturn_test_unused.json"
+    )
+    backend = AWSIMBackend(
+        config=AWSIMBackendConfig(
+            runtime_profile=build_runtime_profile(
+                case_kind="uturn",
+                source_setup_script=None,
+                launch_dir=tmp_path,
+            ),
+            output_dir=tmp_path,
+            timeout_sec=0.01,
+            poll_interval_sec=0.0,
+            settle_time_sec=0.0,
+            post_timeout_grace_sec=0.0,
+            manage_infra=True,
+            reuse_infra_between_runs=True,
+        ),
+        process_manager=process_manager,
+        sleeper=lambda _seconds: None,
+    )
+
+    first = backend.run(
+        TestCase(
+            case_id="backend_timeout_global_5224",
+            target="awsim",
+            case_kind="uturn",
+            meta={"global_loop_num": 5224},
+        )
+    )
+    second = backend.run(
+        TestCase(
+            case_id="backend_success_global_5228",
+            target="awsim",
+            case_kind="uturn",
+            meta={"global_loop_num": 5228},
+        )
+    )
+
+    assert first.status is RunStatus.TIMEOUT
+    assert first.meta["local_loop_num"] == 1
+    assert second.status is RunStatus.SUCCESS
+    assert second.meta["local_loop_num"] == 2
+    assert second.evidence["trace_json"].endswith("uturn_eval_sim5228.json")
+    assert [call["sim_num"] for call in process_manager.infra_calls] == [1, 2]
+    assert process_manager.refresh_non_resident_infra_calls == 1
+
+
+def test_awsim_backend_records_running_client_at_watch_deadline(
+    tmp_path: Path,
+) -> None:
+    trace_path = tmp_path / "uturn_test_sim_running.json"
+    process_manager = NoTraceProcessManager(trace_path, client_returncode=None)
+    backend = AWSIMBackend(
+        config=AWSIMBackendConfig(
+            runtime_profile=build_runtime_profile(
+                case_kind="uturn",
+                source_setup_script=None,
+                launch_dir=tmp_path,
+            ),
+            output_dir=tmp_path,
+            timeout_sec=0.0,
+            poll_interval_sec=0.0,
+            settle_time_sec=0.0,
+            manage_infra=True,
+            reuse_infra_between_runs=True,
+        ),
+        process_manager=process_manager,
+        sleeper=lambda _seconds: None,
+    )
+
+    result = backend.run(
+        TestCase(
+            case_id="backend_infra_running_at_deadline",
+            target="awsim",
+            case_kind="uturn",
+            input={"dx0": 15.0, "ego_speed": 35.0, "npc_speed": 14.0},
+            meta={"global_loop_num": 9},
+        )
+    )
+
+    assert result.status is RunStatus.TIMEOUT
+    assert result.meta["returncode"] is None
+    assert result.meta["client_process_state"] == "running_at_watch_deadline"
 
 
 def test_awsim_backend_refresh_infra_delegates_to_non_resident_refresh(

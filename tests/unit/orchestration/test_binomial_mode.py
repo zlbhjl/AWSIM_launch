@@ -47,6 +47,7 @@ def _make_runner(**overrides) -> BinomialModeRunner:
         config=overrides.get("config", SimpleNamespace()),
         case_kind=overrides.get("case_kind", "uturn"),
         config_module_name=overrides.get("config_module_name", None),
+        region_policy=overrides.get("region_policy"),
     )
 
 
@@ -110,16 +111,19 @@ def test_binomial_mode_runner_requests_more_samples_when_needed() -> None:
     assert state.dispatched_task_count == 2
 
 
-def test_binomial_mode_runner_uses_region_aware_rejection_sampling(monkeypatch) -> None:
-    monkeypatch.setattr(
-        "orchestration.binomial_mode.build_theory_metrics",
-        lambda **kwargs: {
-            "theory_margin_a_human": 1.0
-            if float(kwargs["values"].get("dx0", 0.0)) >= 15.0
-            else -1.0
-        },
+def test_binomial_mode_runner_uses_region_aware_rejection_sampling() -> None:
+    class ThresholdRegionPolicy:
+        def build_filter_frame(self, point):
+            row = dict(point)
+            row["theory_margin_a_human"] = (
+                1.0 if float(point.get("dx0", 0.0)) >= 15.0 else -1.0
+            )
+            return pd.DataFrame([row])
+
+    runner = _make_runner(
+        region="jama_safe",
+        region_policy=ThresholdRegionPolicy(),
     )
-    runner = _make_runner(region="jama_safe")
 
     payload, random_index, dispatched_count = runner.issue_region_aware_random_task(
         reason="BINOMIAL_CI: Sampling (13)",

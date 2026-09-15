@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import os
 from dataclasses import dataclass
+from pathlib import Path
 
 from runtime.container.profile import build_runtime_profile
 from targets.awsim.backend import AWSIMBackend, AWSIMBackendConfig
@@ -12,6 +13,8 @@ from targets.awsim.result_interpreter import (
 from targets.awsim.result_interpreter import ResultInterpreter as AWSIMResultInterpreter
 from targets.bbsl.backend import BBSLBackend
 from targets.bbsl.result_interpreter import ResultInterpreter as BBSLResultInterpreter
+from targets.prism.backend import PrismBackend, PrismBackendConfig
+from targets.prism.result_interpreter import PrismResultInterpreter
 
 
 @dataclass(frozen=True)
@@ -40,6 +43,8 @@ def build_target_components(
                     headless=getattr(args, "headless", False),
                     host_mode=host_mode,
                     machine_role=machine_role,
+                    container_profile=getattr(args, "container_profile", None),
+                    scenario_profile=getattr(args, "scenario_profile", None),
                 ),
                 manage_infra=True,
                 reuse_infra_between_runs=True,
@@ -72,6 +77,18 @@ def build_target_components(
         return TargetComponents(
             backend=backend or BBSLBackend(),
             result_interpreter=result_interpreter or BBSLResultInterpreter(),
+        )
+
+    if args.target == "prism":
+        return TargetComponents(
+            backend=backend or PrismBackend(
+                PrismBackendConfig(
+                    output_root=Path(getattr(args, "prism_output_root", "artifacts/prism")),
+                    prism_executable=getattr(args, "prism_executable", "prism"),
+                    timeout_sec=float(getattr(args, "prism_timeout_sec", 30.0)),
+                )
+            ),
+            result_interpreter=result_interpreter or PrismResultInterpreter(),
         )
 
     raise ValueError(f"Unsupported target: {args.target}")

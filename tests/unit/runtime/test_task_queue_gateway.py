@@ -68,6 +68,32 @@ def test_task_queue_gateway_builds_test_case_from_payload() -> None:
     assert test_case.meta["global_loop_num"] == 7
 
 
+def test_task_queue_gateway_moves_replay_fields_to_metadata() -> None:
+    gateway = TaskQueueGateway(
+        actor=FakeActor(
+            [
+                {
+                    "case_id": "uturn_replay_source_42",
+                    "dx0": 15.0,
+                    "global_loop_num": 3,
+                    "replay_source_loop_num": 42,
+                    "replay_source_case_id": "uturn_strategy_42",
+                    "replay_source_collision": 1,
+                    "replay_source_csv": "/tmp/source.csv",
+                }
+            ]
+        )
+    )
+
+    test_case = gateway.fetch_next()
+
+    assert test_case is not None
+    assert test_case.input == {"dx0": 15.0}
+    assert test_case.meta["global_loop_num"] == 3
+    assert test_case.meta["replay_source_loop_num"] == 42
+    assert test_case.meta["replay_source_collision"] == 1
+
+
 def test_task_queue_gateway_returns_none_when_queue_is_empty() -> None:
     gateway = TaskQueueGateway(actor=FakeActor([]))
 
@@ -105,3 +131,38 @@ def test_task_queue_gateway_proxies_status_and_completion_calls() -> None:
     assert actor.added_tasks == [{"case_id": "case_1"}]
     assert actor.start_counts == [7]
     assert actor.stop_reasons == ["done"]
+
+
+def test_task_queue_gateway_uses_keywords_for_remote_actor_calls() -> None:
+    class RemoteMethod:
+        def __init__(self, return_value=True):
+            self.return_value = return_value
+            self.calls = []
+
+        def remote(self, **kwargs):
+            self.calls.append(kwargs)
+            return self.return_value
+
+    class RemoteActor:
+        def __init__(self):
+            self.update_worker_status = RemoteMethod()
+            self.report_completion = RemoteMethod()
+            self.add_task = RemoteMethod()
+            self.set_start_counts = RemoteMethod()
+            self.set_stop_signal = RemoteMethod()
+
+    actor = RemoteActor()
+    gateway = TaskQueueGateway(actor=actor, ray_get=lambda value: value)
+
+    assert gateway.update_worker_status("worker-21", "running") is True
+    assert gateway.report_completion(11, "success") is True
+    assert gateway.add_task({"case_id": "case_1"}) is True
+    assert gateway.set_start_counts(7) is True
+    assert gateway.set_stop_signal("done") is True
+    assert actor.update_worker_status.calls == [
+        {"worker_id": "worker-21", "status": "running"}
+    ]
+    assert actor.report_completion.calls == [{"loop_num": 11, "status": "success"}]
+    assert actor.add_task.calls == [{"task": {"case_id": "case_1"}}]
+    assert actor.set_start_counts.calls == [{"count": 7}]
+    assert actor.set_stop_signal.calls == [{"reason": "done"}]

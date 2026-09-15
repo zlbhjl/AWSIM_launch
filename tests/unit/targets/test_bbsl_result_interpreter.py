@@ -71,3 +71,5 @@ def test_interpreter_accepts_raw_run_result() -> None:
     assert record.status is RunStatus.SUCCESS
     assert record.meta["raw_run_status"] == "success"
     assert record.meta["raw_run_meta"] == {"returncode": 0}
+    assert record.meta["execution_status"] == "success"
+    assert record.meta["analysis_status"] == "success"

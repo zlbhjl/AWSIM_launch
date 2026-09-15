@@ -47,6 +47,7 @@ class FakeTaskSource:
 def test_build_test_case_uses_fixture_stem_by_default() -> None:
     class Args:
         fixture = "tests/fixtures/awsim/timeout_trace.txt"
+        fixture_raw_run_status = None
         case_id = None
         case_kind = "uturn"
         target = "awsim"
@@ -71,6 +72,7 @@ def test_build_test_case_returns_none_without_fixture() -> None:
 def test_build_test_case_includes_history_loop_num_when_given() -> None:
     class Args:
         fixture = "tests/fixtures/awsim/timeout_trace.txt"
+        fixture_raw_run_status = None
         case_id = None
         case_kind = "uturn"
         target = "awsim"
@@ -83,6 +85,31 @@ def test_build_test_case_includes_history_loop_num_when_given() -> None:
 
     assert test_case is not None
     assert test_case.meta["history_loop_num"] == 12
+
+
+def test_build_test_case_includes_fixture_raw_run_status_when_given() -> None:
+    class Args:
+        fixture = "tests/fixtures/awsim/normal_trace_maude.json"
+        fixture_raw_run_status = "timeout"
+        case_id = None
+        case_kind = "uturn"
+        target = "awsim"
+        tags = []
+        reason = "manual"
+        history_loop_num = None
+        config_module = "targets.awsim.case_kinds.uturn"
+        mode = "explore"
+        ext_mode = "cvm"
+        dkw_region = "custom"
+        dkw_pure_smc = False
+        dkw_simultaneous = False
+        focus_points = None
+        dkw_bounds = None
+
+    test_case = build_test_case(Args())
+
+    assert test_case is not None
+    assert test_case.input["fixture_raw_run_status"] == "timeout"
 
 
 def test_validate_args_requires_exactly_one_input_mode() -> None:
@@ -195,6 +222,8 @@ def test_normalize_args_uses_legacy_type_for_awsim_case_kind() -> None:
         legacy_type = "uturn"
         case_kind = "uturn"
         config_module = None
+        scenario_profile = None
+        container_profile = None
         scenario_type = None
         mode = "explore"
         focus_points = None
@@ -212,6 +241,8 @@ def test_normalize_args_loads_focus_points_from_case_kind_module() -> None:
         legacy_type = None
         case_kind = "uturn"
         config_module = None
+        scenario_profile = None
+        container_profile = None
         scenario_type = None
         mode = "focus"
         focus_points = None
@@ -222,6 +253,73 @@ def test_normalize_args_loads_focus_points_from_case_kind_module() -> None:
     assert isinstance(normalized.focus_points, list)
     assert normalized.focus_points
     assert normalized.focus_points[0]["dx0"] == 10.09
+
+
+def test_normalize_args_uses_scenario_profile_specific_case_kind_module() -> None:
+    class Args:
+        target = "awsim"
+        legacy_type = None
+        case_kind = "uturn"
+        config_module = None
+        scenario_profile = "autoware171"
+        container_profile = None
+        scenario_type = None
+        mode = "explore"
+        focus_points = None
+
+    normalized = normalize_args(Args(), argv=["--scenario-profile", "autoware171"])
+
+    assert normalized.config_module == "targets.awsim.case_kinds.autoware171.uturn"
+
+
+def test_normalize_args_does_not_force_unsupported_scenario_profile_from_container_profile() -> None:
+    class Args:
+        target = "awsim"
+        legacy_type = None
+        case_kind = "uturn"
+        config_module = None
+        scenario_profile = None
+        container_profile = "autoware180"
+        scenario_type = None
+        mode = "explore"
+        focus_points = None
+
+    normalized = normalize_args(Args(), argv=["--container-profile", "autoware180"])
+
+    assert normalized.scenario_profile is None
+    assert normalized.config_module == "targets.awsim.case_kinds.uturn"
+
+
+def test_build_test_case_includes_profile_metadata() -> None:
+    class Args:
+        fixture = None
+        params = ["dx0=15.0", "ego_speed=35.0", "npc_speed=14.0"]
+        case_id = None
+        case_kind = "uturn"
+        target = "awsim"
+        tags = []
+        reason = "manual"
+        config_module = "targets.awsim.case_kinds.autoware171.uturn"
+        container_profile = "autoware171"
+        scenario_profile = "autoware171"
+        mode = "explore"
+        ext_mode = "cvm"
+        dkw_region = "custom"
+        dkw_pure_smc = False
+        dkw_simultaneous = False
+        focus_points = None
+        dkw_bounds = None
+        history_loop_num = None
+        scenario_type = None
+        simulation_output_dir = None
+        expected_trace_path = None
+        local_loop_num = None
+
+    test_case = build_test_case(Args())
+
+    assert test_case is not None
+    assert test_case.meta["container_profile"] == "autoware171"
+    assert test_case.meta["scenario_profile"] == "autoware171"
 
 
 def test_build_direct_input_returns_raw_params_for_bbsl() -> None:
@@ -369,6 +467,8 @@ def test_build_task_source_connects_to_ray_actor(monkeypatch) -> None:
         queue_address = "ray://127.0.0.1:10001"
         queue_connect_timeout = 12.0
         queue_connect_poll_interval = 0.5
+        queue_connect_retries = 4
+        queue_connect_retry_interval = 1.5
         target = "awsim"
         case_kind = "uturn"
 
@@ -397,6 +497,8 @@ def test_build_task_source_connects_to_ray_actor(monkeypatch) -> None:
     assert config.namespace == "awsim_cluster"
     assert config.actor_lookup_timeout_sec == 12.0
     assert config.actor_lookup_poll_interval_sec == 0.5
+    assert config.connect_retries == 4
+    assert config.connect_retry_interval_sec == 1.5
 
 
 def test_build_result_sink_returns_composite_when_dataset_csv_is_set(tmp_path: Path) -> None:
@@ -514,6 +616,102 @@ def test_run_worker_summary_keeps_running_when_optional_shared_store_actor_sink_
     assert output_path.exists()
     assert len(summary["sink_warnings"]) == 1
     assert "shared store actor unavailable" in summary["sink_warnings"][0]
+
+
+def test_run_worker_summary_stops_on_ray_control_plane_loss(tmp_path: Path) -> None:
+    output_path = tmp_path / "records.jsonl"
+    case = TestCase(
+        case_id="queue_case_ray_lost",
+        target="awsim",
+        case_kind="uturn",
+        meta={"global_loop_num": 1},
+    )
+
+    class RayLostTaskSource(FakeTaskSource):
+        def __init__(self):
+            super().__init__([case])
+            self.update_count = 0
+
+        def update_worker_status(self, worker_id: str, status: str):
+            self.update_count += 1
+            if self.update_count >= 3:
+                raise RuntimeError("Ray Client is not connected")
+            super().update_worker_status(worker_id, status)
+
+    def backend(test_case):
+        import time
+
+        time.sleep(0.04)
+        return RawRunResult(
+            case_id=test_case.case_id,
+            target=test_case.target,
+            case_kind=test_case.case_kind,
+            status=RunStatus.SUCCESS,
+        )
+
+    summary = run_worker_with_summary(
+        [
+            "--queue-actor-name",
+            "TaskQueueActor",
+            "--output",
+            str(output_path),
+            "--worker-id",
+            "worker-queue",
+            "--queue-heartbeat-interval",
+            "0.01",
+        ],
+        backend=backend,
+        result_interpreter=lambda raw: EvaluationRecord(
+            case_id=raw.case_id,
+            target=raw.target,
+            case_kind=raw.case_kind,
+            status=RunStatus.SUCCESS,
+        ),
+        task_source=RayLostTaskSource(),
+    )
+
+    assert summary["exit_code"] == 1
+    assert summary["status"] == "ray_control_plane_lost"
+    assert summary["terminal_status"] == "ray_control_plane_lost"
+    assert not output_path.exists()
+
+
+def test_run_worker_summary_exits_before_fetch_when_gpu_is_unavailable(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    output_path = tmp_path / "records.jsonl"
+    case = TestCase(case_id="must_not_run", target="awsim", case_kind="uturn")
+    task_source = FakeTaskSource([case])
+
+    class Unhealthy:
+        healthy = False
+        detail = "Failed to initialize NVML: Unknown Error"
+
+    monkeypatch.setattr(
+        "apps.cli.worker_main.probe_nvidia_smi",
+        lambda **_kwargs: Unhealthy(),
+    )
+    summary = run_worker_with_summary(
+        [
+            "--queue-actor-name",
+            "TaskQueueActor",
+            "--output",
+            str(output_path),
+            "--worker-id",
+            "worker_21",
+            "--worker-gpu-health-check",
+        ],
+        backend=lambda _: (_ for _ in ()).throw(AssertionError("backend must not run")),
+        result_interpreter=lambda _: None,
+        task_source=task_source,
+    )
+
+    assert summary["exit_code"] == 75
+    assert summary["status"] == "gpu_unavailable"
+    assert task_source.cases == [case]
+    assert task_source.status_updates == [("worker_21", "gpu_unavailable")]
+    assert not output_path.exists()
 
 
 def test_build_local_history_returns_none_without_history_path() -> None:

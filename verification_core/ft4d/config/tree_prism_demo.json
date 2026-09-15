@@ -1,0 +1,15 @@
+{
+  "tree": {
+    "top_event": {
+      "id": "PRISM_TOP",
+      "gate": "OR",
+      "use_dataset_aggregation": true,
+      "children": ["FAILURE", "EARLY_FAILURE", "REPEATED_DEGRADATION"]
+    }
+  },
+  "params": {
+    "FAILURE": {"sigma_pf": 0.0, "sigma_pb": 0.0},
+    "EARLY_FAILURE": {"sigma_pf": 0.0, "sigma_pb": 0.0},
+    "REPEATED_DEGRADATION": {"sigma_pf": 0.0, "sigma_pb": 0.0}
+  }
+}

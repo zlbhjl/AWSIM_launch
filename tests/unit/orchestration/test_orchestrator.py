@@ -1,4 +1,5 @@
-from contracts.execution import TestCase
+from contracts.evaluation import EvaluationRecord, ensure_evaluation_meta
+from contracts.execution import RunStatus, TestCase
 import orchestration.orchestrator as orchestrator_module
 from orchestration.final_report import build_final_report
 from orchestration.orchestrator import (
@@ -8,6 +9,7 @@ from orchestration.orchestrator import (
     build_worker_argv,
 )
 from runtime.cluster.ray_queue import TaskQueue
+from runtime.cluster.result_sink import SharedStoreResultSink
 
 
 def test_build_task_payload_uses_fixture_stem_by_default() -> None:
@@ -93,6 +95,42 @@ def test_orchestrator_enqueues_one_task_and_returns_summary() -> None:
     assert summary["completed_count"] == 1
     assert summary["worker_statuses"] == {"worker-21": "success"}
     assert "--queue-actor-name" in captured["argv"]
+
+
+def test_orchestrator_includes_maintenance_events_in_summary() -> None:
+    queue = TaskQueue()
+    emitted = False
+
+    def fake_worker_runner(_argv, *, task_source):
+        test_case = task_source.fetch_next()
+        assert test_case is not None
+        task_source.update_worker_status("worker-21", "success")
+        task_source.report_completion(1, "success")
+        return 0
+
+    def fake_maintenance(_snapshot, _config):
+        nonlocal emitted
+        if emitted:
+            return []
+        emitted = True
+        return [{"worker_id": "worker_21", "action": "restart"}]
+
+    orchestrator = Orchestrator(
+        queue=queue,
+        worker_runner=fake_worker_runner,
+        maintenance_callback=fake_maintenance,
+    )
+    summary = orchestrator.run(
+        OrchestratorConfig(
+            fixture="tests/fixtures/awsim/timeout_trace.txt",
+            output="/tmp/records.jsonl",
+            worker_id="worker-21",
+        )
+    )
+
+    assert summary["maintenance_events"] == [
+        {"worker_id": "worker_21", "action": "restart"}
+    ]
 
 
 def test_orchestrator_enqueues_parameter_case_and_preserves_inputs() -> None:
@@ -596,3 +634,81 @@ def test_orchestrator_summary_includes_strategy_final_report() -> None:
 
     assert summary["final_report"]["target"] == "Binomial CI"
     assert "Binomial CI Complete" in summary["final_report"]["reason"]
+
+
+def test_orchestrator_runs_prism_fixed_sampling_until_ci_is_sufficient(
+    tmp_path,
+) -> None:
+    queue = TaskQueue()
+    dataset_csv = tmp_path / "prism_samples.csv"
+    result_sink = SharedStoreResultSink.from_dataset_csv(dataset_csv)
+
+    def fake_worker_runner(_argv, *, task_source):
+        test_case = task_source.fetch_next()
+        assert test_case is not None
+        loop_num = int(test_case.meta["global_loop_num"])
+        is_model_check = test_case.input.get("record_kind") == "exact_model_check"
+        result_sink.save(
+            EvaluationRecord(
+                case_id=test_case.case_id,
+                target="prism",
+                case_kind=test_case.case_kind,
+                status=RunStatus.SUCCESS,
+                input=dict(test_case.input),
+                output=(
+                    {
+                        "prism_eventual_failure_probability": 1.0,
+                        "prism_bounded_failure_probability": 0.1,
+                    }
+                    if is_model_check
+                    else {"c_failure": 0}
+                ),
+                meta=ensure_evaluation_meta(
+                    {
+                        "global_loop_num": loop_num,
+                        "task_reason": test_case.reason,
+                    },
+                    source_module="tests.fake_prism_worker",
+                ),
+            )
+        )
+        task_source.report_completion(loop_num, "success")
+        return {
+            "exit_code": 0,
+            "terminal_status": "no_task",
+            "status": "success",
+        }
+
+    summary = Orchestrator(
+        queue=queue,
+        worker_runner=fake_worker_runner,
+    ).run(
+        OrchestratorConfig(
+            output=str(tmp_path / "records.jsonl"),
+            dataset_csv=str(dataset_csv),
+            target="prism",
+            case_kind="simple_reliability_dtmc",
+            run_mode="binomial_ci",
+            params={"model": "simple_reliability_dtmc", "steps": 20},
+            experiment_id="phase4-test",
+            max_samples=20,
+            binomial_target="c_failure",
+            binomial_min_samples=10,
+            binomial_target_width=0.3,
+            queue_high_water=1,
+            queue_low_water=0,
+        )
+    )
+
+    assert summary["enqueued"] == 11
+    assert summary["completed_count"] == 11
+    assert "interval sufficient" in summary["stop_reason"]
+    assert summary["statistical_report"]["sample_count"] == 10
+    assert summary["statistical_report"]["sufficient"] is True
+    assert summary["statistical_report"]["exact_model_check"] == {
+        "eventual_failure_probability": 1.0,
+        "bounded_failure_probability": 0.1,
+        "comparison_metric": "c_failure",
+        "ci_contains_bounded_probability": True,
+        "absolute_estimation_error": 0.1,
+    }

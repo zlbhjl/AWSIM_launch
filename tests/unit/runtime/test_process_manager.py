@@ -1,18 +1,44 @@
 import signal
 from pathlib import Path
 
+import pytest
+
 from runtime.container.cleanup import ContainerCleanup
 from runtime.container.infra_tasks import InfraTask
 from runtime.container.process_manager import ContainerProcessManager, ManagedRuntimeProcess
 
 
 class FakeProcess:
-    def __init__(self, pid: int) -> None:
+    def __init__(self, pid: int, returncode: int | None = None) -> None:
         self.pid = pid
-        self.returncode = None
+        self.returncode = returncode
 
     def poll(self) -> int | None:
         return self.returncode
+
+
+class FakeSupervisor:
+    def __init__(self) -> None:
+        self.spawn_calls: list[dict[str, object]] = []
+        self.signal_calls: list[tuple[str, int]] = []
+        self.release_calls: list[str] = []
+        self.run_calls: list[dict[str, object]] = []
+
+    def spawn(self, command, **kwargs):
+        self.spawn_calls.append({"command": command, **kwargs})
+        process = FakeProcess(pid=900 + len(self.spawn_calls))
+        process.process_id = f"process-{len(self.spawn_calls)}"
+        return process
+
+    def signal(self, process_id, signal_number):
+        self.signal_calls.append((process_id, signal_number))
+
+    def release(self, process_id):
+        self.release_calls.append(process_id)
+
+    def run(self, command, **kwargs):
+        self.run_calls.append({"command": command, **kwargs})
+        return type("Completed", (), {"returncode": 0, "stdout": "", "stderr": ""})()
 
 
 def test_process_manager_starts_infra_and_tracks_resident_processes(tmp_path: Path) -> None:
@@ -78,6 +104,78 @@ def test_process_manager_starts_infra_and_tracks_resident_processes(tmp_path: Pa
     ]
     assert (tmp_path / "logs" / "resident.log").exists()
     assert (tmp_path / "logs" / "autoware.log").exists()
+
+
+def test_process_manager_reports_infrastructure_process_that_exits_during_startup(
+    tmp_path: Path,
+) -> None:
+    from runtime.container.process_manager import InfrastructureProcessExited
+
+    log_dir = tmp_path / "logs"
+
+    def fake_popen(_command, **kwargs):
+        kwargs["stdout"].write("NameError: AWSIMClientOpStateTrackerTopic is not defined\n")
+        kwargs["stdout"].flush()
+        return FakeProcess(pid=404, returncode=1)
+
+    manager = ContainerProcessManager(
+        popen_factory=fake_popen,
+        sleeper=lambda _seconds: None,
+    )
+
+    with pytest.raises(InfrastructureProcessExited, match="AWSIMClientOpStateTrackerTopic"):
+        manager.start_process(
+            InfraTask(
+                name="Runtime Monitor",
+                work_dir=tmp_path,
+                command="python3 main.py",
+                delay_sec=5.0,
+                log_filename="runtime_monitor.log",
+            ),
+            sim_num=1,
+            output_dir=log_dir,
+            source_setup_script=None,
+            env={},
+        )
+
+
+def test_process_manager_uses_supervisor_for_spawn_and_cleanup(tmp_path: Path) -> None:
+    supervisor = FakeSupervisor()
+    manager = ContainerProcessManager(
+        popen_factory=lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("worker must not fork subprocesses")
+        ),
+        sleeper=lambda _seconds: None,
+        supervisor_client=supervisor,  # type: ignore[arg-type]
+    )
+
+    process = manager.start_process(
+        InfraTask(
+            name="Autoware",
+            work_dir=tmp_path,
+            command="ros2 launch demo demo.launch.xml",
+            log_filename="autoware.log",
+        ),
+        sim_num=1,
+        output_dir=tmp_path / "logs",
+        source_setup_script=None,
+        env={"ROS_DOMAIN_ID": "21"},
+    )
+    manager.infra_processes.append(process)
+    manager.stop_infra(force_cleanup_os=False)
+
+    assert supervisor.spawn_calls[0]["command"] == [
+        "/bin/bash",
+        "-i",
+        "-c",
+        "ros2 launch demo demo.launch.xml",
+    ]
+    assert supervisor.spawn_calls[0]["log_path"] == tmp_path / "logs" / "autoware.log"
+    assert supervisor.signal_calls == [
+        ("process-1", signal.SIGINT),
+        ("process-1", signal.SIGKILL),
+    ]
+    assert supervisor.release_calls == ["process-1"]
 
 
 def test_process_manager_launch_client_replaces_previous_client(tmp_path: Path) -> None:
@@ -299,4 +397,6 @@ def test_process_manager_shutdown_all_clears_resident_processes(tmp_path: Path) 
         ["Scenario Client", "401", str(signal.SIGINT)],
         ["Scenario Client", "401", str(signal.SIGKILL)],
     ]
-    assert any("pkill -9 -f ros2" in command for command in os_cleanup_calls)
+    assert any("pkill -9 -f autoware_launch" in command for command in os_cleanup_calls)
+    assert not any("pkill -9 -f autoware " in command for command in os_cleanup_calls)
+    assert not any("pkill -9 -f ros2 " in command for command in os_cleanup_calls)

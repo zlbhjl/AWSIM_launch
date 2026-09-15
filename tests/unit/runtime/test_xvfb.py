@@ -93,3 +93,40 @@ def test_xvfb_controller_apply_environment_returns_updated_copy() -> None:
 
     assert updated_env == {"PATH": "/usr/bin", "DISPLAY": ":88"}
     assert original_env == {"PATH": "/usr/bin"}
+
+
+def test_xvfb_controller_uses_process_supervisor() -> None:
+    calls: list[tuple[str, object]] = []
+
+    class FakeSupervisor:
+        def run(self, command, **kwargs):
+            calls.append(("run", command))
+            return type("Completed", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+
+        def spawn(self, command, **kwargs):
+            calls.append(("spawn", command))
+            process = FakeProcess(pid=199)
+            process.process_id = "xvfb-1"
+            return process
+
+        def signal(self, process_id, signal_number):
+            calls.append(("signal", (process_id, signal_number)))
+
+        def release(self, process_id):
+            calls.append(("release", process_id))
+
+    controller = XvfbController(
+        env={"HOME": "/home/passd"},
+        sleeper=lambda _seconds: None,
+        supervisor_client=FakeSupervisor(),  # type: ignore[arg-type]
+    )
+    session = controller.start(XvfbConfig(enabled=True))
+    controller.stop(session)
+
+    assert calls[0][0] == "run"
+    assert calls[1] == (
+        "spawn",
+        ["Xvfb", ":199", "-screen", "0", "1920x1080x24"],
+    )
+    assert calls[2] == ("signal", ("xvfb-1", signal.SIGKILL))
+    assert calls[3] == ("release", "xvfb-1")

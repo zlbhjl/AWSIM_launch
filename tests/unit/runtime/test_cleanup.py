@@ -1,6 +1,6 @@
 import signal
 
-from runtime.container.cleanup import ContainerCleanup, ManagedProcess
+from runtime.container.cleanup import DEFAULT_PROCESS_PATTERNS, ContainerCleanup, ManagedProcess
 
 
 class FakeProcess:
@@ -57,6 +57,34 @@ def test_container_cleanup_force_cleanup_os_runs_expected_commands() -> None:
         "echo cleanup_a",
         "echo cleanup_b",
     ]
+
+
+def test_container_cleanup_quotes_process_patterns_with_spaces() -> None:
+    commands: list[str] = []
+
+    cleanup = ContainerCleanup(
+        signal_sender=lambda *_: None,
+        sleeper=lambda _: None,
+        system_runner=lambda command: commands.append(command) or 0,
+    )
+
+    cleanup.force_cleanup_os(
+        process_patterns=["ros2 launch autoware_launch"],
+        cleanup_commands=[],
+    )
+
+    assert commands == [
+        "pkill -15 -f 'ros2 launch autoware_launch' > /dev/null 2>&1",
+        "pkill -9 -f 'ros2 launch autoware_launch' > /dev/null 2>&1",
+    ]
+
+
+def test_default_cleanup_patterns_do_not_match_worker_profile_names() -> None:
+    assert "autoware" not in DEFAULT_PROCESS_PATTERNS
+    assert "ros2" not in DEFAULT_PROCESS_PATTERNS
+    worker_command = "python3 run_worker_v2.py --container-profile autoware171"
+
+    assert not any(pattern in worker_command for pattern in DEFAULT_PROCESS_PATTERNS)
 
 
 def test_container_cleanup_all_combines_process_and_os_cleanup() -> None:

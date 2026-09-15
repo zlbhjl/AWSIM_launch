@@ -1,15 +1,17 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
-import numpy as np
 import pandas as pd
 
 from contracts.statistics import BoundsMap, StatisticalReport, StatisticalRequest
 from evaluation.dkw import DKWService
+from contracts.statistical_region import (
+    PassthroughStatisticalRegionPolicy,
+    StatisticalRegionPolicy,
+)
 from runtime.repository.statistical_samples import StatisticalSamplesRepository
-from targets.awsim.theory import build_theory_metrics, default_theory_columns
 
 import point_extractors
 
@@ -17,8 +19,8 @@ import point_extractors
 @dataclass(slots=True)
 class DKWModeConfig:
     param_names: list[str]
-    target_metric: str = "min_ttc"
-    target_metrics: list[str] = field(default_factory=lambda: ["min_ttc", "min_distance"])
+    target_metric: str
+    target_metrics: list[str]
     total_delta: float = 0.05
     target_epsilon: float = 0.15
     base_samples: int = 50
@@ -28,6 +30,7 @@ class DKWModeConfig:
     max_samples: int = 2000
     case_kind: str = "uturn"
     config_module_name: str | None = None
+    minimum_value: float | None = None
 
 
 @dataclass(slots=True)
@@ -46,11 +49,13 @@ class DKWModeRunner:
         dkw_service: DKWService,
         statistical_history_repository: object | None = None,
         statistical_samples_repository: StatisticalSamplesRepository | None = None,
+        region_policy: StatisticalRegionPolicy | None = None,
     ) -> None:
         self.config = config
         self.dkw_service = dkw_service
         self.statistical_history_repository = statistical_history_repository
         self.statistical_samples_repository = statistical_samples_repository
+        self.region_policy = region_policy or PassthroughStatisticalRegionPolicy()
 
     @classmethod
     def from_runtime_config(
@@ -72,6 +77,8 @@ class DKWModeRunner:
         config: object | None = None,
         case_kind: str = "uturn",
         config_module_name: str | None = None,
+        region_policy: StatisticalRegionPolicy | None = None,
+        minimum_value: float | None = None,
     ) -> "DKWModeRunner":
         return cls(
             config=DKWModeConfig(
@@ -91,10 +98,14 @@ class DKWModeRunner:
                     if config_module_name is not None
                     else getattr(config, "__name__", None)
                 ),
+                minimum_value=(
+                    float(minimum_value) if minimum_value is not None else None
+                ),
             ),
             dkw_service=dkw_service,
             statistical_history_repository=statistical_history_repository,
             statistical_samples_repository=statistical_samples_repository,
+            region_policy=region_policy,
         )
 
     def initialize_bounds(
@@ -325,6 +336,7 @@ class DKWModeRunner:
                 "use_kde_weighting": use_kde_weighting,
                 "epsilon": self.config.target_epsilon,
                 "stage_target_samples": stage_target_samples,
+                "minimum_value": self.config.minimum_value,
             },
         )
 
@@ -337,20 +349,7 @@ class DKWModeRunner:
         return df_dataset[reason_series.str.contains("SMC", na=False)]
 
     def _build_region_filter_frame(self, point: Mapping[str, object]) -> pd.DataFrame:
-        row: dict[str, object] = dict(point)
-        row.update(default_theory_columns())
-        row.update(
-            build_theory_metrics(
-                case_kind=self.config.case_kind,
-                values=row,
-                config_module_name=self.config.config_module_name,
-            )
-        )
-        row.setdefault("c_collision", 0)
-        row.setdefault("min_ttc", 99.9)
-        row.setdefault("min_distance", 99.9)
-        row.setdefault("min_ttb", 99.9)
-        return pd.DataFrame([row])
+        return self.region_policy.build_filter_frame(point)
 
     def _point_satisfies_region(self, point: Mapping[str, object]) -> bool:
         if self.config.region == "custom":

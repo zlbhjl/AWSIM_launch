@@ -1,4 +1,7 @@
 from targets.awsim.scenario_builders.cutin_builder import build_cutin_scenario
+from targets.awsim.scenario_builders.legacy.cutin_builder import (
+    build_cutin_scenario as build_legacy_cutin_scenario,
+)
 
 
 def test_build_cutin_scenario_maps_dynamic_and_fixed_params() -> None:
@@ -181,3 +184,63 @@ def test_build_cutin_scenario_uses_speed_profile_offsets() -> None:
     assert captured["cutin_next_lane"] == "111"
     assert captured["acceleration"] == 7.0
     assert captured["npc_start_speed_ratio"] == 0.898
+
+
+def test_build_legacy_cutin_scenario_uses_profiled_offsets_without_ratio() -> None:
+    captured: dict[str, object] = {}
+
+    build_legacy_cutin_scenario(
+        network="fake-network",
+        dynamic_params={
+            "dx0": 12.0,
+            "ego_speed": 39.0,
+            "npc_speed": 19.0,
+        },
+        fixed_params={
+            "ego_init_lane": "fallback-lane",
+            "ego_init_offset": -1.0,
+            "ego_goal_lane": "fallback-lane",
+            "ego_goal_offset": -1.0,
+            "npc_init_lane": "fallback-lane",
+            "npc_init_offset": -1.0,
+            "cutin_next_lane": "fallback-lane",
+            "cutin_vy": 1.4,
+            "acceleration": 1.0,
+        },
+        scenario_profiles=[
+            {
+                "profile_id": "cutin_20",
+                "npc_speed": 20.0,
+                "npc_init_lane": "112",
+                "cutin_next_lane": "111",
+                "acceleration": 7.0,
+                "ego_speed_bands": [
+                    {
+                        "max_ego_speed": 35.0,
+                        "ego_init_lane": "111",
+                        "ego_init_offset": 0.0,
+                        "ego_goal_lane": "111",
+                        "ego_goal_offset": 150.0,
+                        "npc_init_offset": 80.0,
+                        "npc_start_speed_ratio": 0.898,
+                    },
+                    {
+                        "max_ego_speed": float("inf"),
+                        "ego_init_lane": "111",
+                        "ego_init_offset": 0.0,
+                        "ego_goal_lane": "111",
+                        "ego_goal_offset": 210.0,
+                        "npc_init_offset": 120.0,
+                        "npc_start_speed_ratio": 0.916,
+                    },
+                ],
+            }
+        ],
+        lane_offset_factory=lambda lane_id, offset: (lane_id, offset),
+        scenario_builder=lambda **kwargs: captured.update(kwargs) or kwargs,
+    )
+
+    assert captured["ego_goal_laneoffset"] == ("111", 210.0)
+    assert captured["npc_init_laneoffset"] == ("112", 120.0)
+    assert captured["acceleration"] == 7.0
+    assert captured["npc_start_speed_ratio"] == 0.916

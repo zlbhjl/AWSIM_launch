@@ -52,3 +52,30 @@ def test_container_runner_sources_setup_script_when_requested() -> None:
     assert result.returncode == 0
     assert captured["command"][0:2] == ["/bin/bash", "-lc"]
     assert "source /tmp/setup.bash && python3 run_scenario.py --type uturn" in captured["command"][2]
+
+
+def test_container_runner_uses_process_supervisor_when_available() -> None:
+    captured: dict[str, object] = {}
+
+    class FakeSupervisor:
+        def run(self, command, **kwargs):
+            captured["command"] = command
+            captured["kwargs"] = kwargs
+            return Completed(returncode=0, stdout="ready", stderr="")
+
+    runner = ContainerRunner(
+        subprocess_runner=lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("worker must not run subprocesses")
+        ),
+        supervisor_client=FakeSupervisor(),  # type: ignore[arg-type]
+    )
+    result = runner.run_command(
+        ["ros2", "service", "list"],
+        cwd=Path("/tmp"),
+        env={"ROS_DOMAIN_ID": "21"},
+        source_setup_script=Path("/opt/ros/humble/setup.bash"),
+    )
+
+    assert result.stdout == "ready"
+    assert captured["command"][0:2] == ["/bin/bash", "-lc"]
+    assert captured["kwargs"]["env"] == {"ROS_DOMAIN_ID": "21"}

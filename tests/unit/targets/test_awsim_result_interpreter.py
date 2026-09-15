@@ -101,3 +101,44 @@ def test_result_interpreter_accepts_raw_run_result() -> None:
     assert record.status is RunStatus.SUCCESS
     assert record.meta["raw_run_status"] == "success"
     assert record.meta["raw_run_meta"] == {"returncode": 0}
+    assert record.meta["execution_status"] == "success"
+    assert record.meta["analysis_status"] == "success"
+
+
+def test_result_interpreter_uses_checker_result_for_partial_timeout_trace() -> None:
+    interpreter = ResultInterpreter()
+    raw_run_result = RawRunResult(
+        case_id="worker_case_timeout_trace",
+        target="awsim",
+        case_kind="uturn",
+        status=RunStatus.TIMEOUT,
+        evidence={"trace_json": str(FIXTURES / "normal_trace_maude.json")},
+        meta={"returncode": 124},
+    )
+
+    record = interpreter.interpret_raw_run_result(raw_run_result)
+
+    assert record.case_id == "worker_case_timeout_trace"
+    assert record.status is RunStatus.SUCCESS
+    assert record.meta["raw_run_status"] == "timeout"
+    assert record.meta["execution_status"] == "timeout"
+    assert record.meta["analysis_status"] == "success"
+    assert record.meta["raw_run_meta"] == {"returncode": 124}
+    assert record.meta["raw_timeout_reason"] == "scenario_goal_timeout"
+
+
+def test_result_interpreter_keeps_late_artifact_as_raw_metadata() -> None:
+    interpreter = ResultInterpreter()
+    raw_run_result = RawRunResult(
+        case_id="worker_case_late_trace",
+        target="awsim",
+        case_kind="uturn",
+        status=RunStatus.TIMEOUT,
+        evidence={"trace_json": str(FIXTURES / "normal_trace_maude.json")},
+        meta={"returncode": 124, "artifact_timing": "late"},
+    )
+
+    record = interpreter.interpret_raw_run_result(raw_run_result)
+
+    assert record.status is RunStatus.SUCCESS
+    assert record.meta["raw_timeout_reason"] == "late_artifact"

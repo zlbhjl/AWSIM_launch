@@ -10,7 +10,7 @@ JAIST Tomita-Lab Parallel Computing Cluster Configuration
 """
 
 # Ray/Redis の起点となるマスターノードのIPとポート
-MASTER_IP = "150.65.227.21"
+MASTER_IP = "150.65.227.108"
 RAY_PORT = "6379"
 
 # クラスターを構成する全ノードの情報
@@ -76,7 +76,7 @@ CLUSTER_NODES = {
         "user": "tomita4",
         "mac": "9c:6b:00:cd:51:c3",
         "role": "worker",
-        "enabled": False,
+        "enabled": True,
         "container": {
             "name": "sim_worker_24",
             "ros_domain_id": 24,

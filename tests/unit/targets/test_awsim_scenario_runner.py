@@ -1,5 +1,4 @@
 from types import SimpleNamespace
-
 from targets.awsim.scenario_runner import (
     _install_scenario_goal_timeout,
     build_scenario,
@@ -64,6 +63,47 @@ def test_build_scenario_creates_uturn_variant_for_right_15_profile() -> None:
     assert captured["_npc_speed"] == 14.0 / 3.6
     assert captured["dx0"] == 15.0
     assert captured["acceleration"] == 7.0
+
+
+def test_build_scenario_uses_profiled_case_kind_and_builder_modules() -> None:
+    captured: dict[str, object] = {}
+
+    def fake_uturn_builder(**kwargs):
+        captured.update(kwargs)
+        return {"scenario": "uturn"}
+
+    _, scenario = build_scenario(
+        "uturn",
+        {"dx0": 15.0, "ego_speed": 35.0, "npc_speed": 14.0},
+        scenario_profile="autoware171",
+        scenario_manager=SimpleNamespace(network="fake-network"),
+        lane_offset_factory=lambda lane_id, offset: (lane_id, offset),
+        scenario_builders={"uturn": fake_uturn_builder},
+    )
+
+    assert scenario == {"scenario": "uturn"}
+    assert captured["ego_init_laneoffset"] == ("514", 17)
+
+
+def test_build_scenario_uses_legacy_uturn_builder_shape() -> None:
+    captured: dict[str, object] = {}
+
+    def fake_uturn_builder(**kwargs):
+        captured.update(kwargs)
+        return {"scenario": "uturn"}
+
+    _, scenario = build_scenario(
+        "uturn",
+        {"dx0": 15.0, "ego_speed": 31.0, "npc_speed": 10.2},
+        scenario_profile="legacy",
+        scenario_manager=SimpleNamespace(network="fake-network"),
+        lane_offset_factory=lambda lane_id, offset: (lane_id, offset),
+        scenario_builders={"uturn": fake_uturn_builder},
+    )
+
+    assert scenario == {"scenario": "uturn"}
+    assert captured["ego_init_laneoffset"] == ("514", 30.0)
+    assert captured["npc_start_speed_ratio"] < 1.0
 
 
 def test_build_scenario_delegates_uturn_shape_to_builder_module() -> None:
@@ -161,6 +201,28 @@ def test_build_scenario_creates_cutin_variant() -> None:
     assert captured["_cutin_vy"] == 1.4
 
 
+def test_build_scenario_uses_legacy_cutin_builder_shape() -> None:
+    captured: dict[str, object] = {}
+
+    def fake_cutin_builder(**kwargs):
+        captured.update(kwargs)
+        return {"scenario": "cutin"}
+
+    _, scenario = build_scenario(
+        "cutin",
+        {"dx0": 12.0, "ego_speed": 39.0, "npc_speed": 19.0},
+        scenario_profile="legacy",
+        scenario_manager=SimpleNamespace(network="fake-network"),
+        lane_offset_factory=lambda lane_id, offset: (lane_id, offset),
+        scenario_builders={"cutin": fake_cutin_builder},
+    )
+
+    assert scenario == {"scenario": "cutin"}
+    assert captured["ego_goal_laneoffset"] == ("111", 210.0)
+    assert captured["npc_init_laneoffset"] == ("112", 120.0)
+    assert captured["npc_start_speed_ratio"] < 1.0
+
+
 def test_build_scenario_creates_cutin_high_speed_profile_variant() -> None:
     captured: dict[str, object] = {}
 
@@ -210,6 +272,28 @@ def test_run_scenario_case_runs_manager_once_for_cutin() -> None:
     assert outputs == [">>> [Runner] Starting 'cutin' simulation..."]
     assert len(fake_manager.runs) == 1
     assert fake_manager.runs[0][0].kind == "cutin"
+
+
+def test_build_scenario_uses_legacy_swerve_builder_shape() -> None:
+    captured: dict[str, object] = {}
+
+    def fake_swerve_builder(**kwargs):
+        captured.update(kwargs)
+        return {"scenario": "swerve"}
+
+    _, scenario = build_scenario(
+        "swerve",
+        {"dx0": 35.0, "ego_speed": 39.0, "npc_speed": 14.7},
+        scenario_profile="legacy",
+        scenario_manager=SimpleNamespace(network="fake-network"),
+        lane_offset_factory=lambda lane_id, offset: (lane_id, offset),
+        scenario_builders={"swerve": fake_swerve_builder},
+    )
+
+    assert scenario == {"scenario": "swerve"}
+    assert captured["ego_goal_laneoffset"] == ("214", 26.0)
+    assert captured["npc_init_laneoffset"] == ("205", 62.0)
+    assert captured["npc_start_speed_ratio"] < 1.0
 
 
 def test_build_scenario_creates_cutout_variant() -> None:
@@ -477,7 +561,7 @@ def test_install_scenario_goal_timeout_marks_timeout_and_returns() -> None:
     assert warnings == ["Scenario timed out after 1.0s before goal arrival."]
 
 
-def test_run_scenario_case_returns_timeout_exit_code_when_goal_is_not_reached() -> None:
+def test_run_scenario_case_leaves_goal_timeout_to_the_outer_supervisor() -> None:
     outputs: list[str] = []
 
     class FakeLogger:
@@ -519,6 +603,6 @@ def test_run_scenario_case_returns_timeout_exit_code_when_goal_is_not_reached() 
         timeout_goal_arrived_value=5,
     )
 
-    assert exit_code == 124
+    assert exit_code == 0
     assert outputs == [">>> [Runner] Starting 'uturn' simulation..."]
-    assert fake_manager.logger.warnings == ["Scenario timed out after 1.0s before goal arrival."]
+    assert fake_manager.logger.warnings == []

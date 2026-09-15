@@ -2,13 +2,21 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
+from pathlib import Path
 from typing import Sequence
 
 from apps.cli.worker_main import LEGACY_MODES, parse_param_assignments
 from orchestration.orchestrator import Orchestrator, OrchestratorConfig, build_task_payload
+from runtime.container.profile import SUPPORTED_CONTAINER_PROFILES
 from runtime.cluster.ray_queue import TaskQueue
-from targets.awsim.case_kinds import load_focus_points
+from targets.awsim.case_kinds import (
+    SUPPORTED_SCENARIO_PROFILES,
+    build_default_case_kind_module_name,
+    load_focus_points,
+)
+from targets.statistical import load_statistical_target_profile
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -48,10 +56,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--target",
         default="awsim",
-        choices=["awsim", "bbsl"],
+        choices=["awsim", "bbsl", "prism"],
         help="Target name for the worker.",
     )
     parser.add_argument("--worker-id", default="worker_v2_local", help="Worker identifier.")
+    parser.add_argument(
+        "--experiment-id",
+        default=None,
+        help="Sampling batch identifier used to keep statistical samples separate.",
+    )
     parser.add_argument("--reason", default="manual_orchestrator_run", help="Task reason label.")
     parser.add_argument(
         "--tag",
@@ -84,6 +97,33 @@ def build_parser() -> argparse.ArgumentParser:
         "--dataset-csv",
         default=None,
         help="Optional dataset CSV path for shared-store style merged output.",
+    )
+    parser.add_argument(
+        "--replay-csv",
+        default=None,
+        help=(
+            "Source dataset CSV for replay mode. Only successful BINOMIAL_CI rows "
+            "with a binary collision result are replayed."
+        ),
+    )
+    parser.add_argument(
+        "--replay-reason-pattern",
+        default="BINOMIAL_CI:",
+        help="Literal source reason text required for replay eligibility.",
+    )
+    parser.add_argument(
+        "--replay-expected-count",
+        type=int,
+        default=None,
+        help="Fail before dispatch when the eligible replay row count differs.",
+    )
+    parser.add_argument(
+        "--run-id",
+        default=None,
+        help=(
+            "Cluster trace directory suffix. Required in replay mode so source "
+            "and replay artifacts cannot overwrite each other."
+        ),
     )
     parser.add_argument(
         "--history-path",
@@ -155,6 +195,24 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional worker refresh policy forwarded to queue-mode worker runs.",
     )
     parser.add_argument(
+        "--worker-queue-empty-wait-timeout-sec",
+        type=float,
+        default=300.0,
+        help="Seconds worker containers keep polling when the shared queue is temporarily empty.",
+    )
+    parser.add_argument(
+        "--worker-queue-empty-wait-interval-sec",
+        type=float,
+        default=5.0,
+        help="Seconds between empty shared queue polling attempts in worker containers.",
+    )
+    parser.add_argument(
+        "--worker-queue-heartbeat-interval-sec",
+        type=float,
+        default=60.0,
+        help="Seconds between worker status heartbeat updates during a running case.",
+    )
+    parser.add_argument(
         "--max-strategy-cases",
         type=int,
         default=None,
@@ -205,6 +263,55 @@ def build_parser() -> argparse.ArgumentParser:
         help="Forward Xvfb-based headless execution to the v2 worker backend.",
     )
     parser.add_argument(
+        "--container-profile",
+        choices=SUPPORTED_CONTAINER_PROFILES,
+        default=None,
+        help="Optional named container runtime profile (for example: legacy, autoware171, autoware180).",
+    )
+    parser.add_argument(
+        "--scenario-profile",
+        choices=SUPPORTED_SCENARIO_PROFILES,
+        default=None,
+        help="Optional named scenario spec profile (for example: legacy, autoware171).",
+    )
+    parser.add_argument(
+        "--no-sync-awsim-launch",
+        dest="sync_awsim_launch",
+        action="store_false",
+        default=True,
+        help="Cluster mode only. Disable the default rsync of ~/AWSIM_launch to remote worker nodes.",
+    )
+    parser.add_argument(
+        "--sync-awsim-script-py",
+        action="store_true",
+        help="Cluster mode only. Also rsync ~/AWSIMScriptPy to remote worker nodes.",
+    )
+    runtime_monitor_sync_group = parser.add_mutually_exclusive_group()
+    runtime_monitor_sync_group.add_argument(
+        "--sync-aw-runtime-monitor",
+        dest="sync_aw_runtime_monitor",
+        action="store_true",
+        default=True,
+        help=(
+            "Cluster mode only. Rsync and validate ~/AW-Runtime-Monitor on remote "
+            "worker nodes (enabled by default)."
+        ),
+    )
+    runtime_monitor_sync_group.add_argument(
+        "--no-sync-aw-runtime-monitor",
+        dest="sync_aw_runtime_monitor",
+        action="store_false",
+        help=(
+            "Cluster mode only. Disable the default AW-Runtime-Monitor sync and "
+            "validation."
+        ),
+    )
+    parser.add_argument(
+        "--sync-autoware180-map",
+        action="store_true",
+        help="Cluster mode only. Also rsync ~/autoware180_runtime/maps to remote worker nodes.",
+    )
+    parser.add_argument(
         "--with-host-worker",
         action="store_true",
         help="Start a host-side v2 worker process alongside orchestrator control.",
@@ -219,6 +326,102 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=None,
         help="Worker count used when deriving queue refill watermarks.",
+    )
+    parser.add_argument(
+        "--worker-launch-stagger-sec",
+        type=float,
+        default=20.0,
+        help="Cluster mode only. Seconds to wait between worker container launches.",
+    )
+    parser.add_argument(
+        "--worker-queue-connect-retries",
+        type=int,
+        default=6,
+        help="Cluster mode only. ray.init retry attempts passed to queue workers.",
+    )
+    parser.add_argument(
+        "--worker-queue-connect-retry-interval-sec",
+        type=float,
+        default=15.0,
+        help="Cluster mode only. Seconds between queue worker ray.init retries.",
+    )
+    parser.add_argument(
+        "--auto-restart-stale-workers",
+        action="store_true",
+        help=(
+            "Cluster mode only. Restart a stale worker container only when docker "
+            "inspect confirms that the container is stopped or missing."
+        ),
+    )
+    parser.add_argument(
+        "--auto-restart-missing-workers",
+        action="store_true",
+        help=(
+            "Cluster mode only. Also restart enabled worker containers that exited "
+            "with code 1 before registering in the Ray queue."
+        ),
+    )
+    parser.add_argument(
+        "--auto-restart-gpu-workers",
+        action="store_true",
+        help=(
+            "Cluster mode only. Quarantine and recreate worker containers when "
+            "their periodic nvidia-smi probe fails."
+        ),
+    )
+    parser.add_argument(
+        "--stale-worker-timeout-sec",
+        type=float,
+        default=600.0,
+        help="Cluster mode only. Seconds before a worker status is considered stale.",
+    )
+    parser.add_argument(
+        "--stale-worker-check-interval-loops",
+        type=int,
+        default=5,
+        help="Cluster mode only. Poll loops between stale worker restart checks.",
+    )
+    parser.add_argument(
+        "--stale-worker-restart-cooldown-sec",
+        type=float,
+        default=600.0,
+        help="Cluster mode only. Minimum seconds between restarts for the same worker.",
+    )
+    parser.add_argument(
+        "--worker-restart-max-count",
+        type=int,
+        default=2,
+        help="Cluster mode only. Maximum automatic worker container restarts per node.",
+    )
+    parser.add_argument(
+        "--worker-restart-log-tail-lines",
+        type=int,
+        default=100,
+        help="Cluster mode only. docker logs lines captured before an automatic restart.",
+    )
+    parser.add_argument(
+        "--gpu-worker-max-restarts-per-24h",
+        type=int,
+        default=5,
+        help="Cluster mode only. Maximum GPU recovery recreations per node in 24 hours.",
+    )
+    parser.add_argument(
+        "--gpu-worker-max-consecutive-failures",
+        type=int,
+        default=3,
+        help="Cluster mode only. Failed GPU recreations before terminal quarantine.",
+    )
+    parser.add_argument(
+        "--gpu-worker-stable-reset-sec",
+        type=float,
+        default=1800.0,
+        help="Cluster mode only. Healthy duration that resets consecutive GPU failures.",
+    )
+    parser.add_argument(
+        "--gpu-worker-probe-timeout-sec",
+        type=float,
+        default=5.0,
+        help="Cluster mode only. Timeout for each host/container nvidia-smi probe.",
     )
     parser.add_argument(
         "--cache-size",
@@ -294,13 +497,46 @@ def build_parser() -> argparse.ArgumentParser:
 def validate_args(args: argparse.Namespace) -> None:
     fixture_mode = bool(getattr(args, "fixture", None))
     simulation_mode = bool(getattr(args, "params", []))
-    strategy_mode = not fixture_mode and not simulation_mode
+    replay_mode = bool(getattr(args, "replay_csv", None))
+    strategy_mode = not fixture_mode and not simulation_mode and not replay_mode
 
-    if fixture_mode and simulation_mode:
-        raise ValueError("Specify exactly one of --fixture or --param key=value")
+    if sum((fixture_mode, simulation_mode, replay_mode)) > 1:
+        raise ValueError(
+            "Specify only one input source: --fixture, --param key=value, or --replay-csv"
+        )
+    if replay_mode and getattr(args, "mode", None) != "replay":
+        raise ValueError("--replay-csv requires --mode replay")
+    if getattr(args, "mode", None) == "replay" and not replay_mode:
+        raise ValueError("--mode replay requires --replay-csv")
+    if replay_mode and not getattr(args, "run_id", None):
+        raise ValueError("--run-id is required in replay mode")
+    run_id = getattr(args, "run_id", None)
+    if run_id and re.fullmatch(r"[A-Za-z0-9_.-]+", str(run_id)) is None:
+        raise ValueError("--run-id may contain only letters, numbers, '.', '_' and '-'")
+    replay_expected_count = getattr(args, "replay_expected_count", None)
+    if replay_expected_count is not None and replay_expected_count <= 0:
+        raise ValueError("--replay-expected-count must be a positive integer")
+    if replay_mode and not str(getattr(args, "replay_reason_pattern", "")).strip():
+        raise ValueError("--replay-reason-pattern must not be empty")
+    if replay_mode and getattr(args, "target", "awsim") != "awsim":
+        raise ValueError("--replay-csv is only supported for target=awsim")
+    if replay_mode and getattr(args, "dataset_csv", None):
+        source = Path(str(args.replay_csv)).expanduser().resolve()
+        destination = Path(str(args.dataset_csv)).expanduser().resolve()
+        if source == destination:
+            raise ValueError("--replay-csv and --dataset-csv must be different files")
     if strategy_mode and getattr(args, "target", "awsim") != "awsim":
         raise ValueError("Strategy mode without --fixture/--param is only supported for target=awsim")
-    if strategy_mode and getattr(args, "dataset_csv", None) is None:
+    prism_sampling_mode = (
+        getattr(args, "target", "awsim") == "prism"
+        and simulation_mode
+        and getattr(args, "mode", "explore") == "binomial_ci"
+    )
+    if prism_sampling_mode and getattr(args, "max_samples", None) is None:
+        raise ValueError("PRISM binomial sampling requires --max-samples")
+    if prism_sampling_mode and getattr(args, "dataset_csv", None) is None:
+        raise ValueError("PRISM binomial sampling requires --dataset-csv")
+    if (strategy_mode or replay_mode) and getattr(args, "dataset_csv", None) is None:
         raise ValueError("--dataset-csv is required for AWSIM strategy mode")
     if strategy_mode and getattr(args, "mode", "explore") not in {
         "explore",
@@ -314,10 +550,11 @@ def validate_args(args: argparse.Namespace) -> None:
         "verify_consistency",
         "binomial_ci",
         "boundary_gap",
+        "replay",
     }:
         raise ValueError(
             "AWSIM strategy mode currently supports "
-            "--mode explore/focus/margin/jama_edge/ttc_edge/worst_ttc/dkw/dkw_fixed/verify_consistency/binomial_ci/boundary_gap only"
+            "--mode explore/focus/margin/jama_edge/ttc_edge/worst_ttc/dkw/dkw_fixed/verify_consistency/binomial_ci/boundary_gap/replay only"
         )
     if getattr(args, "target", "awsim") != "awsim" and getattr(args, "headless", False):
         raise ValueError("--headless is only supported for target=awsim")
@@ -330,6 +567,95 @@ def validate_args(args: argparse.Namespace) -> None:
     worker_count = getattr(args, "worker_count", None)
     if worker_count is not None and worker_count <= 0:
         raise ValueError("--worker-count must be a positive integer")
+    worker_launch_stagger_sec = getattr(args, "worker_launch_stagger_sec", 20.0)
+    if worker_launch_stagger_sec is not None and float(worker_launch_stagger_sec) < 0.0:
+        raise ValueError("--worker-launch-stagger-sec must be non-negative")
+    worker_queue_connect_retries = getattr(args, "worker_queue_connect_retries", 6)
+    if worker_queue_connect_retries is not None and int(worker_queue_connect_retries) <= 0:
+        raise ValueError("--worker-queue-connect-retries must be a positive integer")
+    worker_queue_connect_retry_interval_sec = getattr(
+        args,
+        "worker_queue_connect_retry_interval_sec",
+        15.0,
+    )
+    if (
+        worker_queue_connect_retry_interval_sec is not None
+        and float(worker_queue_connect_retry_interval_sec) < 0.0
+    ):
+        raise ValueError("--worker-queue-connect-retry-interval-sec must be non-negative")
+    worker_queue_empty_wait_timeout_sec = getattr(
+        args,
+        "worker_queue_empty_wait_timeout_sec",
+        300.0,
+    )
+    if (
+        worker_queue_empty_wait_timeout_sec is not None
+        and float(worker_queue_empty_wait_timeout_sec) < 0.0
+    ):
+        raise ValueError("--worker-queue-empty-wait-timeout-sec must be non-negative")
+    worker_queue_empty_wait_interval_sec = getattr(
+        args,
+        "worker_queue_empty_wait_interval_sec",
+        5.0,
+    )
+    if (
+        worker_queue_empty_wait_interval_sec is not None
+        and float(worker_queue_empty_wait_interval_sec) < 0.0
+    ):
+        raise ValueError("--worker-queue-empty-wait-interval-sec must be non-negative")
+    worker_queue_heartbeat_interval_sec = getattr(
+        args,
+        "worker_queue_heartbeat_interval_sec",
+        60.0,
+    )
+    if (
+        worker_queue_heartbeat_interval_sec is not None
+        and float(worker_queue_heartbeat_interval_sec) < 0.0
+    ):
+        raise ValueError("--worker-queue-heartbeat-interval-sec must be non-negative")
+    stale_worker_timeout_sec = getattr(args, "stale_worker_timeout_sec", 600.0)
+    if stale_worker_timeout_sec is not None and float(stale_worker_timeout_sec) < 0.0:
+        raise ValueError("--stale-worker-timeout-sec must be non-negative")
+    stale_worker_check_interval_loops = getattr(
+        args,
+        "stale_worker_check_interval_loops",
+        5,
+    )
+    if (
+        stale_worker_check_interval_loops is not None
+        and int(stale_worker_check_interval_loops) <= 0
+    ):
+        raise ValueError("--stale-worker-check-interval-loops must be a positive integer")
+    stale_worker_restart_cooldown_sec = getattr(
+        args,
+        "stale_worker_restart_cooldown_sec",
+        600.0,
+    )
+    if (
+        stale_worker_restart_cooldown_sec is not None
+        and float(stale_worker_restart_cooldown_sec) < 0.0
+    ):
+        raise ValueError("--stale-worker-restart-cooldown-sec must be non-negative")
+    worker_restart_max_count = getattr(args, "worker_restart_max_count", 2)
+    if worker_restart_max_count is not None and int(worker_restart_max_count) < 0:
+        raise ValueError("--worker-restart-max-count must be non-negative")
+    worker_restart_log_tail_lines = getattr(args, "worker_restart_log_tail_lines", 100)
+    if worker_restart_log_tail_lines is not None and int(worker_restart_log_tail_lines) < 0:
+        raise ValueError("--worker-restart-log-tail-lines must be non-negative")
+    gpu_worker_max_restarts_per_24h = getattr(args, "gpu_worker_max_restarts_per_24h", 5)
+    if int(gpu_worker_max_restarts_per_24h) <= 0:
+        raise ValueError("--gpu-worker-max-restarts-per-24h must be positive")
+    gpu_worker_max_consecutive_failures = getattr(
+        args, "gpu_worker_max_consecutive_failures", 3
+    )
+    if int(gpu_worker_max_consecutive_failures) <= 0:
+        raise ValueError("--gpu-worker-max-consecutive-failures must be positive")
+    gpu_worker_stable_reset_sec = getattr(args, "gpu_worker_stable_reset_sec", 1800.0)
+    if float(gpu_worker_stable_reset_sec) < 0.0:
+        raise ValueError("--gpu-worker-stable-reset-sec must be non-negative")
+    gpu_worker_probe_timeout_sec = getattr(args, "gpu_worker_probe_timeout_sec", 5.0)
+    if float(gpu_worker_probe_timeout_sec) <= 0.0:
+        raise ValueError("--gpu-worker-probe-timeout-sec must be positive")
     cache_size = getattr(args, "cache_size", None)
     if cache_size is not None and cache_size <= 0:
         raise ValueError("--cache-size must be a positive integer")
@@ -377,12 +703,29 @@ def normalize_args(
     explicit_dkw_bounds = any(flag in raw_argv for flag in ("--dkw-bounds", "--dkw_bounds"))
 
     if getattr(args, "target", "awsim") != "awsim":
+        if (
+            getattr(args, "target", "") == "prism"
+            and getattr(args, "mode", "") == "binomial_ci"
+            and getattr(args, "binomial_target", "c_collision") == "c_collision"
+        ):
+            args.binomial_target = load_statistical_target_profile(
+                "prism"
+            ).binary_metric
         if getattr(args, "config_module", None) is None:
             args.config_module = f"targets.awsim.case_kinds.{args.case_kind}"
         return args
 
+    if (
+        getattr(args, "scenario_profile", None) is None
+        and getattr(args, "container_profile", None) in SUPPORTED_SCENARIO_PROFILES
+    ):
+        args.scenario_profile = args.container_profile
+
     if args.config_module is None or not explicit_config_module:
-        args.config_module = f"targets.awsim.case_kinds.{args.case_kind}"
+        args.config_module = build_default_case_kind_module_name(
+            case_kind=args.case_kind,
+            scenario_profile=getattr(args, "scenario_profile", None),
+        )
 
     if args.mode == "focus":
         args.focus_points = _resolve_focus_points(
@@ -437,11 +780,17 @@ def build_orchestrator_config(args: argparse.Namespace) -> OrchestratorConfig:
         case_kind=getattr(args, "case_kind", "uturn"),
         run_mode=getattr(args, "mode", "explore"),
         target=getattr(args, "target", "awsim"),
+        experiment_id=getattr(args, "experiment_id", None),
         worker_id=getattr(args, "worker_id", "worker_v2_local"),
         reason=getattr(args, "reason", "manual_orchestrator_run"),
         tags=list(getattr(args, "tags", [])),
         config_module=getattr(args, "config_module", None)
-        or f"targets.awsim.case_kinds.{getattr(args, 'case_kind', 'uturn')}",
+        or build_default_case_kind_module_name(
+            case_kind=getattr(args, "case_kind", "uturn"),
+            scenario_profile=getattr(args, "scenario_profile", None),
+        ),
+        container_profile=getattr(args, "container_profile", None),
+        scenario_profile=getattr(args, "scenario_profile", None),
         focus_points=(
             [dict(point) for point in getattr(args, "focus_points", [])]
             if getattr(args, "focus_points", None)
@@ -449,6 +798,9 @@ def build_orchestrator_config(args: argparse.Namespace) -> OrchestratorConfig:
         ),
         path_root=getattr(args, "path_root", None),
         dataset_csv=getattr(args, "dataset_csv", None),
+        replay_csv=getattr(args, "replay_csv", None),
+        replay_reason_pattern=getattr(args, "replay_reason_pattern", "BINOMIAL_CI:"),
+        replay_expected_count=getattr(args, "replay_expected_count", None),
         history_path=getattr(args, "history_path", None),
         ext_mode=getattr(args, "ext_mode", "cvm"),
         queue_actor_name=getattr(args, "queue_actor_name", "local_task_queue"),

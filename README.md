@@ -130,6 +130,35 @@ AWSIM_launch/
 - **AW-CheckerPy (Maude)**: `~/aw-cheaker/Maude-3.5.1/AW-CheckerPy`
 - **Python パッケージ**: `numpy`, `pandas`, `scipy`, `scikit-learn`
 
+## Autoware 1.8.0 の既知事項
+
+### カメラ設定
+
+Autoware 1.8.0 で `perception_mode:=camera_lidar_fusion` と
+`enable_2d_detection:=true` を有効にする場合、AWSIM の camera topic、`camera_info`、
+sensor model、物体検出 launch を 1.8.0 向けに揃える必要がある。
+camera が未接続でも AWSIM と Autoware の DDS 接続や局所化の成否とは別問題として扱う。
+カメラ設定の不備は知覚結果に影響するが、以下の EKF/MRM 問題の直接原因としては扱わない。
+
+### EKF 診断と MRM
+
+公式 Autoware 1.8.0 の `autoware_ekf_localizer` は、診断情報を毎周期初期化して
+定期 publish する更新を含む。AWSIM では EKF が 50 Hz で動く一方、NDT pose は約 10 Hz、
+gyro twist は約 20 Hz である。そのため正常な動作中でも、EKF の一部の周期では新しい
+pose または twist が queue に存在しない。
+
+1.7.1 はこの通常の空白周期を正常として扱った。1.8.0 は空白周期を `delay` WARN として
+publish する場合があり、system diagnostic graph が自律走行不可と判断すると
+`mrm_handler` が `EMERGENCY_STOP` を操作する。これは AWSIM の入力周期と 1.8.0 の診断設計の
+組み合わせで起きる問題であり、AWSIM/Autoware の DDS 設定漏れとは区別する。
+
+MRM 自体や Mahalanobis 閾値を無効化して回避してはならない。正常運用向けに修正する場合は、
+通常の空白周期を WARN にしない EKF 診断の最小 overlay を用いる。実際に到着した measurement の
+遅延、Mahalanobis 超過、または `no_update_count` による異常検知は残す。
+
+公式 `1.8.0` image はバージョン比較用として変更せず保持する。修正版を使う場合は
+`1.8.0 + EKF diagnostic overlay` と明示した別 image を作成し、公式版との比較対象を混同しない。
+
 ## クイックスタート (使用方法)
 システムの起動と管理は、すべてマスター機（21号機）の単一のターミナルから行います。
 中断した場合は、同じコマンドを再度実行することで自動的に続きから再開します。
@@ -450,7 +479,8 @@ python3 awchecker.py --type uturn
   - ※ **最小接近距離 (`min_distance`)**: 事実として車同士が何メートルまで接近したかの最短距離。TTCの予測誤差を排除した物理的なニアミス指標として記録されます。
   - ※ JAMA物理モデルに基づく理論値（`theory_margin_*`, `theory_zone_*` 等）も記録され、シミュレータの実挙動と物理限界の乖離分析に活用できます。アプローチA（壁想定）とアプローチB（NPC前進考慮）の両方が保存されます。
 - `checker_errors_detail.log`: 解析ツールで異常が発生した際の詳細なエラーログ (STDOUT/STDERR)。
-- `{scenario}_test_sim{N}.json`: 各ループのRuntime Monitorの詳細トレースデータ。
+- `{scenario}_eval_sim{N}.json`: global loop番号で確定したRuntime Monitorの詳細トレースデータ。
+- `{scenario}_test_sim{N}.json`: Runtime Monitorがworker内連番で一時保存する変換前データ。通常は`eval`名へ移動されます。
 - `awsim.log` / `autoware.log`: インフラ側の生ログ (エラー調査用)。
 
 ## 新しいシナリオの追加方法
@@ -492,6 +522,393 @@ python3 awchecker.py --type uturn
 `case_kind + build_theory_metrics(...)` を見る形になっているため、
 新しいシナリオを足すたびにそこを毎回修正する必要はありません。
 
+### `scenario_profile` の運用方針 (`2026-08-31` 時点)
+
+- scenario 実装の正本はすべて新フレームです。
+- `uturn` / `cutin` / `swerve` / `cutout` / `deceleration` は、現在の `targets/awsim/case_kinds/*` と `targets/awsim/scenario_builders/*` を正本として運用します。
+- `legacy` という名前の入口はまだ残っていますが、これは互換のための alias です。実体として旧フレームの別挙動を維持しているわけではありません。
+- したがって、`scenario_profile=legacy` を指定しても、現行コードでは新フレームの scenario 定義と builder に流れます。
+- 今後 profile を増やす場合は、「互換名だけ残す」のか「本当に別挙動を持つ」のかを先に決め、README と test を同時に更新してください。
+
+### `container_profile` を切り替えるときの扱い (`2026-08-31` 時点)
+
+- 現在サポートしている `container_profile` は `legacy`、`autoware171`、`autoware180`、`autoware180_ekfdiagfix` です。
+- `legacy` は旧来寄りのコンテナ起動条件で、`image=autoware_internal:2026`、`network_mode=host`、`privileged=true` を使います。
+- `autoware171` は `1.7.1` 系の現在の運用条件で、`image=autoware_internal:2026-1.7.1-x11-verified-20260808`、`network_mode=bridge`、`privileged=false` を使います。
+- `autoware180` は公式 `1.8.0` 比較用、`autoware180_ekfdiagfix` は AWSIM 運用向けの EKF 診断 overlay 版です。どちらも `autoware180_runtime/maps` と `autoware180_runtime/ml_models` を mount します。
+- `autoware180` 系 image の `/docker-entrypoint.sh` は root 権限で初期化した後、`gosu passd` で実プロセスを起動します。そのため、この2 profileだけ Docker の開始userを`root`に固定します。`docker run --user passd`を指定するとentrypoint内のuser切替が`operation not permitted`で失敗します。非`privileged`運用で表示されるloopback multicastやsysctlのWARNは非致命であり、このuser切替エラーとは別です。
+- `autoware180` 系workerのRay Client、checker、統計処理は、全号機で固定した`awsim_python_deps/py310`を`/opt/awsim_python_deps/py310`へread-only mountして使用します。image内のuser-local packageだけに依存するとentrypointの`gosu passd`後に`grpc`が見えず、workerが`ray_control_plane_lost`で終了するためです。
+- `autoware171` / `autoware180*` では `cyclonedds.xml`、`AWSIMScriptPy`、`autoware_map`、`AW-Runtime-Monitor` などの mount を profile 側でまとめて管理しています。`docker run` を都度手で増減させるのではなく、まず profile 定義を直してください。
+- CLI では `--container-profile` だけを指定した場合、`--scenario-profile` を省略すると同じ名前が自動で入ります。
+- ただし現行の scenario 実装は新フレーム 1 系統なので、`scenario_profile=legacy` になっても scenario の中身は旧実装へ戻りません。変わるのは主にコンテナ起動条件です。
+- つまり「コンテナだけ切り替えたい」場合でも、まず `container_profile` を基準に考えてください。scenario の違いより、`docker run` の network / privileged / env / mounts の違いのほうが実運用では重要です。
+- `container_profile` は image / network / privileged / mount / Docker env を決める入口です。画面あり・headless の最終切替は `--headless` で行います。
+- `--headless` を付けた場合、Xvfb の仮想画面を使い、Autoware launch には `rviz:=false` を自動で追加します。`DISPLAY=:99` だけでは RViz は止まりません。
+- 画面ありで目視確認したい場合は `--headless` を付けず、X11 表示用の手動コマンドまたは画面ありコンテナ手順を使ってください。
+- `bridge` profile で cluster worker を起動する場合、コンテナ内では Ray worker node を起動しません。`run_worker_v2.py` は Ray の外部 driver として、21号機の `TaskQueueActor` / `SharedStoreActor` に接続します。Docker bridge 内部IPやホスト側物理IPを、コンテナ内 Ray node として登録しないでください。
+- `bridge` profile では Ray Client 経由で detached actor を呼びます。この経路では actor method の位置引数 signature が崩れることがあるため、`TaskQueueActor` / `SharedStoreActor` への複数引数呼び出しは keyword 引数で行います。`too many positional arguments` が出た場合はこの層を確認してください。
+- `bridge` profile の cluster worker は、Ray Client 接続をデフォルトで 6 回、15 秒間隔で retry します。simulation 中は 60 秒ごとに `running` heartbeat を更新し、長い case 実行中に stale と誤判定されるのを避けます。
+- Ray/GCS 接続が途中で切れた場合、worker は `ray_control_plane_lost` として停止し、その case の結果を無理に保存し続けません。司令塔側も Python 例外として検知できる範囲では `run_failed_ray_gcs_lost` を summary に残して停止します。
+- 登録前に `Exited(1)` した worker container を自動再起動したい場合だけ、`--auto-restart-missing-workers` を明示してください。再起動は node ごと最大 2 回、cooldown 600 秒、再起動前に `docker logs --tail 100` を summary の `maintenance_events` に残す方針です。
+- 長期実験で稼働中 container から GPU / NVML が見えなくなる問題へ自動対応する場合は、`--auto-restart-gpu-workers` を明示してください。worker は各ケースを queue から取る前に `nvidia-smi` を確認し、異常時は `gpu_unavailable` を通知して終了するため、新しいケースを消費しません。
+- GPU watchdog は数ループごとに各稼働中 container の `nvidia-smi` も確認します。実行中ケースを強制終了するとqueue上の未完了taskを失うため、`running`中は隔離待ちにし、ケース終了後の取得前checkで停止させます。その後、ログ末尾を `maintenance_events` に保存し、worker container を `docker rm -f` して同じ profile から再作成します。simulation trace はホストの `simulation_traces_sim_worker_*` を bind mount しているため、container 再作成では削除されません。
+- 再作成後はホストと新しい container の両方で GPU を確認し、成功時だけ一時隔離を解除します。失敗時は既定で600秒待って再試行し、連続3回失敗または24時間内の再作成5回到達でその node を終端隔離します。他nodeの実験は継続します。
+- GPU自動復旧を有効にする標準指定は `--auto-restart-gpu-workers --gpu-worker-max-restarts-per-24h 5 --gpu-worker-max-consecutive-failures 3 --stale-worker-restart-cooldown-sec 600` です。上限値を増やす前に、host側driverやNVIDIA Container Toolkitの恒常障害でないことを確認してください。
+- コンテナを切り替えるときは、次の順でそろえるのを基本にしてください。
+  - 既存コンテナを停止して消す
+  - 使いたい `container_profile` を 1 つ決める
+  - その profile で worker / orchestrator を起動する
+  - mount 済みの `cyclonedds.xml`、`VK_ICD_FILENAMES`、`DISPLAY`、map path がその profile で成立しているかを確認する
+- 画面表示や学校ネットワーク対策を含む `1.7.1` 系運用は、原則として `autoware171` profile を正本にしてください。`legacy` は互換用に残っている profile です。
+
+### Autoware 1.7.1 クラスター標準実行コマンド
+
+次のコマンドを司令塔の21号機で実行します。これは `bridge`、headless、
+`AWSIMScriptPy` 同期、stale/missing worker復旧、GPU異常時の隔離・再作成を含む
+1.7.1長期実験用の正本です。
+
+```bash
+cd /home/passd/AWSIM_launch
+
+python3 run_orchestrator_cluster_v2.py \
+  --output /home/passd/simulation_traces/uturn_records.jsonl \
+  --dataset-csv /home/passd/simulation_traces/uturn_dataset.csv \
+  --case-kind uturn \
+  --mode binomial_ci \
+  --binomial-target c_collision \
+  --binomial-method wilson \
+  --binomial-confidence 0.95 \
+  --binomial-target-width 0.02 \
+  --container-profile autoware171 \
+  --scenario-profile autoware171 \
+  --headless \
+  --sync-awsim-script-py \
+  --auto-restart-stale-workers \
+  --auto-restart-missing-workers \
+  --auto-restart-gpu-workers \
+  --worker-queue-connect-retries 6 \
+  --worker-queue-connect-retry-interval-sec 15 \
+  --stale-worker-restart-cooldown-sec 600 \
+  --gpu-worker-max-restarts-per-24h 5 \
+  --gpu-worker-max-consecutive-failures 3 \
+  --gpu-worker-stable-reset-sec 1800 \
+  --gpu-worker-probe-timeout-sec 5
+```
+
+`--auto-restart-gpu-workers` は起動済みorchestratorへ後から反映できません。
+このオプションを付けずに開始した実験では、現在の実験を安全に停止してから上記コマンドで
+再開してください。既存CSVと各ホストの `simulation_traces_sim_worker_*` は削除しません。
+
+### 1.7.1 bridge worker の Python 依存 bundle
+
+`autoware171` の verified image は Autoware / AWSIM の運用状態を固定するための image ですが、現在の `AWSIM_launch` worker は起動時に `ray` と `scikit-learn` を import します。そのため、`binomial_ci` や `dkw` では `sklearn` が無いと worker がキュー取得前に落ちます。
+
+この依存はホストの `~/.local/lib/python3.10/site-packages` を丸ごと mount して解決しないでください。実測では host 側の `numpy==1.26.4` と container 側の `scipy==1.8.0` が混ざり、`SciPy requires NumPy <1.25.0` の警告が出ます。短期的に import は通っても、検証運用の再現性が落ちます。
+
+`1.7.1` bridge worker では、各ホストに専用の Python deps bundle を置き、それだけを read-only mount する方針にします。
+
+```text
+host:      ${HOME}/awsim_python_deps/py310
+container: /opt/awsim_python_deps/py310
+env:       PYTHONPATH=/opt/awsim_python_deps/py310
+```
+
+bundle に入れる依存は、少なくとも次を固定します。
+
+```text
+ray[client]==2.55.0
+scikit-learn==1.7.2
+numpy==1.24.4
+joblib
+threadpoolctl
+```
+
+`ray` / `scikit-learn` を毎回 `pip install` する方式は、起動時間が長くなり、ネットワーク状態にも依存します。最終的にはこの bundle を image に焼き込んだ snapshot を作るのが本命ですが、まずは `autoware171` profile の mount/env でこの bundle を読む形を正本にします。
+
+`2026-09-02` 時点で、21/22/23/24号機にこの bundle を配置済みです。
+
+```text
+21号機: /home/passd/awsim_python_deps/py310
+22号機: /home/tomita1/awsim_python_deps/py310
+23号機: /home/tomita2/awsim_python_deps/py310
+24号機: /home/tomita4/awsim_python_deps/py310
+```
+
+22/23/24号機では、`autoware_internal:2026-1.7.1-x11-verified-20260808` に mount した状態で `ray[client]==2.55.0`、`grpcio`、`sklearn==1.7.2`、`numpy==1.24.4`、container 標準の `scipy==1.8.0`、`StandardScaler` の import が通ることを確認済みです。bridge worker は `ray://<master-ip>:10001` で Ray Client 接続します。
+
+### Maude checker の Python 環境
+
+`AWSIM_launch` worker の Python 依存 bundle と、AW-CheckerPy の `maude` Python module は別物です。
+`maude` は次の venv に入っているため、検証器は通常の `python3` ではなくこの Python を優先して使います。
+
+```text
+/home/passd/aw-cheaker/Maude-3.5.1/AW-CheckerPy/.venv/bin/python
+```
+
+`ModuleNotFoundError: No module named 'maude'` が出た場合は、`aw-cheaker` mount の中に
+`AW-CheckerPy/.venv/lib/python3.10/site-packages/maude` が存在するかを確認してください。
+`PYTHONPATH=/opt/awsim_python_deps/py310` だけを増やしても Maude は見えません。
+
+### クラスター各ノードの Trash 掃除
+
+Ray の `/tmp/ray ... is over 95% full` 警告が出た場合でも、実際には `/tmp/ray` ではなく
+各ホストの root filesystem が詰まっていることがあります。まず `~/.local/share/Trash` を確認してください。
+
+Trash 掃除は実験データ、Docker image、map、model には触れず、次の tool に固定します。
+実行場所は司令塔の 21号機です。21号機から `redis_cluster/cluster_config.py` の
+`enabled=True` ノードへ SSH し、各ノードの Trash だけを処理します。
+
+```bash
+cd /home/passd/AWSIM_launch
+
+# 確認だけ。削除はしない。
+python3 tools/maintenance/clean_trash.py
+
+# 21/22/23/24 など enabled=True のノードで Trash を空にする。
+python3 tools/maintenance/clean_trash.py --apply
+```
+
+デフォルトは `redis_cluster/cluster_config.py` で `enabled=True` のノードだけです。特定ノードだけ見る場合は次のように指定します。
+
+```bash
+# 22/23 だけ確認する。
+python3 tools/maintenance/clean_trash.py --nodes 22,23
+
+# cluster_config に登録されている全ノードで Trash を空にする。
+python3 tools/maintenance/clean_trash.py --nodes all --apply
+```
+
+削除対象は各ユーザーの `~/.local/share/Trash/files/*` と `~/.local/share/Trash/info/*` のみです。
+`simulation_traces*`、Docker image/container、`autoware_map`、`autoware180_runtime`、
+`AWSIMScriptPy`、`AWSIM_launch` は削除対象にしません。
+
+実験中に `/tmp/ray ... over 95% full` が出た場合は、まず削除なしで確認します。
+
+```bash
+python3 tools/maintenance/clean_trash.py
+```
+
+Trash が大きく、root filesystem の空きが危険な場合だけ `--apply` を付けます。
+この tool は Ray や worker container を停止しません。
+
+### AWSIM trace timeout と late JSON の扱い
+
+クラスタ実行では、司令塔が割り当てるglobal loop番号と、各workerが実行する順番は一致しません。
+Runtime Monitorにはworker内のローカル連番 (`1, 2, 3, ...`) を渡し、backendは
+`{scenario}_test_sim{local}.json`を待ちます。取得後にJSON、動画、動画メタデータを
+`{scenario}_eval_sim{global}.json`へ移動します。Runtime Monitorを再利用してもglobal番号を
+直接渡してはいけません。
+
+AWSIM は scenario 終了処理の最後に trace JSON を書くため、監視時刻ちょうどに
+`uturn_test_sim<loop>.json` が出ていない場合でも、数秒後に JSON が届くことがあります。
+`uturn` は旧 worker と同じく outer watcher で `300秒` 待ち、scenario 内部には別の
+goal timeout を入れません。このため AWSIM backend は通常の scenario timeout の後、`10秒` の artifact grace を取ります。
+grace 内に JSON を見つけた場合は `eval` 側へ昇格して解析し、`TIMEOUT` marker は書きません。
+
+JSON がある試行は、scenario process の終了コードではなく checker の検証結果で最終判定します。
+raw process の状態は `meta.raw_run_status`、timeout の内訳は `meta.raw_timeout_reason` に保存し、
+検証結果を上書きしません。
+
+| trace / checker の状態 | 最終 `status` | 衝突率への採用 |
+| --- | --- | --- |
+| JSON あり、checker が全式を評価し、EGO/NPC ともに移動 | `success` | 採用 (`c_collision` が `0` / `1`) |
+| JSON あり、EGO または NPC が動いていない | `analysis_error` | 除外 (`c_collision=-1`) |
+| JSON あり、formula 欠落・Maude 失敗 | `analysis_error` | 除外 |
+| JSON なし、10秒 grace 後も未到着 | `timeout` | 除外 (`meta.timeout_reason=artifact_timeout`) |
+
+たとえば scenario 側が exit code `124` を返しても、その後に回収した JSON が checker を通り、
+EGO/NPC の移動と衝突判定が確認できれば `success` として採用します。逆に JSON があっても
+車両が動いていない試行は衝突なしには数えません。
+
+`binomial_ci` の有効標本は `status=success` かつ対象値が `0` / `1` の行だけです。
+
+既存CSVを変更せず、timeout marker と同じ worker の local trace を再照合するには次を使います。
+実行場所は21号機です。
+
+```bash
+cd /home/passd/AWSIM_launch
+
+# 読み取りだけ。CSV、trace、container、Ray 状態は変更しない。
+python3 tools/maintenance/reconcile_late_traces.py \
+  --dataset-csv /home/passd/simulation_traces/uturn_dataset.csv \
+  --case-kind uturn
+
+# JSON report を別ファイルへ残す場合だけ明示する。
+python3 tools/maintenance/reconcile_late_traces.py \
+  --dataset-csv /home/passd/simulation_traces/uturn_dataset.csv \
+  --case-kind uturn \
+  --output /home/passd/simulation_traces/uturn_late_trace_reconciliation.json
+```
+
+このtimeout処理の変更はworker process起動時に読み込まれます。すでに実行中のworkerへは
+遡及しないため、次のcluster runから有効です。
+
+### success結果だけのCSVを作成する
+
+元のdataset CSVを変更せず、`status`列が`success`の行だけを同じ列構成・行順で
+別CSVへ保存する場合は次を実行します。出力先を省略すると、入力ファイルと同じ場所に
+`<入力名>_success.csv`を作成します。
+
+```bash
+cd /home/passd/AWSIM_launch
+
+python3 tools/maintenance/filter_success_csv.py \
+  --dataset-csv /home/passd/simulation_traces/uturn_dataset.csv
+```
+
+既存のsuccess CSVを現在のdatasetから作り直す場合だけ`--overwrite`を付けます。
+
+```bash
+python3 tools/maintenance/filter_success_csv.py \
+  --dataset-csv /home/passd/simulation_traces/uturn_dataset.csv \
+  --output /home/passd/simulation_traces/uturn_dataset_success.csv \
+  --overwrite
+```
+
+このツールは`timeout`、`execution_error`、`analysis_error`を除外します。
+ただし、focusやerror recovery由来の成功行も保持します。`binomial_ci`が使用する
+一様ランダム標本だけへ限定したCSVではありません。
+
+### 1.7.1の二項標本を1.8.0で再実行する
+
+`replay`モードは、入力CSVから次の条件をすべて満たす行だけを元の行順で再実行します。
+
+- `status=success`
+- `reason`に`BINOMIAL_CI:`を含む
+- `c_collision`が`0`または`1`
+
+`uturn_dataset_success.csv`の全`10,309件`ではなく、実際に1.7.1の二項信頼区間へ
+採用された`9,066件`だけが比較対象です。件数が変わっていた場合は実験を開始しないよう、
+`--replay-expected-count 9066`を指定します。
+
+```bash
+cd /home/passd/AWSIM_launch
+
+python3 run_orchestrator_cluster_v2.py \
+  --output /home/passd/simulation_traces_autoware180_replay_20260911/uturn_records.jsonl \
+  --dataset-csv /home/passd/simulation_traces_autoware180_replay_20260911/uturn_dataset.csv \
+  --case-kind uturn \
+  --mode replay \
+  --replay-csv /home/passd/simulation_traces_shared_20260911_125415/uturn_dataset_success.csv \
+  --replay-expected-count 9066 \
+  --run-id autoware180_replay_20260911 \
+  --container-profile autoware180_ekfdiagfix \
+  --scenario-profile autoware171 \
+  --headless \
+  --sync-autoware180-map \
+  --auto-restart-stale-workers \
+  --auto-restart-missing-workers \
+  --auto-restart-gpu-workers
+```
+
+`--run-id`は各号機のtrace mount先を別ディレクトリに分離し、1.7.1の既存traceを
+上書きしないために必須です。1.8.0の結果には`meta_replay_source_loop_num`、
+`meta_replay_source_case_id`、`meta_replay_source_collision`、`meta_replay_source_reason`が入り、
+元試行と一対一で比較できます。
+再実行先で発生した`timeout`や`execution_error`もバージョン差なので削除しません。同じ出力CSVで
+再開した場合は、すでに記録済みの`meta_replay_source_loop_num`を自動的に除外します。
+
+### バージョン差と確率的変動を反復検証する準備
+
+反転したケースと固定seedの無作為対照群を選び、5反復ずつ実行するためのCSV、manifest、
+手動コマンド一覧を一括生成します。生成コマンドは実験を開始しません。
+
+```bash
+python3 -m tools.analysis.prepare_version_repeat \
+  --source-csv /home/passd/simulation_traces_shared_20260911_125415/uturn_dataset_success.csv \
+  --replay-csv /home/passd/simulation_traces_autoware180_replay_20260911/uturn_dataset.csv \
+  --output-dir /home/passd/simulation_traces_version_repeat_20260913 \
+  --random-count 500 \
+  --seed 171180
+```
+
+実験は出力された`manual_commands.md`の順番で1ブロックずつ手動実行します。各ブロックの
+`run-id`と出力先は別になっているため、反復結果は上書きされません。中断したブロックだけは、
+同じコマンドを再入力すると完了済みケースを除外して再開します。
+
+### クラスター同期で追加更新するもの
+
+クラスター起動時、リモートノードにはデフォルトで `~/AWSIM_launch` と
+`~/AW-Runtime-Monitor` を同期します。前者は通常の worker / scenario / supervisor コード、
+後者は trace JSON の保存処理に必要なため、両方を実験コードの正本として毎回揃えます。
+
+`1.7.1` 系で `AWSIMScriptPy` 本体を更新したい場合だけ、次を追加します。
+
+```bash
+python3 run_orchestrator_cluster_v2.py ... \
+  --container-profile autoware171 \
+  --scenario-profile autoware171 \
+  --headless \
+  --sync-awsim-script-py \
+  --auto-restart-gpu-workers
+```
+
+`AW-Runtime-Monitor` はデフォルトでディレクトリ全体を同期します。`main.py` だけを個別に
+配布すると recorder 側と版がずれて起動時に失敗するため、部分同期は行いません。
+`--sync-aw-runtime-monitor` は明示指定との互換のため残しますが、通常は入力不要です。
+
+```bash
+python3 run_orchestrator_cluster_v2.py ... \
+  --sync-aw-runtime-monitor
+```
+
+この同期では `main.py`、`recorder/Recorder.py`、
+`recorder/AWSIMClientOpStateTracker.py` の SHA-256 と構文を worker 起動前に検証します。
+さらに container 内で lifecycle tracker を import できなければ worker は起動しません。
+
+`1.8.0` 系で map を更新したい場合だけ、次を追加します。
+
+```bash
+python3 run_orchestrator_cluster_v2.py ... \
+  --container-profile autoware180_ekfdiagfix \
+  --scenario-profile autoware171 \
+  --headless \
+  --sync-autoware180-map
+```
+
+複数の追加更新が必要な作業では `--sync-awsim-script-py` と
+`--sync-autoware180-map` を同時に指定できます。
+デフォルト同期を止める特殊検証だけは `--no-sync-awsim-launch` または
+`--no-sync-aw-runtime-monitor` を使います。通常の実験では指定しません。
+
+cluster 起動前には各 image を使った `nvidia-smi` preflight も実行します。GPU を認識できない
+ノードはタスクを取得させず、`cluster_preflight_failures` に理由を残して他ノードだけを起動します。
+AWSIM、Autoware、Runtime Monitor が待機時間内に終了した場合も、trace timeout を待たず
+`execution_error` とし、起動ログ末尾をエラー情報へ含めます。
+
+### cluster worker の process supervisor
+
+cluster container では `run_worker_v2.py` を PID 1 として直接起動しません。
+PID 1 は `runtime.container.supervised_process.server` で、Ray Client / gRPC を import する前に
+Unix socket `/tmp/awsim-process-supervisor.sock` を作り、その後 worker を子 process として起動します。
+
+worker は socket 経由で supervisor に依頼し、次の process を起動・停止します。
+
+- Xvfb
+- AWSIM
+- Autoware
+- AW-Runtime-Monitor
+- scenario client
+- readiness probe
+- AW Checker / Maude / BBSL の外部 command
+
+これにより、gRPC thread が動作中の worker 自身から `fork()` して
+`cygrpc` や `librclcpp` が不定期に segfault する経路を避けます。AWSIM、Autoware、scenario の
+command、待機時間、parameter は変更しません。手動実行など
+`AWSIM_PROCESS_SUPERVISOR_SOCKET` がない環境では、従来のローカル subprocess 経路を使います。
+
+supervisor が終了した場合は管理下の process group を停止します。worker が終了した場合も
+AWSIM/Autoware を残したまま container を存続させず、同じ container を再利用しません。
+
+### 22/23/24号機への 1.8.0 運用入力配置 (`2026-09-01` 確認)
+
+- `AWSIMScriptPy`、`autoware180_runtime/maps`、`autoware180_runtime/ml_models`、`cyclonedds.xml` は 22/23/24号機へ配置済みです。
+- `cyclonedds.xml` は 3台とも `026239b408bfde21dfbc136b4ab84c12588c8571314e0f0c34d7826c5fd360be` で一致しています。
+- `autoware180_runtime/maps` は 3台とも `223M`、`69` files で一致しています。
+- `autoware180_runtime/ml_models` は 3台とも `3.7G`、`198` files で一致しています。
+- `autoware_internal:1.8.0-ekfdiagfix` は `numpy==1.24.4`、`scikit-learn==1.7.2`、`ray==2.55.0`、`typing_extensions==4.15.0` を含む image として rebuild し、22/23/24号機へ再配布済みです。
+- 依存確認では 22/23/24号機で `numpy=1.24.4 scipy=1.8.0 sklearn=1.7.2 ray=2.55.0` の import が通っています。
+
 ### 設計ルール
 
 - `case_kind` にシミュレータ組み立て処理は入れないでください。
@@ -499,6 +916,8 @@ python3 awchecker.py --type uturn
 - 速度帯で挙動が変わるなら `SCENARIO_PROFILES` を使ってください。
 - 手動実行でも `bash -i -c` と `source /home/passd/autoware/install/setup.bash` を崩さないでください。
 - 旧 `AWSIMScriptPy` 側の scenario 本体も最新化されていることを確認してください。
+- 原則として修正は `AWSIM_launch` 側へ寄せますが、新フレームは最終的に旧 `AWSIMScriptPy/scenarios/...` の `make_*_scenario(...)` を呼ぶため、受け口の引数追加や実挙動修正が必要な場合は旧 scenario 本体も合わせて直してください。
+- 特に `NPC が動かない`、`spawn はするが lane change しない`、`新フレームで計算した ratio が効かない` といった問題は、`case_kind` / `builder` ではなく旧 `AWSIMScriptPy` 側の条件式が原因のことがあります。この場合は新フレームだけ直しても不十分です。
 
 ### 新しいシナリオ設計時の注意と調整アルゴリズム
 
@@ -509,9 +928,9 @@ python3 awchecker.py --type uturn
   - `goal_offset`
   - `acceleration`
   が本当に十分かを確認してください。
-- `uturn` は `SCENARIO_PROFILES` で速度帯ごとに開始位置や加速度を切り替える設計にしてあり、単純な固定値より安定して動かせるようにしています。
-- `cutin` のように全ケースで同じ `FIXED_PARAMS` を使う形は、最初の移植としてはよいですが、「全速度帯で十分距離がある」「車が確実に動ける」「route / operation mode が安定する」ことをまだ保証しません。
-- したがって、新しいシナリオを実験基盤へ正式に入れるときは、必要に応じて `uturn` と同様に速度帯プロファイルを導入し、シナリオごとに十分距離・十分加速度を設計してください。
+- `uturn` / `cutin` / `swerve` は、現行の新フレーム側で `SCENARIO_PROFILES` を使い、速度帯ごとに開始位置や加速度、始動条件を切り替える設計です。
+- `cutout` / `deceleration` は現状では新方式 1 系統で運用しています。こちらも必要なら profile 化できますが、`2026-08-31` 時点では別系統を持っていません。
+- したがって、新しいシナリオを実験基盤へ正式に入れるときは、「profile を分ける必要が本当にあるか」を先に判断し、不要なら新フレーム 1 系統として整理したまま入れて構いません。
 - `ego_goal_offset` は「目標速度に達する最低距離」だけで決めないでください。基本は `加速距離 + イベント区間 + 余裕` で見積もり、さらに少なくとも旧来の安定値を下回らないようにしてください。
 - `npc_init_offset` も単なる固定値ではなく、必要なら `ego_speed` / `npc_speed` / `lateral velocity` / `event time` から必要 gap を式で見積もり、そのうえで旧来の安定値を下回らないようにしてください。
 - `NPC が動かない` 問題に備えて、`npc_start_speed_ratio` や `spawn_trigger_speed_ratio` のような始動条件を `SCENARIO_PROFILES` で持てるようにしておくと安全です。
@@ -540,15 +959,17 @@ python3 awchecker.py --type uturn
 ### `uturn` / `cutin` の NPC1 始動条件
 
 - `uturn` と `cutin` では、カーブ自体の開始条件は昔から変えていません。`uturn` は `longitudinal_distance_to_ego <= dx0` で `FollowWaypoints` に入り、`cutin` は `longitudinal_distance_to_ego <= dx0` で `ChangeLane` に入ります。
-- `2026-08-28` の実機確認では、問題になっていたのは「曲がる条件」ではなく、「NPC1 が前進を開始する条件」でした。旧実装ではどちらも `av_speed >= _ego_speed - 0.2` で、ego が目標速度ぴったり近くまで出ないと NPC1 が動き始めないことがありました。
-- このため新フレーム側では `npc_start_speed_ratio` を `SCENARIO_PROFILES` に持たせ、`uturn` / `cutin` の `AWSIMScriptPy` 側へ渡すようにしました。現在は `av_speed >= npc_start_speed_ratio * _ego_speed` を使います。
+- 問題になりやすいのは「曲がる条件」ではなく、「NPC1 が前進を開始する条件」です。
+- 現行の新フレーム側では `npc_start_speed_ratio` を `SCENARIO_PROFILES` に持たせ、`uturn` / `cutin` の `AWSIMScriptPy` 側へ渡します。現在は `av_speed >= npc_start_speed_ratio * _ego_speed` を使います。
 - `2026-08-28` 時点の実運用値はおおむね `30/35/40 km/h -> 0.898 / 0.9083 / 0.916` です。つまり、ego が完全に目標速度へ届く前でも、NPC1 が少し早めに走り始められるようにしています。
+- `legacy` profile を指定しても、この始動条件を旧式へ戻すことはありません。現行コードでは互換入口も同じ新方式へ流れます。
 - 新しいシナリオでも、`NPC がときどき動かない` ときは `dx0` や lane change 条件だけを見るのではなく、まず `NPC1 の前進開始条件` が実速度に対して厳しすぎないかを確認してください。
 
 ### `swerve` で入れた補正の考え方
 
 - `swerve` でも `2026-08-28` 時点で `npc_start_speed_ratio` を導入し、`av_speed >= npc_start_speed_ratio * _ego_speed` で `npc1` が前進を開始するようにしています。
 - さらに `npc_init_offset` と `ego_goal_offset` は、式で必要距離を見積もった上で、旧アンカーケース `30/10`, `30/15`, `40/10`, `40/15` の安定値を下回らないように補正しています。
+- この補正も現行の新フレーム実装に集約されています。`legacy` profile 名は残っていますが、別の `swerve` 挙動を維持しているわけではありません。
 - つまり `swerve` の調整は「全部を完全に式へ置き換える」のではなく、
   - 旧安定値を基準にする
   - そこから必要なら増やす
@@ -569,6 +990,7 @@ python3 awchecker.py --type uturn
   という役割です。
 - `2026-08-28` の代表ケース `ego_speed=30 km/h` では、21号コンテナで `bash -i -c` と `source /home/passd/autoware/install/setup.bash` 付きの手動実行を行い、`npc1` の spawn、`FollowLane`、`SetTargetSpeed` 送信まで確認済みです。
 - ただし `deceleration` でも、repo 内の `case_kind` / `builder` だけでは不十分です。手動検証時は、コンテナ内の `AWSIMScriptPy/scenarios/deceleration/dynamic_spawn.py` も最新化されていることを確認してください。
+- これは「新フレームのためだけに旧コードを触った」のではなく、新フレームが最終的に旧 `dynamic_spawn.py` を実行するためです。`spawn_trigger_speed_ratio` や `decel_trigger_speed_ratio` を新フレーム側で計算しても、旧 scenario 関数がその引数を受け取らなければ runtime では反映されません。
 
 ## 技術的な工夫・トラブルシューティング (分散自動化に関する解決策)
 
@@ -640,6 +1062,12 @@ python3 tools/plot/visualize_collision_regions.py ~/simulation_traces
 
 # 実データの衝突外縁とAI学習境界を滑らかな面として可視化
 python3 tools/plot/visualize_collision_surfaces.py ~/simulation_traces
+
+# 1.7.1の元ケースと1.8.0 replayをケース番号で対応付けて差分を可視化
+python3 -m tools.plot.visualize_version_comparison \
+  ~/simulation_traces_shared_20260911_125415/uturn_dataset_success.csv \
+  ~/simulation_traces_autoware180_replay_20260911/uturn_dataset.csv \
+  --output ~/simulation_traces_autoware180_replay_20260911/autoware171_vs_180_comparison.png
 ```
 
 # 対象のフォルダ（ディレクトリ）を指定する場合
@@ -681,15 +1109,115 @@ ssh tomita2@150.65.227.23 "docker exec sim_worker_23 tail -f /home/passd/simulat
 ### コンテナ内での手動デバッグ
 もし特定の号機でシミュレーションがうまく動かない場合、以下の手順でシステムと全く同じ環境設定のコンテナに手動で入り、どこでエラーが起きているか検証することができます。
 
-```bash
-# `docker exec` の中でも `bash -i -c` を徹底する
-docker exec -it sim_worker_21 bash -i -c 'cd /home/passd/awsim_labs && ./awsim_labs.x86_64 -noise false'
+`bridge` コンテナを使う 1.7.1 の手動起動は、
+[docs/node21_autoware_1_7_1_awsim_bridge_commands_20260830.md](/home/passd/AWSIM_launch/docs/node21_autoware_1_7_1_awsim_bridge_commands_20260830.md:1)
+を正本にしてください。
 
-# Autoware も同様に対話型シェルで起動する
-docker exec -it sim_worker_21 bash -i -c 'source /home/passd/autoware/install/setup.bash && cd /home/passd/autoware && ros2 launch autoware_launch e2e_simulator.launch.xml vehicle_model:=awsim_labs_vehicle sensor_model:=awsim_labs_sensor_kit map_path:=/home/passd/autoware_map/nishishinjuku_autoware_map launch_vehicle_interface:=true'
+```bash
+docker exec -it autoware171-x11-map bash -i -c 'cd /home/passd/awsim_labs && ./awsim_labs.x86_64 -noise false'
+docker exec -it autoware171-x11-map bash -i -c 'source /home/passd/autoware/install/setup.bash && cd /home/passd/autoware && ros2 launch autoware_launch e2e_simulator.launch.xml vehicle_model:=awsim_labs_vehicle sensor_model:=awsim_labs_sensor_kit map_path:=/home/passd/autoware_map/nishishinjuku_autoware_map launch_vehicle_interface:=true rviz:=false'
 ```
 
 `bash -c` や `bash -lc` で十分そうに見えても、コンテナ運用では `bash -i -c` を正本にしてください。
+
+## PRISM / Maude worker（CPU専用）
+
+PRISM対象では、1つのworker container内でPRISMの確率モデル・ランダム経路を実行し、その経路をMaudeで判定します。判定後はAWSIM workerと同じRay queueへ共通形式の結果を返します。Autoware、ROS、AW-Runtime-Monitor、GPUは使用しません。
+
+実行時のcontainer名は `prism_worker_<ROS_DOMAIN_ID>` になります。既存の `sim_worker_*` を停止・置換しないため、AWSIM用container名とは衝突しません。
+
+ただし、このcluster CLIは起動時にRay headを再作成します。進行中のAWSIM cluster実験と同時には起動せず、その実験を終了してから実行してください。
+
+2026-09-15に21・22・23・24号機の実クラスタで、40本疎通試験および基準+4条件(各200〜500本、95% Wilson CI幅0.10で逐次停止)を実行して検証済みです。検証中に見つかったRay head/Pythonバージョン/JSON出力まわりの不具合と、条件ごとの結果は[PRISM対応計画の「16. 実クラスタ検証結果」](docs/prism_integration_plan.md#16-実クラスタ検証結果-2026-09-15)を参照してください。
+
+```bash
+docker build \
+  -f docker/prism-maude.Dockerfile \
+  -t awsim-launch/prism-maude:0.1.0 \
+  docker
+
+python3 run_orchestrator_cluster_v2.py \
+  --target prism \
+  --container-profile prism_maude \
+  --case-kind simple_reliability_dtmc \
+  --param model=simple_reliability_dtmc \
+  --param steps=20 \
+  --output ./verification_results/prism_cluster.jsonl
+```
+
+`--mode explore` では固定パラメータ1件を実行します。逐次停止つきの反復サンプリングには、以下の `--mode binomial_ci` または同じ司令塔を内部利用する `python3 -m apps.cli.prism_main` を使用します。詳細は [PRISM対応計画](docs/prism_integration_plan.md) を参照してください。
+
+固定パラメータを繰り返し、Wilson信頼区間が指定幅に達した時点で司令塔から停止する場合は次を使います。`experiment-id` とパラメータからsampling batchを分離するため、異なる条件の結果は同じ信頼区間に混ざりません。
+
+```bash
+python3 run_orchestrator_cluster_v2.py \
+  --target prism \
+  --container-profile prism_maude \
+  --case-kind simple_reliability_dtmc \
+  --mode binomial_ci \
+  --binomial-target c_failure \
+  --binomial-confidence 0.95 \
+  --binomial-target-width 0.3 \
+  --max-samples 60 \
+  --param steps=20 \
+  --param p_normal_degrade=0.1 \
+  --param p_normal_failure=0.01 \
+  --param p_degraded_normal=0.3 \
+  --param p_degraded_failure=0.1 \
+  --output /home/passd/prism_results/records.jsonl \
+  --dataset-csv /home/passd/prism_results/dataset.csv
+```
+
+`records.jsonl` は、各workerが返した完全な `EvaluationRecord` をRayの共有ストアが司令塔側で1ファイルへ直列化したものです。`dataset.csv` は、同じrecordを既存の統計評価が読める1行1標本の表へ変換したものです。workerは障害調査用のローカルJSONLも各成果物ディレクトリに保持しますが、利用者が指定した `--output` とは別物です。
+
+`apps.cli.prism_main` は削除せず、単一containerでPRISM、Maude、統計変換まで確認するsmoke/demo入口として残しています。同じ `FixedParameterSamplingStrategy` と司令塔を使用し、独自の反復loopは持ちません。
+
+```bash
+python3 -m apps.cli.prism_main --samples 20 --min-samples 10
+```
+
+PRISMの反復実験では、厳密モデル検査とランダム経路生成を別の実行種別として扱います。
+
+```text
+実験開始時（1 TestCase）:
+  PRISM propertiesによる厳密モデル検査
+
+各標本（1 path = 1 TestCase）:
+  PRISM -simpathによるランダム経路生成
+  Maudeによる経路判定
+```
+
+厳密モデル検査のrecordには`c_failure`を保存しないため、二項信頼区間やDKWの標本数には入りません。最終統計reportの`exact_model_check`には、有限horizonの厳密到達確率、CIに含まれるか、標本推定値との絶対誤差が保存されます。
+
+統計metricとregion処理はtarget profileで切り替わります。
+
+| target | 二項metric | DKW metric | region policy |
+|---|---|---|---|
+| AWSIM | `c_collision` | `min_ttc` | `targets/awsim/`でtheory列を生成 |
+| PRISM | `c_failure` | `steps_to_failure_capped` | `custom`（追加処理なし） |
+
+`orchestration/binomial_mode.py`と`orchestration/dkw_mode.py`はAWSIM theoryをimportせず、注入されたregion policyだけを使用します。
+
+PRISM targetとMaude verifierは、同じ`prism_maude`コンテナ内で動作します。ディレクトリの分離はコンテナ分割ではなく、Pythonモジュールの責務分離です。
+
+```text
+targets/prism/
+├── backend.py              # TestCaseからPRISM実行を調停
+├── runner.py               # PRISM CLI実行
+├── trace_parser.py         # -simpath CSVの正規化
+├── result_interpreter.py   # EvaluationRecordへの統合
+├── verification_input.py  # FT4D入力への変換
+├── dataset_adapter.py      # exact/sample datasetの分離
+└── profile.py              # TestCase.inputの検証・型変換
+
+verifiers/maude/
+├── prism_checker.py         # Maude bindingとspecの実行
+├── prism_trace_evaluator.py # checker固定出力からmetricへ変換
+└── specs/
+    └── prism_trace.maude
+```
+
+旧`targets.prism.maude_checker`は外部利用コードを壊さないための互換importだけを残しています。新規コードは`verifiers.maude.prism_checker`を使用します。
 
 ## 今後の拡張性
 新しくワーカーPC（例：24号機）を追加したい場合は、`redis_cluster/cluster_config.py` に新しいIPアドレスやコンテナ名、`ROS_DOMAIN_ID` を追記するだけで、システムが全自動でコンテナを構築し、クラスターの計算力（スループット）を向上させます。

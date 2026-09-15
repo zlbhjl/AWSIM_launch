@@ -3,13 +3,15 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 
-import numpy as np
 import pandas as pd
 
 from contracts.statistics import BoundsMap, StatisticalReport, StatisticalRequest
 from evaluation.binomial_ci import BinomialCIService
+from contracts.statistical_region import (
+    PassthroughStatisticalRegionPolicy,
+    StatisticalRegionPolicy,
+)
 from runtime.repository.statistical_samples import StatisticalSamplesRepository
-from targets.awsim.theory import build_theory_metrics, default_theory_columns
 
 import point_extractors
 
@@ -17,7 +19,7 @@ import point_extractors
 @dataclass(slots=True)
 class BinomialModeConfig:
     param_names: list[str]
-    target: str = "c_collision"
+    target: str
     method: str = "wilson"
     confidence: float = 0.95
     target_width: float = 0.02
@@ -43,11 +45,13 @@ class BinomialModeRunner:
         binomial_ci_service: BinomialCIService,
         statistical_history_repository: object | None = None,
         statistical_samples_repository: StatisticalSamplesRepository | None = None,
+        region_policy: StatisticalRegionPolicy | None = None,
     ) -> None:
         self.config = config
         self.binomial_ci_service = binomial_ci_service
         self.statistical_history_repository = statistical_history_repository
         self.statistical_samples_repository = statistical_samples_repository
+        self.region_policy = region_policy or PassthroughStatisticalRegionPolicy()
 
     @classmethod
     def from_runtime_config(
@@ -67,6 +71,7 @@ class BinomialModeRunner:
         config: object | None = None,
         case_kind: str = "uturn",
         config_module_name: str | None = None,
+        region_policy: StatisticalRegionPolicy | None = None,
     ) -> "BinomialModeRunner":
         return cls(
             config=BinomialModeConfig(
@@ -88,6 +93,7 @@ class BinomialModeRunner:
             binomial_ci_service=binomial_ci_service,
             statistical_history_repository=statistical_history_repository,
             statistical_samples_repository=statistical_samples_repository,
+            region_policy=region_policy,
         )
 
     def initialize_bounds(
@@ -211,20 +217,7 @@ class BinomialModeRunner:
         )
 
     def _build_region_filter_frame(self, point: Mapping[str, object]) -> pd.DataFrame:
-        row: dict[str, object] = dict(point)
-        row.update(default_theory_columns())
-        row.update(
-            build_theory_metrics(
-                case_kind=self.config.case_kind,
-                values=row,
-                config_module_name=self.config.config_module_name,
-            )
-        )
-        row.setdefault("c_collision", 0)
-        row.setdefault("min_ttc", 99.9)
-        row.setdefault("min_distance", 99.9)
-        row.setdefault("min_ttb", 99.9)
-        return pd.DataFrame([row])
+        return self.region_policy.build_filter_frame(point)
 
     def _point_satisfies_region(self, point: Mapping[str, object]) -> bool:
         if self.config.region == "custom":

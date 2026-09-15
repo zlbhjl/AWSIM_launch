@@ -8,9 +8,18 @@ import sys
 from pathlib import Path
 from typing import Sequence
 
-from contracts.execution import TestCase
-from orchestration.worker_loop import WorkerLoop, WorkerLoopContext
-from runtime.cluster.ray_client import RayActorLocator, RayConnectionConfig
+from contracts.execution import RunStatus, TestCase
+from orchestration.worker_loop import (
+    WorkerControlPlaneLost,
+    WorkerInfrastructureUnavailable,
+    WorkerLoop,
+    WorkerLoopContext,
+)
+from runtime.cluster.ray_client import (
+    RayActorLocator,
+    RayConnectionConfig,
+    is_ray_control_plane_error,
+)
 from runtime.cluster.task_queue_gateway import TaskQueueGateway, TaskQueueGatewayConfig
 from runtime.cluster.result_sink import (
     CompositeResultSink,
@@ -20,8 +29,15 @@ from runtime.cluster.result_sink import (
     SharedStoreResultSink,
 )
 from runtime.repository.local_history import LocalHistory
+from runtime.container.profile import SUPPORTED_CONTAINER_PROFILES
+from runtime.container.gpu_health import probe_nvidia_smi
 from targets.registry import build_target_components
-from targets.awsim.case_kinds import load_case_definition, load_focus_points
+from targets.awsim.case_kinds import (
+    SUPPORTED_SCENARIO_PROFILES,
+    build_default_case_kind_module_name,
+    load_case_definition,
+    load_focus_points,
+)
 
 
 LEGACY_MODES = [
@@ -36,6 +52,7 @@ LEGACY_MODES = [
     "verify_consistency",
     "binomial_ci",
     "boundary_gap",
+    "replay",
 ]
 
 
@@ -47,6 +64,15 @@ def build_parser() -> argparse.ArgumentParser:
         "--fixture",
         default=None,
         help="Path to a local target fixture.",
+    )
+    parser.add_argument(
+        "--fixture-raw-run-status",
+        choices=[status.value for status in RunStatus],
+        default=None,
+        help=(
+            "Optional execution status to attach when importing an existing fixture. "
+            "Use this when the saved trace came from a timed-out or failed run."
+        ),
     )
     parser.add_argument(
         "--param",
@@ -81,6 +107,47 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=5.0,
         help="Seconds between queue actor lookup retries.",
+    )
+    parser.add_argument(
+        "--queue-connect-retries",
+        type=int,
+        default=6,
+        help="Number of ray.init attempts before the queue worker exits.",
+    )
+    parser.add_argument(
+        "--queue-connect-retry-interval",
+        type=float,
+        default=15.0,
+        help="Seconds to wait between ray.init retry attempts.",
+    )
+    parser.add_argument(
+        "--queue-empty-wait-timeout",
+        type=float,
+        default=0.0,
+        help="Queue mode only. Seconds to keep polling when the queue is temporarily empty.",
+    )
+    parser.add_argument(
+        "--queue-empty-wait-interval",
+        type=float,
+        default=5.0,
+        help="Seconds between empty queue polling attempts.",
+    )
+    parser.add_argument(
+        "--queue-heartbeat-interval",
+        type=float,
+        default=0.0,
+        help="Queue mode only. Seconds between status heartbeat updates while a case is running.",
+    )
+    parser.add_argument(
+        "--worker-gpu-health-check",
+        action="store_true",
+        help="Run nvidia-smi before taking each queued simulation case.",
+    )
+    parser.add_argument(
+        "--worker-gpu-health-timeout-sec",
+        type=float,
+        default=5.0,
+        help="Timeout for the worker-side nvidia-smi health check.",
     )
     parser.add_argument(
         "--refresh-interval",
@@ -118,7 +185,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--target",
         default="awsim",
-        choices=["awsim", "bbsl"],
+        choices=["awsim", "bbsl", "prism"],
         help="Target name for the worker.",
     )
     parser.add_argument("--worker-id", default="worker_v2_local", help="Worker identifier.")
@@ -227,6 +294,18 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Run AWSIM simulation mode with Xvfb-based headless display setup.",
     )
+    parser.add_argument(
+        "--container-profile",
+        choices=SUPPORTED_CONTAINER_PROFILES,
+        default=None,
+        help="Optional named container runtime profile (for example: legacy, autoware171, autoware180).",
+    )
+    parser.add_argument(
+        "--scenario-profile",
+        choices=SUPPORTED_SCENARIO_PROFILES,
+        default=None,
+        help="Optional named scenario spec profile (for example: legacy, autoware171).",
+    )
     return parser
 
 
@@ -246,9 +325,30 @@ def validate_args(args: argparse.Namespace) -> None:
     queue_connect_timeout = getattr(args, "queue_connect_timeout", 30.0)
     if queue_connect_timeout is not None and float(queue_connect_timeout) < 0.0:
         raise ValueError("--queue-connect-timeout must be non-negative")
+    queue_connect_retries = getattr(args, "queue_connect_retries", 6)
+    if queue_connect_retries is not None and int(queue_connect_retries) <= 0:
+        raise ValueError("--queue-connect-retries must be a positive integer")
+    queue_connect_retry_interval = getattr(args, "queue_connect_retry_interval", 15.0)
+    if (
+        queue_connect_retry_interval is not None
+        and float(queue_connect_retry_interval) < 0.0
+    ):
+        raise ValueError("--queue-connect-retry-interval must be non-negative")
     queue_connect_poll_interval = getattr(args, "queue_connect_poll_interval", 5.0)
     if queue_connect_poll_interval is not None and float(queue_connect_poll_interval) < 0.0:
         raise ValueError("--queue-connect-poll-interval must be non-negative")
+    queue_empty_wait_timeout = getattr(args, "queue_empty_wait_timeout", 0.0)
+    if queue_empty_wait_timeout is not None and float(queue_empty_wait_timeout) < 0.0:
+        raise ValueError("--queue-empty-wait-timeout must be non-negative")
+    queue_empty_wait_interval = getattr(args, "queue_empty_wait_interval", 5.0)
+    if queue_empty_wait_interval is not None and float(queue_empty_wait_interval) < 0.0:
+        raise ValueError("--queue-empty-wait-interval must be non-negative")
+    queue_heartbeat_interval = getattr(args, "queue_heartbeat_interval", 0.0)
+    if queue_heartbeat_interval is not None and float(queue_heartbeat_interval) < 0.0:
+        raise ValueError("--queue-heartbeat-interval must be non-negative")
+    worker_gpu_health_timeout_sec = getattr(args, "worker_gpu_health_timeout_sec", 5.0)
+    if worker_gpu_health_timeout_sec is not None and float(worker_gpu_health_timeout_sec) <= 0.0:
+        raise ValueError("--worker-gpu-health-timeout-sec must be positive")
     if (
         getattr(args, "dataset_csv", None) is not None
         and getattr(args, "shared_store_actor_name", None) is not None
@@ -286,11 +386,20 @@ def normalize_args(
             args.config_module = "targets.awsim.case_kinds.uturn"
         return args
 
+    if (
+        getattr(args, "scenario_profile", None) is None
+        and getattr(args, "container_profile", None) in SUPPORTED_SCENARIO_PROFILES
+    ):
+        args.scenario_profile = args.container_profile
+
     if args.legacy_type and not explicit_case_kind:
         args.case_kind = args.legacy_type
 
     if args.config_module is None or not explicit_config_module:
-        args.config_module = f"targets.awsim.case_kinds.{args.case_kind}"
+        args.config_module = build_default_case_kind_module_name(
+            case_kind=args.case_kind,
+            scenario_profile=getattr(args, "scenario_profile", None),
+        )
 
     case_definition = load_case_definition(
         case_kind=args.case_kind,
@@ -344,6 +453,9 @@ def build_test_case(args: argparse.Namespace) -> TestCase | None:
         fixture_path = Path(args.fixture).expanduser().resolve()
         case_id = args.case_id or fixture_path.stem
         input_payload = {"fixture_path": str(fixture_path)}
+        fixture_raw_run_status = getattr(args, "fixture_raw_run_status", None)
+        if fixture_raw_run_status is not None:
+            input_payload["fixture_raw_run_status"] = str(fixture_raw_run_status)
     else:
         input_payload = build_direct_input(args)
         case_id = args.case_id or f"{args.case_kind}_direct"
@@ -357,7 +469,24 @@ def build_test_case(args: argparse.Namespace) -> TestCase | None:
         reason=args.reason,
         meta={
             "source_cli": "run_worker_v2.py",
-            "config_module": getattr(args, "config_module", f"targets.awsim.case_kinds.{args.case_kind}"),
+            "config_module": getattr(
+                args,
+                "config_module",
+                build_default_case_kind_module_name(
+                    case_kind=args.case_kind,
+                    scenario_profile=getattr(args, "scenario_profile", None),
+                ),
+            ),
+            **(
+                {"container_profile": str(args.container_profile)}
+                if getattr(args, "container_profile", None)
+                else {}
+            ),
+            **(
+                {"scenario_profile": str(args.scenario_profile)}
+                if getattr(args, "scenario_profile", None)
+                else {}
+            ),
             "run_mode": getattr(args, "mode", "explore"),
             "ext_mode": getattr(args, "ext_mode", "cvm"),
             "dkw_region": getattr(args, "dkw_region", "custom"),
@@ -483,6 +612,10 @@ def build_task_source(
             actor_lookup_timeout_sec=float(getattr(args, "queue_connect_timeout", 30.0)),
             actor_lookup_poll_interval_sec=float(
                 getattr(args, "queue_connect_poll_interval", 5.0)
+            ),
+            connect_retries=int(getattr(args, "queue_connect_retries", 6)),
+            connect_retry_interval_sec=float(
+                getattr(args, "queue_connect_retry_interval", 15.0)
             ),
         ),
     )
@@ -629,7 +762,27 @@ def run_worker_with_summary(
     args = normalize_args(args, argv=raw_argv)
     validate_args(args)
     direct_test_case = build_test_case(args)
-    task_source_impl = build_task_source(args, task_source=task_source)
+    try:
+        task_source_impl = build_task_source(args, task_source=task_source)
+    except Exception as exc:
+        if not is_ray_control_plane_error(exc):
+            raise
+        summary = {
+            "case_id": direct_test_case.case_id if direct_test_case is not None else None,
+            "target": args.target,
+            "case_kind": args.case_kind,
+            "status": "ray_control_plane_lost",
+            "mode": "queue",
+            "reason": str(exc),
+            "processed_count": 0,
+            "skipped_count": 0,
+            "terminal_status": "ray_control_plane_lost",
+            "output_path": str(Path(args.output).expanduser().resolve()),
+            "exit_code": 1,
+        }
+        if emit_summary:
+            print(json.dumps(summary, ensure_ascii=False))
+        return summary
     history = build_local_history(args)
 
     target_components = build_target_components(
@@ -646,13 +799,73 @@ def run_worker_with_summary(
         result_sink=sink_impl,
         task_source=task_source_impl,
         context=WorkerLoopContext(worker_id=args.worker_id),
+        heartbeat_interval_sec=(
+            float(getattr(args, "queue_heartbeat_interval", 0.0))
+            if task_source_impl is not None
+            else 0.0
+        ),
+        pre_fetch_health_check=(
+            (
+                lambda: probe_nvidia_smi(
+                    timeout_sec=float(
+                        getattr(args, "worker_gpu_health_timeout_sec", 5.0)
+                    )
+                )
+            )
+            if task_source_impl is not None
+            and args.target == "awsim"
+            and bool(getattr(args, "worker_gpu_health_check", False))
+            else None
+        ),
     )
     try:
         batch = loop.execute_until_exit(
             direct_test_case=direct_test_case,
             history=history,
             refresh_interval=args.refresh_interval if task_source_impl is not None else None,
+            empty_wait_timeout_sec=(
+                float(getattr(args, "queue_empty_wait_timeout", 0.0))
+                if task_source_impl is not None
+                else 0.0
+            ),
+            empty_wait_interval_sec=float(
+                getattr(args, "queue_empty_wait_interval", 5.0)
+            ),
         )
+    except WorkerInfrastructureUnavailable as exc:
+        summary = {
+            "case_id": direct_test_case.case_id if direct_test_case is not None else None,
+            "target": args.target,
+            "case_kind": args.case_kind,
+            "status": "gpu_unavailable",
+            "mode": "queue" if task_source_impl is not None else "direct",
+            "reason": str(exc),
+            "processed_count": 0,
+            "skipped_count": 0,
+            "terminal_status": "gpu_unavailable",
+            "output_path": str(Path(args.output).expanduser().resolve()),
+            "exit_code": 75,
+        }
+        if emit_summary:
+            print(json.dumps(summary, ensure_ascii=False))
+        return summary
+    except WorkerControlPlaneLost as exc:
+        summary = {
+            "case_id": direct_test_case.case_id if direct_test_case is not None else None,
+            "target": args.target,
+            "case_kind": args.case_kind,
+            "status": "ray_control_plane_lost",
+            "mode": "queue" if task_source_impl is not None else "direct",
+            "reason": str(exc),
+            "processed_count": 0,
+            "skipped_count": 0,
+            "terminal_status": "ray_control_plane_lost",
+            "output_path": str(Path(args.output).expanduser().resolve()),
+            "exit_code": 1,
+        }
+        if emit_summary:
+            print(json.dumps(summary, ensure_ascii=False))
+        return summary
     except Exception as exc:
         summary = {
             "case_id": direct_test_case.case_id if direct_test_case is not None else None,

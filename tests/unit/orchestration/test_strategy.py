@@ -3,9 +3,8 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pytest
 
-import orchestration.binomial_mode as binomial_mode_module
-import orchestration.dkw_mode as dkw_mode_module
 import orchestration.strategy as strategy_module
 from contracts.statistics import StatisticalReport
 from orchestration.strategy import (
@@ -15,6 +14,7 @@ from orchestration.strategy import (
     ParameterCaseStrategy,
     ParameterCaseStrategyConfig,
 )
+from orchestration.replay import ReplayCsvStrategy, ReplayCsvStrategyConfig
 from runtime.repository.consistency_classification import (
     ConsistencyClassificationRepository,
 )
@@ -77,6 +77,87 @@ def test_parameter_case_strategy_returns_none_after_first_case() -> None:
 
     assert strategy.next_test_case() is not None
     assert strategy.next_test_case() is None
+
+
+def test_replay_csv_strategy_keeps_only_binomial_success_rows(tmp_path: Path) -> None:
+    source = tmp_path / "source.csv"
+    source.write_text(
+        "loop_num,status,reason,c_collision,case_id,ego_init_lane,acceleration,dx0\n"
+        "1,success,BINOMIAL_CI: Sampling (1),0,old_1,514,7.0,12.5\n"
+        "2,success,[FOCUS] Error Recovery,1,old_2,514,7.0,13.5\n"
+        "3,timeout,BINOMIAL_CI: Sampling (2),0,old_3,514,7.0,14.5\n"
+        "4,success,BINOMIAL_CI: Sampling (3),-1,old_4,514,7.0,15.5\n"
+        "5,success,BINOMIAL_CI: Sampling (4),1,old_5,282,7.0,16.5\n",
+        encoding="utf-8",
+    )
+    strategy = ReplayCsvStrategy(
+        ReplayCsvStrategyConfig(
+            source_csv=source,
+            input_types={"ego_init_lane": "514", "acceleration": 7.0, "dx0": 10.0},
+            expected_count=2,
+        )
+    )
+
+    first = strategy.next_test_case()
+    second = strategy.next_test_case()
+
+    assert strategy.eligible_count == 2
+    assert first is not None
+    assert first.input == {
+        "ego_init_lane": "514",
+        "acceleration": 7.0,
+        "dx0": 12.5,
+        "scenario_type": "uturn",
+    }
+    assert first.meta["replay_source_loop_num"] == 1
+    assert first.meta["replay_source_collision"] == 0
+    assert second is not None
+    assert second.meta["replay_source_loop_num"] == 5
+    assert second.meta["replay_source_collision"] == 1
+    assert strategy.next_test_case() is None
+
+
+def test_replay_csv_strategy_skips_completed_source_loops(tmp_path: Path) -> None:
+    source = tmp_path / "source.csv"
+    source.write_text(
+        "loop_num,status,reason,c_collision,dx0\n"
+        "10,success,BINOMIAL_CI: Sampling (1),0,12.5\n"
+        "20,success,BINOMIAL_CI: Sampling (2),1,15.0\n",
+        encoding="utf-8",
+    )
+    strategy = ReplayCsvStrategy(
+        ReplayCsvStrategyConfig(
+            source_csv=source,
+            input_types={"dx0": 10.0},
+            expected_count=2,
+            completed_source_loop_nums=frozenset({10}),
+        )
+    )
+
+    test_case = strategy.next_test_case()
+
+    assert strategy.skipped_completed_count == 1
+    assert test_case is not None
+    assert test_case.meta["replay_source_loop_num"] == 20
+    assert strategy.next_test_case() is None
+
+
+def test_replay_csv_strategy_rejects_unexpected_eligible_count(tmp_path: Path) -> None:
+    source = tmp_path / "source.csv"
+    source.write_text(
+        "loop_num,status,reason,c_collision,dx0\n"
+        "1,success,BINOMIAL_CI: Sampling (1),0,12.5\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="expected 9066, found 1"):
+        ReplayCsvStrategy(
+            ReplayCsvStrategyConfig(
+                source_csv=source,
+                input_types={"dx0": 10.0},
+                expected_count=9066,
+            )
+        )
 
 
 def test_active_learning_strategist_prefers_grouped_case_definition_and_settings() -> None:
@@ -1380,9 +1461,7 @@ def test_active_learning_strategist_binomial_ci_requests_more_samples_when_neede
     assert 10.0 <= payload["dx0"] <= 20.0
 
 
-def test_active_learning_strategist_binomial_ci_uses_region_aware_rejection_sampling(
-    monkeypatch,
-) -> None:
+def test_active_learning_strategist_binomial_ci_uses_region_aware_rejection_sampling() -> None:
     class Repo:
         def load_dataset(self):
             return pd.DataFrame([{"loop_num": 1, "c_collision": 0}])
@@ -1400,15 +1479,13 @@ def test_active_learning_strategist_binomial_ci_uses_region_aware_rejection_samp
                 diagnostics={"status": "success"},
             )
 
-    monkeypatch.setattr(
-        binomial_mode_module,
-        "build_theory_metrics",
-        lambda **kwargs: {
-            "theory_margin_a_human": (
-                1.0 if float(kwargs["values"]["dx0"]) >= 15.0 else -1.0
+    class ThresholdRegionPolicy:
+        def build_filter_frame(self, point):
+            row = dict(point)
+            row["theory_margin_a_human"] = (
+                1.0 if float(point["dx0"]) >= 15.0 else -1.0
             )
-        },
-    )
+            return pd.DataFrame([row])
 
     strategist = ActiveLearningStrategist(
         "uturn",
@@ -1426,6 +1503,7 @@ def test_active_learning_strategist_binomial_ci_uses_region_aware_rejection_samp
         binomial_ci_service=FakeBinomialService(),
         run_mode="binomial_ci",
         dkw_region="jama_safe",
+        statistical_region_policy=ThresholdRegionPolicy(),
         num_candidates=5,
     )
     strategist.get_random_point = lambda index: {
@@ -1636,9 +1714,7 @@ def test_active_learning_strategist_auto_derives_dkw_bounds_from_region() -> Non
     assert strategist.active_bounds == strategist.dkw_bounds
 
 
-def test_active_learning_strategist_dkw_uses_region_aware_rejection_sampling(
-    monkeypatch,
-) -> None:
+def test_active_learning_strategist_dkw_uses_region_aware_rejection_sampling() -> None:
     class Repo:
         def load_dataset(self):
             return pd.DataFrame([{"loop_num": 1, "min_ttc": 1.0}])
@@ -1656,15 +1732,13 @@ def test_active_learning_strategist_dkw_uses_region_aware_rejection_sampling(
                 diagnostics={"status": "success"},
             )
 
-    monkeypatch.setattr(
-        dkw_mode_module,
-        "build_theory_metrics",
-        lambda **kwargs: {
-            "theory_margin_a_human": (
-                1.0 if float(kwargs["values"]["dx0"]) >= 15.0 else -1.0
+    class ThresholdRegionPolicy:
+        def build_filter_frame(self, point):
+            row = dict(point)
+            row["theory_margin_a_human"] = (
+                1.0 if float(point["dx0"]) >= 15.0 else -1.0
             )
-        },
-    )
+            return pd.DataFrame([row])
 
     strategist = ActiveLearningStrategist(
         "uturn",
@@ -1683,6 +1757,7 @@ def test_active_learning_strategist_dkw_uses_region_aware_rejection_sampling(
         dkw_service=FakeDKWService(),
         run_mode="dkw",
         dkw_region="jama_safe",
+        statistical_region_policy=ThresholdRegionPolicy(),
         num_candidates=5,
     )
     strategist.get_random_point = lambda index: {

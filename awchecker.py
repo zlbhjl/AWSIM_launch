@@ -13,6 +13,8 @@ import importlib
 import ray
 from datetime import datetime
 
+from runtime.container.supervised_process import supervisor_client_from_environment
+
 # --- 修正: モジュール検索パスの追加 ---
 LAUNCH_DIR = os.path.dirname(os.path.abspath(__file__))
 if LAUNCH_DIR not in sys.path:
@@ -52,6 +54,9 @@ def main():
         sys.exit(1)
 
     tool_dir = "/home/passd/aw-cheaker/Maude-3.5.1/AW-CheckerPy"
+    maude_python = os.path.join(tool_dir, ".venv", "bin", "python")
+    if not os.path.exists(maude_python):
+        maude_python = "python3"
     traces_dir = os.environ.get("AW_OUTPUT_DIR", "/home/passd/simulation_traces")
     formulas_path = os.path.join(tool_dir, "formulas.txt")
     dataset_csv_path = os.path.join(traces_dir, f"{args.type}_dataset.csv")
@@ -63,11 +68,23 @@ def main():
     my_env = os.environ.copy()
     my_env["PWD"] = tool_dir
 
-    # 分散対応: Rayクラスターの共有ストアに接続
-    # [修正] 各号機が自分のIPで正しく接続できるよう _node_ip_address を削除
-    ray.init(address=f"{MASTER_IP}:{RAY_PORT}", namespace='awsim_cluster', ignore_reinit_error=True)
-    
     is_host_mode = os.environ.get("EXEC_MODE") == "host"
+
+    # 分散対応: host 実行では Ray を使わず、ローカル保存モードへ直行する
+    ray_available = False
+    if is_host_mode:
+        print("[AW Checker] host 実行のため、Ray には接続せずローカル保存モードで動作します。")
+    else:
+        # [修正] 各号機が自分のIPで正しく接続できるよう _node_ip_address を削除
+        try:
+            ray.init(
+                address=f"{MASTER_IP}:{RAY_PORT}",
+                namespace='awsim_cluster',
+                ignore_reinit_error=True,
+            )
+            ray_available = True
+        except Exception as e:
+            print(f"[AW Checker] ⚠️ Rayクラスターへ接続できませんでした。ローカル保存モードで続行します: {e}")
 
     # --- 新機能: config に FORMULAS が定義されていれば formulas.txt を自動生成/上書き ---
     if formulas_config:
@@ -80,17 +97,18 @@ def main():
         except Exception as e:
             print(f"[Warning] formulas.txt の生成に失敗しました (権限エラー等): {e}")
 
-    print("[AW Checker] 共有金庫 (SharedStoreActor) を探しています...")
-    for _ in range(10): # 最大約50秒待機
-        try:
-            shared_store = ray.get_actor("SharedStoreActor")
-            print("[AW Checker] 共有金庫に接続しました！")
-            break
-        except ValueError:
-            time.sleep(5)
-    else:
-        print("[AW Checker] ⚠️ 共有金庫が見つかりませんでした。ローカル保存モードで動作します。")
-        shared_store = None
+    shared_store = None
+    if ray_available:
+        print("[AW Checker] 共有金庫 (SharedStoreActor) を探しています...")
+        for _ in range(10): # 最大約50秒待機
+            try:
+                shared_store = ray.get_actor("SharedStoreActor")
+                print("[AW Checker] 共有金庫に接続しました！")
+                break
+            except ValueError:
+                time.sleep(5)
+        else:
+            print("[AW Checker] ⚠️ 共有金庫が見つかりませんでした。ローカル保存モードで動作します。")
 
     if not os.path.exists(formulas_path):
         print(f"[Error] {formulas_path} が見つかりません。")
@@ -276,8 +294,22 @@ def main():
 
                     # 2. すべての指標について Maude (aw_checkerpy.py) を呼び出して厳密な論理検証を行う
                     print(f"  [Maude検証] すべての指標({len(metric_config)}件)を厳密に論理検証します...")
-                    command = ["python3", "aw_checkerpy.py", target_path]
-                    result = subprocess.run(command, cwd=tool_dir, env=my_env, capture_output=True, text=True)
+                    command = [maude_python, "aw_checkerpy.py", target_path]
+                    process_supervisor = supervisor_client_from_environment(my_env)
+                    if process_supervisor is not None:
+                        result = process_supervisor.run(
+                            command,
+                            cwd=tool_dir,
+                            env=my_env,
+                        )
+                    else:
+                        result = subprocess.run(
+                            command,
+                            cwd=tool_dir,
+                            env=my_env,
+                            capture_output=True,
+                            text=True,
+                        )
                     output_log = result.stdout
                     error_log = result.stderr
 

@@ -17,6 +17,7 @@ class MaudeEvaluationSummary:
     output: dict[str, object]
     has_error: bool
     missing_headers: list[str]
+    invalid_headers: list[str]
 
 
 def evaluate_formula_results(
@@ -43,15 +44,19 @@ def evaluate_formula_results(
     _apply_collision_rules(output)
     _apply_ttc_monotonic_rules(output)
 
-    has_error = bool(missing_headers)
-    if invalid_conditions:
-        has_error = has_error or _matches_invalid_conditions(output, invalid_conditions)
+    invalid_headers = _matching_invalid_conditions(output, invalid_conditions or {})
+    # A trace without required vehicle motion is not a no-collision sample.
+    # Preserve the trace for diagnosis, but remove it from collision statistics.
+    if invalid_headers:
+        output["c_collision"] = -1
+    has_error = bool(missing_headers or invalid_headers)
 
     return MaudeEvaluationSummary(
         metrics=metrics,
         output=output,
         has_error=has_error,
         missing_headers=missing_headers,
+        invalid_headers=invalid_headers,
     )
 
 
@@ -74,14 +79,15 @@ def _apply_ttc_monotonic_rules(output: dict[str, object]) -> None:
             output[key] = 1
 
 
-def _matches_invalid_conditions(
+def _matching_invalid_conditions(
     output: Mapping[str, object],
     invalid_conditions: Mapping[str, object],
-) -> bool:
+) -> list[str]:
+    matches: list[str] = []
     for key, expected_value in invalid_conditions.items():
         if output.get(key) == expected_value:
-            return True
-    return False
+            matches.append(key)
+    return matches
 
 
 def _ttc_threshold_from_key(key: str) -> float:

@@ -19,6 +19,7 @@ from evaluation.gp_boundary import (
 from orchestration.binomial_mode import BinomialModeRunner, BinomialModeState
 from orchestration.dkw_mode import DKWModeRunner, DKWModeState
 from orchestration.final_report import FinalReport, build_final_report
+from contracts.statistical_region import StatisticalRegionPolicy
 import point_extractors
 from runtime.repository.boundary_gap_progress import BoundaryGapProgressRepository
 from runtime.repository.consistency_classification import (
@@ -198,6 +199,8 @@ class ActiveLearningStrategist:
         binomial_min_samples: int | None = None,
         cache_size: int = 4,
         random_seed: int = 42,
+        statistical_region_policy: StatisticalRegionPolicy | None = None,
+        dkw_minimum_value: float | None = None,
     ) -> None:
         self.scenario_name = scenario_name
         self.config = config
@@ -362,6 +365,8 @@ class ActiveLearningStrategist:
             config=self.config,
             case_kind=self.scenario_name,
             config_module_name=getattr(self.config, "__name__", None),
+            region_policy=statistical_region_policy,
+            minimum_value=dkw_minimum_value,
         )
         self.dkw_mode_state = DKWModeState(bounds=self.dkw_bounds)
         self.binomial_mode = BinomialModeRunner.from_runtime_config(
@@ -379,6 +384,7 @@ class ActiveLearningStrategist:
             config=self.config,
             case_kind=self.scenario_name,
             config_module_name=getattr(self.config, "__name__", None),
+            region_policy=statistical_region_policy,
         )
         self.binomial_mode_state = BinomialModeState(bounds=self.dkw_bounds)
         self.random_seed = random_seed

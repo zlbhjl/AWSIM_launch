@@ -25,6 +25,11 @@ def calculate_binomial_confidence_interval(
         return None
 
     working_df = df.copy()
+    # A metric value is statistically usable only after a completed run and
+    # successful analysis. This excludes timeout traces recovered by grace.
+    if "status" in working_df.columns:
+        status_series = working_df["status"].fillna("").astype(str).str.lower()
+        working_df = working_df[status_series.eq("success")]
     if reason_pattern and "reason" in working_df.columns:
         reason_series = working_df["reason"].fillna("").astype(str)
         working_df = working_df[reason_series.str.contains(reason_pattern, na=False)]
@@ -40,9 +45,6 @@ def calculate_binomial_confidence_interval(
 
     if working_df is None or working_df.empty:
         return None
-
-    if "c_collision" in working_df.columns:
-        working_df = working_df[~working_df["c_collision"].isin([-1, "-1", -1.0])]
 
     target = pd.to_numeric(working_df[target_column], errors="coerce")
     valid_mask = target.isin([0, 1])
@@ -151,6 +153,8 @@ class BinomialCIService:
             reason_pattern = str(reason_pattern)
 
         df = _ensure_data_frame(data)
+        has_any_rows = df is not None and not df.empty
+        has_target_column = bool(has_any_rows and request.metric in df.columns)
         result = calculate_binomial_confidence_interval(
             df,
             target_column=request.metric,
@@ -161,6 +165,25 @@ class BinomialCIService:
             reason_pattern=reason_pattern,
         )
         if not result:
+            if not has_any_rows or has_target_column:
+                return StatisticalReport(
+                    method=request.method,
+                    metric=request.metric,
+                    sample_count=0,
+                    estimate=None,
+                    interval=None,
+                    sufficient=False,
+                    next_action="collect_more_samples",
+                    diagnostics={
+                        "status": "pending",
+                        "message": "No binomial samples are available yet.",
+                        "confidence": request.confidence,
+                        "target_width": request.target_width,
+                        "method": method,
+                        "region": region,
+                        "reason_pattern": reason_pattern,
+                    },
+                )
             return StatisticalReport(
                 method=request.method,
                 metric=request.metric,

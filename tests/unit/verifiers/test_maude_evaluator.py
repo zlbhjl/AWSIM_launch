@@ -46,5 +46,27 @@ def test_evaluator_applies_invalid_conditions() -> None:
         invalid_conditions={"c_collision": 0},
     )
 
-    assert summary.output["c_collision"] == 0
+    assert summary.output["c_collision"] == -1
     assert summary.has_error is True
+    assert summary.invalid_headers == ["c_collision"]
+
+
+def test_evaluator_invalidates_collision_when_ego_or_npc_did_not_move() -> None:
+    stdout = (
+        "F(collision)\nModel checking result: True\n"
+        "F(npc-moved)\nModel checking result: False\n"
+        "F(ego-moved)\nModel checking result: True\n"
+    )
+    summary = evaluate_formula_results(
+        stdout,
+        [
+            FormulaSpec(formula="F(collision)", header="c_collision"),
+            FormulaSpec(formula="F(npc-moved)", header="c_npc_stuck"),
+            FormulaSpec(formula="F(ego-moved)", header="c_ego_stuck"),
+        ],
+        invalid_conditions={"c_npc_stuck": 1, "c_ego_stuck": 1},
+    )
+
+    assert summary.has_error is True
+    assert summary.invalid_headers == ["c_npc_stuck"]
+    assert summary.output["c_collision"] == -1

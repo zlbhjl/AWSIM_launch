@@ -3,9 +3,23 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import sys
 from typing import Sequence
 
+from runtime.container.supervised_process import supervisor_client_from_environment
 from targets.bbsl.dataset_adapter import BBSLExperimentAdapter
+
+
+def _run_command(command: list[str], *, cwd: str):
+    process_supervisor = supervisor_client_from_environment()
+    if process_supervisor is None:
+        return subprocess.run(command, cwd=cwd, check=False)
+    completed = process_supervisor.run(command, cwd=cwd, env=os.environ.copy())
+    if completed.stdout:
+        print(completed.stdout, end="")
+    if completed.stderr:
+        print(completed.stderr, end="", file=sys.stderr)
+    return completed
 
 
 def cleanup_bbsl_batch_state(target_repo: str) -> dict[str, object]:
@@ -91,7 +105,7 @@ def run_bbsl_experiment(
     if detect_timeout is not None:
         command.extend(["--detect-timeout", str(detect_timeout)])
 
-    completed = subprocess.run(command, cwd=target_repo, check=False)
+    completed = _run_command(command, cwd=target_repo)
     if completed.returncode != 0:
         raise RuntimeError(
             f"BBSL experiment failed with return code {completed.returncode}"
@@ -129,7 +143,7 @@ def run_bbsl_clean_baseline(
     if output_json is not None:
         command.extend(["--output-json", output_json])
 
-    completed = subprocess.run(command, cwd=target_repo, check=False)
+    completed = _run_command(command, cwd=target_repo)
     if completed.returncode != 0:
         raise RuntimeError(
             f"BBSL clean baseline failed with return code {completed.returncode}"
@@ -190,7 +204,7 @@ def run_bbsl_noisy_batch(
     if output_json is not None:
         command.extend(["--output-json", output_json])
 
-    completed = subprocess.run(command, cwd=target_repo, check=False)
+    completed = _run_command(command, cwd=target_repo)
     if completed.returncode != 0:
         raise RuntimeError(
             f"BBSL noisy batch failed with return code {completed.returncode}"

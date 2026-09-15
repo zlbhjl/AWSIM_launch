@@ -32,36 +32,7 @@ class JsonlResultSink:
             handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
 
     def serialize_record(self, record: EvaluationRecord) -> dict[str, object]:
-        validate_evaluation_meta(record.meta)
-        meta = dict(record.meta)
-        if self.path_root is not None:
-            meta.setdefault("path_root", str(self.path_root))
-        return {
-            "case_id": record.case_id,
-            "target": record.target,
-            "case_kind": record.case_kind,
-            "status": record.status.value,
-            "input": dict(record.input),
-            "output": dict(record.output),
-            "evidence": {
-                key: self._normalize_path(value) for key, value in record.evidence.items()
-            },
-            "meta": meta,
-        }
-
-    def _normalize_path(self, value: str) -> str:
-        path = Path(value).expanduser()
-        if not path.is_absolute():
-            return str(path)
-
-        resolved_path = path.resolve()
-        if self.path_root is None:
-            return str(resolved_path)
-
-        try:
-            return str(resolved_path.relative_to(self.path_root))
-        except ValueError:
-            return str(resolved_path)
+        return serialize_evaluation_record(record, path_root=self.path_root)
 
 
 class SharedStoreResultSink:
@@ -219,22 +190,49 @@ class RaySharedStoreResultSink(SharedStoreResultSink):
                 result_row,
                 input_row,
                 self._build_timeout_reason(reason),
+                loop_num=loop_num,
+                timeout_row=result_row,
+                input_row=input_row,
+                reason=self._build_timeout_reason(reason),
             )
+            self._append_evaluation_record(record)
             return
 
-        self._invoke("buffer_parameters", loop_num, input_row, reason)
-        self._invoke("merge_result", result_row)
+        self._invoke(
+            "buffer_parameters",
+            loop_num,
+            input_row,
+            reason,
+            loop_num=loop_num,
+            input_row=input_row,
+            reason=reason,
+        )
+        self._invoke("merge_result", result_row, result_row=result_row)
+        self._append_evaluation_record(record)
 
-    def _invoke(self, method_name: str, *args: object) -> object:
+    def _append_evaluation_record(self, record: EvaluationRecord) -> None:
+        record_payload = serialize_evaluation_record(record)
+        try:
+            self._invoke(
+                "append_evaluation_record",
+                record_payload,
+                record_payload=record_payload,
+            )
+        except AttributeError:
+            # Older shared-store actors only provide the merged CSV methods.
+            # Keep them usable while the v2 actor adds central JSONL persistence.
+            return
+
+    def _invoke(self, method_name: str, *args: object, **kwargs: object) -> object:
         method = getattr(self.actor, method_name)
         if hasattr(method, "remote"):
-            remote_result = method.remote(*args)
+            remote_result = method.remote(**kwargs) if kwargs else method.remote(*args)
             if self.ray_get is not None:
                 return self.ray_get(remote_result)
             import ray  # type: ignore
 
             return ray.get(remote_result)
-        return method(*args)
+        return method(*args) if args else method(**kwargs)
 
 
 class OptionalResultSink:
@@ -302,3 +300,45 @@ def _build_theoretical_metrics(
         if isinstance(record.meta.get("config_module"), str)
         else None,
     )
+
+
+def serialize_evaluation_record(
+    record: EvaluationRecord,
+    *,
+    path_root: str | Path | None = None,
+) -> dict[str, object]:
+    validate_evaluation_meta(record.meta)
+    resolved_root = (
+        Path(path_root).expanduser().resolve() if path_root is not None else None
+    )
+    meta = dict(record.meta)
+    if resolved_root is not None:
+        meta.setdefault("path_root", str(resolved_root))
+    return {
+        "case_id": record.case_id,
+        "target": record.target,
+        "case_kind": record.case_kind,
+        "status": record.status.value,
+        "input": dict(record.input),
+        "output": dict(record.output),
+        "evidence": {
+            key: _normalize_evidence_path(value, path_root=resolved_root)
+            for key, value in record.evidence.items()
+        },
+        "meta": meta,
+    }
+
+
+def _normalize_evidence_path(value: str, *, path_root: Path | None) -> str:
+    path = Path(value).expanduser()
+    if not path.is_absolute():
+        return str(path)
+
+    resolved_path = path.resolve()
+    if path_root is None:
+        return str(resolved_path)
+
+    try:
+        return str(resolved_path.relative_to(path_root))
+    except ValueError:
+        return str(resolved_path)

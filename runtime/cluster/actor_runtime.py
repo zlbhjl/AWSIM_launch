@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -33,6 +34,9 @@ class _TaskQueueActorBackend:
     def get_status(self) -> tuple[int, int, dict[str, str]]:
         return self.queue.get_status()
 
+    def get_in_flight_tasks(self) -> list[dict[str, Any]]:
+        return self.queue.get_in_flight_tasks()
+
     def get_snapshot(self) -> dict[str, Any]:
         return self.queue.get_snapshot()
 
@@ -41,13 +45,24 @@ class _TaskQueueActorBackend:
 
 
 class _SharedStoreActorBackend:
-    def __init__(self, dataset_csv_path: str, *, buffer_timeout_sec: int = 600) -> None:
+    def __init__(
+        self,
+        dataset_csv_path: str,
+        *,
+        records_jsonl_path: str | None = None,
+        buffer_timeout_sec: int = 600,
+    ) -> None:
         repository = DatasetCsvRepository(Path(dataset_csv_path).expanduser())
         self.shared_store = SharedStore(
             repository,
             parameter_buffer=ParameterBuffer(timeout_sec=buffer_timeout_sec),
         )
         self.dataset_csv_path = str(Path(dataset_csv_path).expanduser())
+        self.records_jsonl_path = (
+            Path(records_jsonl_path).expanduser().resolve()
+            if records_jsonl_path is not None
+            else None
+        )
 
     def buffer_parameters(
         self,
@@ -115,6 +130,22 @@ class _SharedStoreActorBackend:
     def get_dataset_csv_path(self) -> str:
         return self.dataset_csv_path
 
+    def append_evaluation_record(
+        self,
+        record_payload: dict[str, object],
+    ) -> bool:
+        if self.records_jsonl_path is None:
+            return False
+        self.records_jsonl_path.parent.mkdir(parents=True, exist_ok=True)
+        with self.records_jsonl_path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(record_payload, ensure_ascii=False) + "\n")
+        return True
+
+    def get_records_jsonl_path(self) -> str | None:
+        if self.records_jsonl_path is None:
+            return None
+        return str(self.records_jsonl_path)
+
 
 @dataclass(frozen=True)
 class DetachedActorConfig:
@@ -151,12 +182,14 @@ class ActorRuntime:
         config: DetachedActorConfig,
         *,
         dataset_csv_path: str,
+        records_jsonl_path: str | None = None,
         buffer_timeout_sec: int = 600,
     ) -> Any:
         return self._ensure_named_actor(
             config,
             _SharedStoreActorBackend,
             dataset_csv_path,
+            records_jsonl_path=records_jsonl_path,
             buffer_timeout_sec=buffer_timeout_sec,
         )
 

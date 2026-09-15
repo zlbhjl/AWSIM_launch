@@ -15,7 +15,7 @@ from runtime.container.profile import ContainerRuntimeProfile, build_runtime_pro
 from runtime.container.runner import CommandResult
 from runtime.container.supervisor import ContainerSupervisor
 from runtime.container.xvfb import XvfbConfig, XvfbController
-from targets.awsim.case_kinds import load_timeout_sec
+from targets.awsim.case_kinds import build_default_case_kind_module_name, load_timeout_sec
 from targets.awsim.readiness_probe import (
     AWSIMReadinessConfig,
     AWSIMReadinessProbe,
@@ -45,6 +45,7 @@ class AWSIMBackendConfig:
     timeout_sec: float | None = None
     poll_interval_sec: float = 2.0
     settle_time_sec: float = 5.0
+    post_timeout_grace_sec: float = 10.0
     manage_infra: bool = False
     reuse_infra_between_runs: bool = False
     initial_warmup_sec: float = 0.0
@@ -83,6 +84,7 @@ class AWSIMBackend:
             ArtifactWatcherConfig(
                 poll_interval_sec=self.config.poll_interval_sec,
                 settle_time_sec=self.config.settle_time_sec,
+                post_timeout_grace_sec=self.config.post_timeout_grace_sec,
             ),
             monotonic=monotonic,
             sleeper=sleeper,
@@ -92,6 +94,7 @@ class AWSIMBackend:
         self._infra_started = False
         self._initial_warmup_done = False
         self._last_refresh_reason = ""
+        self._next_local_loop_num = 1
 
     def run(self, test_case: TestCase) -> RawRunResult:
         if "fixture_path" in test_case.input:
@@ -101,7 +104,7 @@ class AWSIMBackend:
     def _run_fixture(self, test_case: TestCase) -> RawRunResult:
         fixture_path = self._resolve_fixture_path(test_case)
         content = fixture_path.read_text(encoding="utf-8").strip()
-        status = RunStatus.TIMEOUT if content == "TIMEOUT" else RunStatus.SUCCESS
+        status = self._resolve_fixture_status(test_case=test_case, content=content)
         return RawRunResult(
             case_id=test_case.case_id,
             target=test_case.target,
@@ -117,20 +120,18 @@ class AWSIMBackend:
 
     def _run_simulation(self, test_case: TestCase) -> RawRunResult:
         output_dir = self._resolve_output_dir(test_case)
-        expected_trace_path, local_trace_path = self._resolve_trace_paths(test_case, output_dir)
-        timeout_sec = self._resolve_timeout_sec(test_case)
-        local_loop_num = self._resolve_loop_num(
-            test_case.input,
-            primary_key="local_loop_num",
-            fallback_key="global_loop_num",
+        local_loop_num = self._claim_local_loop_num(test_case)
+        global_loop_num = self._resolve_loop_num(
+            test_case.meta,
+            primary_key="global_loop_num",
+            fallback_key="history_loop_num",
         )
-        if local_loop_num is None:
-            local_loop_num = self._resolve_loop_num(
-                test_case.meta,
-                primary_key="local_loop_num",
-                fallback_key="global_loop_num",
-            )
-        local_loop_num = local_loop_num or 1
+        expected_trace_path, local_trace_path = self._resolve_trace_paths(
+            test_case,
+            output_dir,
+            local_loop_num=local_loop_num,
+        )
+        timeout_sec = self._resolve_timeout_sec(test_case)
         command = self._build_command(test_case)
         env = os.environ.copy()
         env[self.config.runtime_profile.output_env_var] = str(output_dir)
@@ -139,6 +140,7 @@ class AWSIMBackend:
         self._cleanup_stale_artifacts(expected_trace_path, local_trace_path)
 
         status = RunStatus.EXECUTION_ERROR
+        client_process_state = "not_started"
         try:
             command_result = CommandResult(returncode=0, stdout="", stderr="")
             client_process = None
@@ -172,16 +174,26 @@ class AWSIMBackend:
             )
             trace_json_path = supervision.trace_path
             status = supervision.status
-            if status is RunStatus.SUCCESS:
+            if supervision.status is RunStatus.SUCCESS:
                 self._promote_related_artifacts(
                     expected_trace_path=expected_trace_path,
                     local_trace_path=local_trace_path,
                 )
             if client_process is not None:
+                process_returncode = self._poll_process_returncode(client_process.process)
                 command_result = CommandResult(
-                    returncode=self._poll_process_returncode(client_process.process),
+                    returncode=process_returncode,
                     stdout="",
                     stderr="",
+                )
+                client_process_state = (
+                    "running_at_watch_deadline"
+                    if process_returncode is None
+                    else "exited"
+                )
+                status = self._resolve_runtime_status(
+                    supervision_status=supervision.status,
+                    process_returncode=process_returncode,
                 )
         finally:
             if self.config.manage_infra:
@@ -208,9 +220,14 @@ class AWSIMBackend:
                 "backend_mode": "simulation",
                 "command": command,
                 "returncode": command_result.returncode,
+                "client_process_state": client_process_state,
                 "stdout": command_result.stdout,
                 "stderr": command_result.stderr,
                 "timeout_sec": supervision.timeout_sec,
+                "artifact_timing": supervision.artifact_timing,
+                "post_timeout_grace_sec": self.config.post_timeout_grace_sec,
+                "local_loop_num": local_loop_num,
+                "global_loop_num": global_loop_num,
             },
         )
 
@@ -356,6 +373,48 @@ class AWSIMBackend:
             raise FileNotFoundError(f"AWSIM fixture not found: {fixture_path}")
         return fixture_path
 
+    def _resolve_fixture_status(
+        self,
+        *,
+        test_case: TestCase,
+        content: str,
+    ) -> RunStatus:
+        if content == "TIMEOUT":
+            return RunStatus.TIMEOUT
+        explicit_status = (
+            test_case.input.get("fixture_raw_run_status")
+            or test_case.meta.get("fixture_raw_run_status")
+        )
+        return self._coerce_run_status(explicit_status) or RunStatus.SUCCESS
+
+    @staticmethod
+    def _coerce_run_status(value: object) -> RunStatus | None:
+        if value is None:
+            return None
+        if isinstance(value, RunStatus):
+            return value
+        if isinstance(value, str):
+            stripped = value.strip()
+            if not stripped:
+                return None
+            try:
+                return RunStatus(stripped)
+            except ValueError as exc:
+                raise ValueError(f"Unsupported run status: {value}") from exc
+        raise TypeError(f"Run status must be a string or RunStatus, got {type(value).__name__}")
+
+    @staticmethod
+    def _resolve_runtime_status(
+        *,
+        supervision_status: RunStatus,
+        process_returncode: int | None,
+    ) -> RunStatus:
+        if supervision_status is RunStatus.TIMEOUT:
+            return RunStatus.TIMEOUT
+        # The artifact is the experiment result. Client exit state is evidence
+        # only: a trace is evaluated by the checker regardless of its code.
+        return supervision_status
+
     def _resolve_output_dir(self, test_case: TestCase) -> Path:
         explicit_output_dir = test_case.input.get("output_dir")
         configured_output_dir = self.config.output_dir
@@ -372,7 +431,14 @@ class AWSIMBackend:
         config_module_name = str(
             test_case.meta.get(
                 "config_module",
-                f"targets.awsim.case_kinds.{test_case.case_kind}",
+                build_default_case_kind_module_name(
+                    case_kind=test_case.case_kind,
+                    scenario_profile=(
+                        str(test_case.meta.get("scenario_profile"))
+                        if test_case.meta.get("scenario_profile") is not None
+                        else None
+                    ),
+                ),
             )
         )
         return load_timeout_sec(
@@ -385,25 +451,16 @@ class AWSIMBackend:
         self,
         test_case: TestCase,
         output_dir: Path,
+        *,
+        local_loop_num: int,
     ) -> tuple[Path, Path]:
         global_loop_num = self._resolve_loop_num(
             test_case.meta,
             primary_key="global_loop_num",
             fallback_key="history_loop_num",
         )
-        local_loop_num = self._resolve_loop_num(
-            test_case.input,
-            primary_key="local_loop_num",
-            fallback_key="global_loop_num",
-        )
-        if local_loop_num is None:
-            local_loop_num = self._resolve_loop_num(
-                test_case.meta,
-                primary_key="local_loop_num",
-                fallback_key="global_loop_num",
-            )
         eval_loop_num = global_loop_num or local_loop_num or 1
-        test_loop_num = local_loop_num or global_loop_num or 1
+        test_loop_num = local_loop_num
 
         explicit_trace_path = test_case.input.get("expected_trace_path")
         if explicit_trace_path:
@@ -414,6 +471,30 @@ class AWSIMBackend:
         expected_trace_path = output_dir / f"{test_case.case_kind}_eval_sim{eval_loop_num}.json"
         local_trace_path = output_dir / f"{test_case.case_kind}_test_sim{test_loop_num}.json"
         return expected_trace_path, local_trace_path
+
+    def _claim_local_loop_num(self, test_case: TestCase) -> int:
+        explicit_loop_num = self._resolve_loop_num(
+            test_case.input,
+            primary_key="local_loop_num",
+            fallback_key="local_loop_num",
+        )
+        if explicit_loop_num is None:
+            explicit_loop_num = self._resolve_loop_num(
+                test_case.meta,
+                primary_key="local_loop_num",
+                fallback_key="local_loop_num",
+            )
+
+        if explicit_loop_num is not None and explicit_loop_num > 0:
+            self._next_local_loop_num = max(
+                self._next_local_loop_num,
+                explicit_loop_num + 1,
+            )
+            return explicit_loop_num
+
+        local_loop_num = self._next_local_loop_num
+        self._next_local_loop_num += 1
+        return local_loop_num
 
     def _build_infra_tasks(
         self,
@@ -437,8 +518,14 @@ class AWSIMBackend:
             "--type",
             scenario_type,
         ]
+        scenario_profile = test_case.meta.get("scenario_profile")
+        if scenario_profile:
+            command.extend(["--scenario-profile", str(scenario_profile)])
         config_module = test_case.meta.get("config_module")
-        default_config_module = f"targets.awsim.case_kinds.{test_case.case_kind}"
+        default_config_module = build_default_case_kind_module_name(
+            case_kind=test_case.case_kind,
+            scenario_profile=str(scenario_profile) if scenario_profile is not None else None,
+        )
         if config_module and str(config_module) != default_config_module:
             command.extend(["--config-module", str(config_module)])
         for key, value in self._dynamic_params(test_case.input).items():
@@ -548,9 +635,9 @@ class AWSIMBackend:
         return self.container_launcher.launch_prepared(prepared_launch)
 
     @staticmethod
-    def _poll_process_returncode(process: object) -> int:
+    def _poll_process_returncode(process: object) -> int | None:
         poll = getattr(process, "poll", None)
         if not callable(poll):
             return 0
         returncode = poll()
-        return 0 if returncode is None else int(returncode)
+        return None if returncode is None else int(returncode)

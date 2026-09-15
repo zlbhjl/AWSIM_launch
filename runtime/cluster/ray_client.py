@@ -5,12 +5,38 @@ from time import monotonic, sleep
 from typing import Any, Callable
 
 
+RAY_CONTROL_PLANE_ERROR_MARKERS = (
+    "Ray Client is not connected",
+    "Failed to reconnect",
+    "Failed to connect to GCS",
+    "GCS may have been killed",
+    "Starting Ray client server failed",
+    "Initialization failure from server",
+    "ConnectionAbortedError",
+    "Failed to connect to Ray",
+    "raylet",
+    "gcs",
+)
+
+
+class RayControlPlaneError(RuntimeError):
+    pass
+
+
+def is_ray_control_plane_error(exc: BaseException) -> bool:
+    text = f"{type(exc).__name__}: {exc}"
+    lowered = text.lower()
+    return any(marker.lower() in lowered for marker in RAY_CONTROL_PLANE_ERROR_MARKERS)
+
+
 @dataclass(frozen=True)
 class RayConnectionConfig:
     address: str | None = None
     namespace: str | None = None
     actor_lookup_timeout_sec: float = 30.0
     actor_lookup_poll_interval_sec: float = 5.0
+    connect_retries: int = 6
+    connect_retry_interval_sec: float = 15.0
 
 
 class RayActorLocator:
@@ -34,8 +60,23 @@ class RayActorLocator:
             init_kwargs["address"] = config.address
         if config.namespace:
             init_kwargs["namespace"] = config.namespace
-        resolved_ray.init(**init_kwargs)
-        return resolved_ray
+        max_attempts = max(int(config.connect_retries), 1)
+        last_error: Exception | None = None
+        for attempt in range(1, max_attempts + 1):
+            try:
+                resolved_ray.init(**init_kwargs)
+                return resolved_ray
+            except Exception as exc:
+                last_error = exc
+                shutdown = getattr(resolved_ray, "shutdown", None)
+                if callable(shutdown):
+                    shutdown()
+                if attempt >= max_attempts:
+                    break
+                self.sleep(max(float(config.connect_retry_interval_sec), 0.0))
+        raise RayControlPlaneError(
+            f"Failed to connect to Ray after {max_attempts} attempt(s)"
+        ) from last_error
 
     def connect_and_get_actor(
         self,
@@ -78,6 +119,10 @@ class RayActorLocator:
                 self.sleep(max(float(poll_interval_sec), 0.0))
             except Exception as exc:  # pragma: no cover - defensive branch
                 last_error = exc
+                if is_ray_control_plane_error(exc):
+                    raise RayControlPlaneError(
+                        f"Failed to resolve Ray actor '{actor_name}' due to control-plane loss"
+                    ) from exc
                 raise RuntimeError(
                     f"Failed to resolve Ray actor '{actor_name}'"
                 ) from exc
@@ -96,6 +141,8 @@ class RayActorLocator:
 
 
 __all__ = [
+    "RayControlPlaneError",
     "RayActorLocator",
     "RayConnectionConfig",
+    "is_ray_control_plane_error",
 ]

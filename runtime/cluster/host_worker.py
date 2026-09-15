@@ -16,6 +16,8 @@ class HostWorkerConfig:
     queue_namespace: str | None = "awsim_cluster"
     queue_address: str | None = None
     config_module: str | None = None
+    container_profile: str | None = None
+    scenario_profile: str | None = None
     dataset_csv: str | None = None
     path_root: str | None = None
     history_path: str | None = None
@@ -121,6 +123,10 @@ class HostWorkerManager:
             command.extend(["--queue-address", config.queue_address])
         if config.config_module:
             command.extend(["--config-module", config.config_module])
+        if config.container_profile:
+            command.extend(["--container-profile", config.container_profile])
+        if config.scenario_profile:
+            command.extend(["--scenario-profile", config.scenario_profile])
         if config.dataset_csv and not config.shared_store_actor_name:
             command.extend(["--dataset-csv", config.dataset_csv])
         if config.path_root:

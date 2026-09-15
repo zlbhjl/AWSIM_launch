@@ -9,3 +9,7 @@ simulation_traces_host/
 simulation_traces_*/
 *.log
 verification_results/
+
+# PRISM/Maude and other run artifacts, scratch output
+artifacts/
+tmp/

@@ -1,19 +1,17 @@
 from __future__ import annotations
 
 import argparse
+import importlib
 import sys
 import time
 from types import MethodType
 from pathlib import Path
 from typing import Callable, Mapping, Sequence
 
-from targets.awsim.case_kinds import load_case_definition
-from targets.awsim.scenario_builders import (
-    build_deceleration_scenario,
-    build_cutin_scenario,
-    build_cutout_scenario,
-    build_swerve_scenario,
-    build_uturn_scenario,
+from targets.awsim.case_kinds import (
+    SUPPORTED_SCENARIO_PROFILES,
+    build_default_case_kind_module_name,
+    load_case_definition,
 )
 
 
@@ -42,6 +40,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Optional case kind module override. Defaults to targets.awsim.case_kinds.<type>.",
     )
+    parser.add_argument(
+        "--scenario-profile",
+        choices=SUPPORTED_SCENARIO_PROFILES,
+        default=None,
+        help="Optional named scenario spec profile (for example: legacy, autoware171).",
+    )
     return parser
 
 
@@ -65,81 +69,41 @@ def build_scenario(
     dynamic_params: Mapping[str, float],
     *,
     case_kind_module_name: str | None = None,
+    scenario_profile: str | None = None,
     scenario_manager: object | None = None,
     lane_offset_factory: Callable[[str, float], object] | None = None,
     scenario_builders: Mapping[str, Callable[..., object]] | None = None,
 ) -> tuple[object, object | None]:
+    resolved_case_kind_module_name = case_kind_module_name or build_default_case_kind_module_name(
+        case_kind=scenario_type,
+        scenario_profile=scenario_profile,
+    )
     case_definition = load_case_definition(
         case_kind=scenario_type,
-        module_name=case_kind_module_name,
+        module_name=resolved_case_kind_module_name,
     )
     fixed_params = dict(case_definition.get("fixed_params", {}))
 
     resolved_manager = scenario_manager or _default_scenario_manager_factory()
     resolved_lane_offset_factory = lane_offset_factory or _default_lane_offset_factory
     resolved_scenario_builders = dict(scenario_builders or {})
-
-    if scenario_type == "uturn":
-        builder = resolved_scenario_builders.get("uturn") or _load_uturn_builder()
-        scenario = build_uturn_scenario(
-            network=resolved_manager.network,
-            dynamic_params=dynamic_params,
-            fixed_params=fixed_params,
-            scenario_profiles=case_definition.get("scenario_profiles"),
-            lane_offset_factory=resolved_lane_offset_factory,
-            scenario_builder=builder,
-        )
-        return resolved_manager, scenario
-
-    if scenario_type == "cutin":
-        builder = resolved_scenario_builders.get("cutin") or _load_cutin_builder()
-        scenario = build_cutin_scenario(
-            network=resolved_manager.network,
-            dynamic_params=dynamic_params,
-            fixed_params=fixed_params,
-            scenario_profiles=case_definition.get("scenario_profiles"),
-            lane_offset_factory=resolved_lane_offset_factory,
-            scenario_builder=builder,
-        )
-        return resolved_manager, scenario
-
-    if scenario_type == "cutout":
-        builder = resolved_scenario_builders.get("cutout") or _load_cutout_builder()
-        scenario = build_cutout_scenario(
-            network=resolved_manager.network,
-            dynamic_params=dynamic_params,
-            fixed_params=fixed_params,
-            scenario_profiles=case_definition.get("scenario_profiles"),
-            lane_offset_factory=resolved_lane_offset_factory,
-            scenario_builder=builder,
-        )
-        return resolved_manager, scenario
-
-    if scenario_type == "deceleration":
-        builder = resolved_scenario_builders.get("deceleration") or _load_deceleration_builder()
-        scenario = build_deceleration_scenario(
-            network=resolved_manager.network,
-            dynamic_params=dynamic_params,
-            fixed_params=fixed_params,
-            scenario_profiles=case_definition.get("scenario_profiles"),
-            lane_offset_factory=resolved_lane_offset_factory,
-            scenario_builder=builder,
-        )
-        return resolved_manager, scenario
-
-    if scenario_type == "swerve":
-        builder = resolved_scenario_builders.get("swerve") or _load_swerve_builder()
-        scenario = build_swerve_scenario(
-            network=resolved_manager.network,
-            dynamic_params=dynamic_params,
-            fixed_params=fixed_params,
-            scenario_profiles=case_definition.get("scenario_profiles"),
-            lane_offset_factory=resolved_lane_offset_factory,
-            scenario_builder=builder,
-        )
-        return resolved_manager, scenario
-
-    raise ValueError(f"Unsupported scenario type: {scenario_type}")
+    internal_builder = _load_internal_builder(
+        scenario_type,
+        scenario_profile=scenario_profile,
+    )
+    scenario_builder = resolved_scenario_builders.get(scenario_type) or _load_external_builder(
+        scenario_type,
+        scenario_profile=scenario_profile,
+    )
+    scenario = internal_builder(
+        network=resolved_manager.network,
+        dynamic_params=dynamic_params,
+        fixed_params=fixed_params,
+        scenario_profiles=case_definition.get("scenario_profiles"),
+        lane_offset_factory=resolved_lane_offset_factory,
+        scenario_builder=scenario_builder,
+    )
+    return resolved_manager, scenario
 
 
 def run_scenario_case(
@@ -147,6 +111,7 @@ def run_scenario_case(
     dynamic_params: Mapping[str, float],
     *,
     case_kind_module_name: str | None = None,
+    scenario_profile: str | None = None,
     scenario_manager: object | None = None,
     lane_offset_factory: Callable[[str, float], object] | None = None,
     scenario_builders: Mapping[str, Callable[..., object]] | None = None,
@@ -161,6 +126,7 @@ def run_scenario_case(
             scenario_type,
             dynamic_params,
             case_kind_module_name=case_kind_module_name,
+            scenario_profile=scenario_profile,
             scenario_manager=scenario_manager,
             lane_offset_factory=lane_offset_factory,
             scenario_builders=scenario_builders,
@@ -176,24 +142,8 @@ def run_scenario_case(
         printer(f"[Error] Scenario object could not be created for type: {scenario_type}")
         return 1
 
-    resolved_timeout_sec = _resolve_scenario_timeout_sec(
-        scenario_type,
-        case_kind_module_name=case_kind_module_name,
-        timeout_sec=timeout_sec,
-    )
-    _install_scenario_goal_timeout(
-        scenario,
-        timeout_sec=resolved_timeout_sec,
-        printer=printer,
-        monotonic=timeout_monotonic,
-        spin_once=timeout_spin_once,
-        goal_arrived_value=timeout_goal_arrived_value,
-    )
-
     printer(f">>> [Runner] Starting '{scenario_type}' simulation...")
     manager.run([scenario])
-    if getattr(scenario, "_scenario_timeout_reached", False):
-        return 124
     return 0
 
 
@@ -210,6 +160,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         args.type,
         dynamic_params,
         case_kind_module_name=args.config_module,
+        scenario_profile=args.scenario_profile,
     )
 def _default_scenario_manager_factory() -> object:
     ensure_runtime_paths()
@@ -260,10 +211,47 @@ def _load_swerve_builder() -> Callable[..., object]:
     return make_swerve_scenario
 
 
+def _load_internal_builder(
+    scenario_type: str,
+    *,
+    scenario_profile: str | None = None,
+) -> Callable[..., object]:
+    base_package = "targets.awsim.scenario_builders"
+    module_name = (
+        f"{base_package}.{scenario_profile}.{scenario_type}_builder"
+        if scenario_profile
+        else f"{base_package}.{scenario_type}_builder"
+    )
+    module = importlib.import_module(module_name)
+    builder = getattr(module, f"build_{scenario_type}_scenario", None)
+    if builder is None or not callable(builder):
+        raise ValueError(f"Unsupported scenario type: {scenario_type}")
+    return builder
+
+
+def _load_external_builder(
+    scenario_type: str,
+    *,
+    scenario_profile: str | None = None,
+) -> Callable[..., object]:
+    loader_map = {
+        "uturn": _load_uturn_builder,
+        "cutin": _load_cutin_builder,
+        "cutout": _load_cutout_builder,
+        "deceleration": _load_deceleration_builder,
+        "swerve": _load_swerve_builder,
+    }
+    loader = loader_map.get(scenario_type)
+    if loader is None:
+        raise ValueError(f"Unsupported scenario type: {scenario_type}")
+    return loader()
+
+
 def _resolve_scenario_timeout_sec(
     scenario_type: str,
     *,
     case_kind_module_name: str | None,
+    scenario_profile: str | None,
     timeout_sec: float | None,
 ) -> float | None:
     if timeout_sec is not None:
@@ -272,6 +260,7 @@ def _resolve_scenario_timeout_sec(
     case_definition = load_case_definition(
         case_kind=scenario_type,
         module_name=case_kind_module_name,
+        scenario_profile=scenario_profile,
     )
     loaded_timeout = case_definition.get("timeout_sec")
     if loaded_timeout is None:

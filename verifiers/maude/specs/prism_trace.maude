@@ -1,0 +1,21 @@
+fmod PRISM-TRACE-CHECKER is
+  protecting NAT .
+  protecting BOOL .
+
+  sort Verdict .
+  ops safe violation invalid : -> Verdict [ctor] .
+
+  op early-failure : Nat Nat -> Verdict .
+  vars F L : Nat .
+  ceq early-failure(F, L) = violation if F <= L .
+  eq early-failure(F, L) = safe [owise] .
+
+  op repeated-degradation : Nat Nat -> Verdict .
+  vars D T : Nat .
+  ceq repeated-degradation(D, T) = violation if D >= T .
+  eq repeated-degradation(D, T) = safe [owise] .
+
+  op absorbing-valid : Bool -> Verdict .
+  eq absorbing-valid(true) = safe .
+  eq absorbing-valid(false) = invalid .
+endfm

@@ -47,13 +47,20 @@ class ResultInterpreter:
     def interpret_raw_run_result(self, raw_run_result) -> EvaluationRecord:
         raw_result_json = raw_run_result.evidence.get("raw_result_json")
         if not raw_result_json:
+            final_status = (
+                raw_run_result.status
+                if raw_run_result.status is not RunStatus.SUCCESS
+                else RunStatus.ANALYSIS_ERROR
+            )
             return EvaluationRecord(
                 case_id=raw_run_result.case_id,
                 target=raw_run_result.target,
                 case_kind=raw_run_result.case_kind,
-                status=RunStatus.ANALYSIS_ERROR,
+                status=final_status,
                 meta=ensure_evaluation_meta(
                     {
+                        "execution_status": raw_run_result.status.value,
+                        "analysis_status": RunStatus.ANALYSIS_ERROR.value,
                         "verifier_name": self.context.verifier_name,
                         "error_message": "missing_raw_result_json",
                         "raw_run_status": raw_run_result.status.value,
@@ -71,6 +78,10 @@ class ResultInterpreter:
         record.case_kind = raw_run_result.case_kind
         record.meta.setdefault("raw_run_status", raw_run_result.status.value)
         record.meta.setdefault("raw_run_meta", dict(raw_run_result.meta))
+        record.meta.setdefault("execution_status", raw_run_result.status.value)
+        record.meta.setdefault("analysis_status", record.status.value)
+        if raw_run_result.status is not RunStatus.SUCCESS:
+            record.status = raw_run_result.status
         return record
 
     def interpret_path(self, fixture_path: str | Path) -> EvaluationRecord:
