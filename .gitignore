@@ -13,3 +13,6 @@ verification_results/
 # PRISM/Maude and other run artifacts, scratch output
 artifacts/
 tmp/
+
+# Office lock files
+.~lock.*#
