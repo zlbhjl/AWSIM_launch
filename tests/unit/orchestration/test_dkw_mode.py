@@ -157,6 +157,30 @@ def test_dkw_mode_runner_handles_sequential_sampling() -> None:
     assert state.dispatched_task_count == 2
 
 
+def test_dkw_mode_runner_sequential_stops_at_max_samples_without_converging() -> None:
+    # handle_sequential previously never checked max_samples at all: as long
+    # as the FakeDKWService kept returning "collect_more_samples", it would
+    # dispatch tasks forever. It must stop once dispatched_task_count reaches
+    # the configured max_samples.
+    runner = _make_runner(max_samples=5)
+    state = DKWModeState(dispatched_task_count=5)
+
+    payload = runner.handle_sequential(
+        pd.DataFrame([{"loop_num": 5, "min_ttc": 1.0}]),
+        state=state,
+        get_random_point=lambda index: {
+            "dx0": 10.0 + index,
+            "ego_speed": 35.0,
+            "npc_speed": 15.0,
+        },
+    )
+
+    assert payload["system_command"] == "stop"
+    assert "max_samples=5" in payload["reason"]
+    assert "without converging" in payload["reason"]
+    assert state.dispatched_task_count == 5
+
+
 def test_dkw_mode_runner_saves_samples_on_stop() -> None:
     class SamplesRepo:
         def __init__(self):

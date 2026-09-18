@@ -16,8 +16,12 @@ from evaluation.gp_boundary import (
     fit_gp_boundary_model,
     predict_uncertainty as predict_gp_boundary_uncertainty,
 )
+from evaluation.sprt import SPRTService
+from evaluation.ebstop import EBStopService
 from orchestration.binomial_mode import BinomialModeRunner, BinomialModeState
 from orchestration.dkw_mode import DKWModeRunner, DKWModeState
+from orchestration.sprt_mode import SPRTModeRunner, SPRTModeState
+from orchestration.ebstop_mode import EBStopModeRunner, EBStopModeState
 from orchestration.final_report import FinalReport, build_final_report
 from contracts.statistical_region import StatisticalRegionPolicy
 import point_extractors
@@ -166,6 +170,17 @@ def _load_strategy_settings_from_config(config: object) -> dict[str, object]:
         "binomial_ci_confidence": getattr(config, "BINOMIAL_CI_CONFIDENCE", 0.95),
         "binomial_ci_target_width": getattr(config, "BINOMIAL_CI_TARGET_WIDTH", 0.02),
         "binomial_ci_min_samples": getattr(config, "BINOMIAL_CI_MIN_SAMPLES", 100),
+        "sprt_target": getattr(config, "SPRT_TARGET", "c_collision"),
+        "sprt_p0": getattr(config, "SPRT_P0", 0.1),
+        "sprt_p1": getattr(config, "SPRT_P1", 0.01),
+        "sprt_beta": getattr(config, "SPRT_BETA", 0.05),
+        "sprt_confidence": getattr(config, "SPRT_CONFIDENCE", 0.95),
+        "sprt_min_samples": getattr(config, "SPRT_MIN_SAMPLES", 0),
+        "ebstop_target": getattr(config, "EBSTOP_TARGET", "min_ttc"),
+        "ebstop_epsilon": getattr(config, "EBSTOP_EPSILON", 0.1),
+        "ebstop_value_range": getattr(config, "EBSTOP_VALUE_RANGE", (0.0, 10.0)),
+        "ebstop_confidence": getattr(config, "EBSTOP_CONFIDENCE", 0.95),
+        "ebstop_max_samples": getattr(config, "EBSTOP_MAX_SAMPLES", 2000),
     }
 
 
@@ -187,6 +202,8 @@ class ActiveLearningStrategist:
         boundary_model_service: object | None = None,
         dkw_service: DKWService | None = None,
         binomial_ci_service: BinomialCIService | None = None,
+        sprt_service: SPRTService | None = None,
+        ebstop_service: EBStopService | None = None,
         dkw_bounds: Mapping[str, tuple[float, float]] | None = None,
         dkw_region: str = "custom",
         dkw_pure_smc: bool = False,
@@ -197,6 +214,18 @@ class ActiveLearningStrategist:
         binomial_confidence: float | None = None,
         binomial_target_width: float | None = None,
         binomial_min_samples: int | None = None,
+        binomial_anytime_valid: bool | None = None,
+        sprt_target: str | None = None,
+        sprt_p0: float | None = None,
+        sprt_p1: float | None = None,
+        sprt_beta: float | None = None,
+        sprt_confidence: float | None = None,
+        sprt_min_samples: int | None = None,
+        ebstop_target: str | None = None,
+        ebstop_epsilon: float | None = None,
+        ebstop_value_range: tuple[float, float] | None = None,
+        ebstop_confidence: float | None = None,
+        ebstop_max_samples: int | None = None,
         cache_size: int = 4,
         random_seed: int = 42,
         statistical_region_policy: StatisticalRegionPolicy | None = None,
@@ -257,6 +286,8 @@ class ActiveLearningStrategist:
         self.boundary_model: GPBoundaryModel | None = None
         self.dkw_service = dkw_service or DKWService(feature_names=list(self.param_names))
         self.binomial_ci_service = binomial_ci_service or BinomialCIService()
+        self.sprt_service = sprt_service or SPRTService()
+        self.ebstop_service = ebstop_service or EBStopService()
 
         self.target_priorities = list(self.strategy_settings.get("target_priorities", []))
         self.INITIAL_EXPLORATION_LIMIT = int(
@@ -331,6 +362,62 @@ class ActiveLearningStrategist:
             if binomial_min_samples is not None
             else self.strategy_settings.get("binomial_ci_min_samples", 100)
         )
+        self.binomial_anytime_valid = bool(
+            binomial_anytime_valid
+            if binomial_anytime_valid is not None
+            else self.strategy_settings.get("binomial_ci_anytime_valid", False)
+        )
+        self.sprt_target = str(
+            sprt_target
+            if sprt_target is not None
+            else self.strategy_settings.get("sprt_target", "c_collision")
+        )
+        self.sprt_p0 = float(
+            sprt_p0 if sprt_p0 is not None else self.strategy_settings.get("sprt_p0", 0.1)
+        )
+        self.sprt_p1 = float(
+            sprt_p1 if sprt_p1 is not None else self.strategy_settings.get("sprt_p1", 0.01)
+        )
+        self.sprt_beta = float(
+            sprt_beta
+            if sprt_beta is not None
+            else self.strategy_settings.get("sprt_beta", 0.05)
+        )
+        self.sprt_confidence = float(
+            sprt_confidence
+            if sprt_confidence is not None
+            else self.strategy_settings.get("sprt_confidence", 0.95)
+        )
+        self.sprt_min_samples = int(
+            sprt_min_samples
+            if sprt_min_samples is not None
+            else self.strategy_settings.get("sprt_min_samples", 0)
+        )
+        self.ebstop_target = str(
+            ebstop_target
+            if ebstop_target is not None
+            else self.strategy_settings.get("ebstop_target", "min_ttc")
+        )
+        self.ebstop_epsilon = float(
+            ebstop_epsilon
+            if ebstop_epsilon is not None
+            else self.strategy_settings.get("ebstop_epsilon", 0.1)
+        )
+        self.ebstop_value_range = tuple(
+            ebstop_value_range
+            if ebstop_value_range is not None
+            else self.strategy_settings.get("ebstop_value_range", (0.0, 10.0))
+        )
+        self.ebstop_confidence = float(
+            ebstop_confidence
+            if ebstop_confidence is not None
+            else self.strategy_settings.get("ebstop_confidence", 0.95)
+        )
+        self.ebstop_max_samples = int(
+            ebstop_max_samples
+            if ebstop_max_samples is not None
+            else self.strategy_settings.get("ebstop_max_samples", 2000)
+        )
         self.dkw_bounds = (
             {
                 str(name): (float(raw_bounds[0]), float(raw_bounds[1]))
@@ -385,8 +472,45 @@ class ActiveLearningStrategist:
             case_kind=self.scenario_name,
             config_module_name=getattr(self.config, "__name__", None),
             region_policy=statistical_region_policy,
+            anytime_valid=self.binomial_anytime_valid,
         )
         self.binomial_mode_state = BinomialModeState(bounds=self.dkw_bounds)
+        self.sprt_mode = SPRTModeRunner.from_runtime_config(
+            param_names=self.param_names,
+            target=self.sprt_target,
+            p0=self.sprt_p0,
+            p1=self.sprt_p1,
+            beta=self.sprt_beta,
+            confidence=self.sprt_confidence,
+            min_samples=self.sprt_min_samples,
+            max_samples=self.max_samples,
+            region=self.dkw_region,
+            sprt_service=self.sprt_service,
+            statistical_history_repository=self.statistical_history_repository,
+            statistical_samples_repository=self.statistical_samples_repository,
+            config=self.config,
+            case_kind=self.scenario_name,
+            config_module_name=getattr(self.config, "__name__", None),
+            region_policy=statistical_region_policy,
+        )
+        self.sprt_mode_state = SPRTModeState(bounds=self.dkw_bounds)
+        self.ebstop_mode = EBStopModeRunner.from_runtime_config(
+            param_names=self.param_names,
+            target=self.ebstop_target,
+            epsilon=self.ebstop_epsilon,
+            value_range=self.ebstop_value_range,
+            confidence=self.ebstop_confidence,
+            max_samples=self.ebstop_max_samples,
+            region=self.dkw_region,
+            ebstop_service=self.ebstop_service,
+            statistical_history_repository=self.statistical_history_repository,
+            statistical_samples_repository=self.statistical_samples_repository,
+            config=self.config,
+            case_kind=self.scenario_name,
+            config_module_name=getattr(self.config, "__name__", None),
+            region_policy=statistical_region_policy,
+        )
+        self.ebstop_mode_state = EBStopModeState(bounds=self.dkw_bounds)
         self.random_seed = random_seed
         self.rng = np.random.default_rng(random_seed)
         df_init = self.dataset_repository.load_dataset()
@@ -410,9 +534,21 @@ class ActiveLearningStrategist:
                 self.binomial_mode_state.bounds,
             )
             self.dkw_bounds = self.binomial_mode_state.bounds
+        elif self.run_mode == "sprt":
+            self.sprt_mode_state.bounds = self.sprt_mode.initialize_bounds(
+                df_init,
+                self.sprt_mode_state.bounds,
+            )
+            self.dkw_bounds = self.sprt_mode_state.bounds
+        elif self.run_mode == "ebstop":
+            self.ebstop_mode_state.bounds = self.ebstop_mode.initialize_bounds(
+                df_init,
+                self.ebstop_mode_state.bounds,
+            )
+            self.dkw_bounds = self.ebstop_mode_state.bounds
 
         self.active_bounds = dict(self.param_ranges)
-        if self.run_mode in {"dkw", "dkw_fixed", "binomial_ci"} and self.dkw_bounds:
+        if self.run_mode in {"dkw", "dkw_fixed", "binomial_ci", "sprt", "ebstop"} and self.dkw_bounds:
             for name in self.param_names:
                 if name in self.dkw_bounds:
                     self.active_bounds[name] = self.dkw_bounds[name]
@@ -431,6 +567,10 @@ class ActiveLearningStrategist:
         self._sync_strategy_from_dkw_mode_state()
         if self.run_mode == "binomial_ci":
             self._sync_strategy_from_binomial_mode_state()
+        elif self.run_mode == "sprt":
+            self._sync_strategy_from_sprt_mode_state()
+        elif self.run_mode == "ebstop":
+            self._sync_strategy_from_ebstop_mode_state()
 
         if self.run_mode == "boundary_gap":
             self.FOCUS_POINTS = self._extract_boundary_gap_points(df_init)
@@ -509,6 +649,16 @@ class ActiveLearningStrategist:
 
         if self.run_mode == "binomial_ci":
             payload = self._handle_binomial_ci_mode(df_dataset)
+            if payload.get("system_command") == "stop":
+                self._capture_final_report(payload)
+            return payload
+        if self.run_mode == "sprt":
+            payload = self._handle_sprt_mode(df_dataset)
+            if payload.get("system_command") == "stop":
+                self._capture_final_report(payload)
+            return payload
+        if self.run_mode == "ebstop":
+            payload = self._handle_ebstop_mode(df_dataset)
             if payload.get("system_command") == "stop":
                 self._capture_final_report(payload)
             return payload
@@ -945,6 +1095,10 @@ class ActiveLearningStrategist:
             return "DKW Fixed"
         if self.run_mode == "binomial_ci":
             return "Binomial CI"
+        if self.run_mode == "sprt":
+            return "SPRT"
+        if self.run_mode == "ebstop":
+            return "EBStop"
         if self.run_mode == "dkw":
             if self.dkw_simultaneous:
                 return "SMC (DKW Simultaneous)"
@@ -1111,6 +1265,52 @@ class ActiveLearningStrategist:
             get_random_point=self.get_random_point,
         )
         self._sync_strategy_from_binomial_mode_state()
+        return payload
+
+    def _sync_sprt_mode_state_from_strategy(self) -> None:
+        self.sprt_mode_state.bounds = self.dkw_bounds
+        if self.sprt_mode_state.dispatched_task_count < self.dispatched_task_count:
+            self.sprt_mode_state.dispatched_task_count = self.dispatched_task_count
+
+    def _sync_strategy_from_sprt_mode_state(self) -> None:
+        self.dkw_bounds = self.sprt_mode_state.bounds
+        self.sprt_random_index = self.sprt_mode_state.random_index
+        self.dispatched_task_count = max(
+            self.dispatched_task_count,
+            self.sprt_mode_state.dispatched_task_count,
+        )
+
+    def _handle_sprt_mode(self, df_dataset: pd.DataFrame | None) -> dict[str, object]:
+        self._sync_sprt_mode_state_from_strategy()
+        payload = self.sprt_mode.handle(
+            df_dataset,
+            state=self.sprt_mode_state,
+            get_random_point=self.get_random_point,
+        )
+        self._sync_strategy_from_sprt_mode_state()
+        return payload
+
+    def _sync_ebstop_mode_state_from_strategy(self) -> None:
+        self.ebstop_mode_state.bounds = self.dkw_bounds
+        if self.ebstop_mode_state.dispatched_task_count < self.dispatched_task_count:
+            self.ebstop_mode_state.dispatched_task_count = self.dispatched_task_count
+
+    def _sync_strategy_from_ebstop_mode_state(self) -> None:
+        self.dkw_bounds = self.ebstop_mode_state.bounds
+        self.ebstop_random_index = self.ebstop_mode_state.random_index
+        self.dispatched_task_count = max(
+            self.dispatched_task_count,
+            self.ebstop_mode_state.dispatched_task_count,
+        )
+
+    def _handle_ebstop_mode(self, df_dataset: pd.DataFrame | None) -> dict[str, object]:
+        self._sync_ebstop_mode_state_from_strategy()
+        payload = self.ebstop_mode.handle(
+            df_dataset,
+            state=self.ebstop_mode_state,
+            get_random_point=self.get_random_point,
+        )
+        self._sync_strategy_from_ebstop_mode_state()
         return payload
 
     def _handle_dkw_mode(self, df_dataset: pd.DataFrame | None) -> dict[str, object]:

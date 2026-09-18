@@ -90,6 +90,57 @@ def test_prism_binomial_sampling_requires_dataset_and_max_samples() -> None:
         validate_args(missing_max)
 
 
+def test_prism_rejects_modes_with_no_live_execution_path() -> None:
+    # boundary_gap (and verify_consistency/etc.) have no branch in
+    # orchestration/orchestrator.py::_build_strategy for target=prism, so without
+    # this check they would silently fall through to a single one-off case with
+    # no statistical evaluation at all instead of failing loudly.
+    parser = build_parser()
+    args = parser.parse_args(
+        [
+            "--output",
+            "/tmp/prism.jsonl",
+            "--dataset-csv",
+            "/tmp/prism.csv",
+            "--target",
+            "prism",
+            "--mode",
+            "boundary_gap",
+            "--param",
+            "steps=20",
+        ]
+    )
+
+    with pytest.raises(ValueError, match="no live execution path|has no branch"):
+        validate_args(args)
+
+
+def test_prism_allows_explore_binomial_ci_sprt_ebstop_dkw_modes() -> None:
+    parser = build_parser()
+    for mode in ("explore", "binomial_ci", "sprt", "ebstop", "dkw", "dkw_fixed"):
+        extra = (
+            ["--max-samples", "20"]
+            if mode in {"binomial_ci", "sprt", "ebstop", "dkw", "dkw_fixed"}
+            else []
+        )
+        args = parser.parse_args(
+            [
+                "--output",
+                "/tmp/prism.jsonl",
+                "--dataset-csv",
+                "/tmp/prism.csv",
+                "--target",
+                "prism",
+                "--mode",
+                mode,
+                "--param",
+                "steps=20",
+                *extra,
+            ]
+        )
+        validate_args(args)
+
+
 def test_prism_binomial_sampling_uses_failure_metric_and_experiment_id() -> None:
     parser = build_parser()
     args = parser.parse_args(
@@ -185,6 +236,30 @@ def test_validate_args_allows_verify_consistency_mode() -> None:
         headless = False
         dataset_csv = "/tmp/uturn_dataset.csv"
         mode = "verify_consistency"
+
+    validate_args(Args())
+
+
+def test_validate_args_allows_ebstop_mode() -> None:
+    class Args:
+        fixture = None
+        params = []
+        target = "awsim"
+        headless = False
+        dataset_csv = "/tmp/uturn_dataset.csv"
+        mode = "ebstop"
+
+    validate_args(Args())
+
+
+def test_validate_args_allows_sprt_mode() -> None:
+    class Args:
+        fixture = None
+        params = []
+        target = "awsim"
+        headless = False
+        dataset_csv = "/tmp/uturn_dataset.csv"
+        mode = "sprt"
 
     validate_args(Args())
 
@@ -381,6 +456,7 @@ def test_build_orchestrator_config_keeps_strategy_fields() -> None:
             "0.05",
             "--binomial_min_samples",
             "40",
+            "--binomial_anytime_valid",
         ]
     )
     normalized = normalize_args(
@@ -399,6 +475,7 @@ def test_build_orchestrator_config_keeps_strategy_fields() -> None:
             "--binomial_confidence", "0.9",
             "--binomial_target_width", "0.05",
             "--binomial_min_samples", "40",
+            "--binomial_anytime_valid",
         ],
     )
 
@@ -418,6 +495,19 @@ def test_build_orchestrator_config_keeps_strategy_fields() -> None:
     assert config.binomial_confidence == 0.9
     assert config.binomial_target_width == 0.05
     assert config.binomial_min_samples == 40
+    assert config.binomial_anytime_valid is True
+
+
+def test_build_orchestrator_config_binomial_anytime_valid_defaults_to_false() -> None:
+    parser = build_parser()
+    args = parser.parse_args(
+        ["--output", "/tmp/records.jsonl", "--dataset-csv", "/tmp/uturn_dataset.csv"]
+    )
+    normalized = normalize_args(args, argv=[])
+
+    config = build_orchestrator_config(normalized)
+
+    assert config.binomial_anytime_valid is False
 
 
 def test_normalize_args_rejects_invalid_dkw_bounds_json() -> None:

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import pandas as pd
 
 from contracts.statistics import BoundsMap, StatisticalReport, StatisticalRequest
-from evaluation.binomial_ci import BinomialCIService
+from evaluation.ebstop import EBStopService
 from contracts.statistical_region import (
     PassthroughStatisticalRegionPolicy,
     StatisticalRegionPolicy,
@@ -17,39 +17,37 @@ import point_extractors
 
 
 @dataclass(slots=True)
-class BinomialModeConfig:
+class EBStopModeConfig:
     param_names: list[str]
     target: str
-    method: str = "wilson"
+    epsilon: float
+    value_range: float | tuple[float, float]
     confidence: float = 0.95
-    target_width: float = 0.02
-    min_samples: int = 100
     max_samples: int = 2000
     region: str = "custom"
     case_kind: str = "uturn"
     config_module_name: str | None = None
-    anytime_valid: bool = False
 
 
 @dataclass(slots=True)
-class BinomialModeState:
+class EBStopModeState:
     bounds: BoundsMap | None = None
     random_index: int = 0
     dispatched_task_count: int = 0
 
 
-class BinomialModeRunner:
+class EBStopModeRunner:
     def __init__(
         self,
         *,
-        config: BinomialModeConfig,
-        binomial_ci_service: BinomialCIService,
+        config: EBStopModeConfig,
+        ebstop_service: EBStopService,
         statistical_history_repository: object | None = None,
         statistical_samples_repository: StatisticalSamplesRepository | None = None,
         region_policy: StatisticalRegionPolicy | None = None,
     ) -> None:
         self.config = config
-        self.binomial_ci_service = binomial_ci_service
+        self.ebstop_service = ebstop_service
         self.statistical_history_repository = statistical_history_repository
         self.statistical_samples_repository = statistical_samples_repository
         self.region_policy = region_policy or PassthroughStatisticalRegionPolicy()
@@ -60,29 +58,26 @@ class BinomialModeRunner:
         *,
         param_names: Sequence[str],
         target: str,
-        method: str,
+        epsilon: float,
+        value_range: float | tuple[float, float],
         confidence: float,
-        target_width: float,
-        min_samples: int,
         max_samples: int,
         region: str,
-        binomial_ci_service: BinomialCIService,
+        ebstop_service: EBStopService,
         statistical_history_repository: object | None = None,
         statistical_samples_repository: StatisticalSamplesRepository | None = None,
         config: object | None = None,
         case_kind: str = "uturn",
         config_module_name: str | None = None,
         region_policy: StatisticalRegionPolicy | None = None,
-        anytime_valid: bool = False,
-    ) -> "BinomialModeRunner":
+    ) -> "EBStopModeRunner":
         return cls(
-            config=BinomialModeConfig(
+            config=EBStopModeConfig(
                 param_names=list(param_names),
                 target=str(target),
-                method=str(method),
+                epsilon=float(epsilon),
+                value_range=value_range,
                 confidence=float(confidence),
-                target_width=float(target_width),
-                min_samples=int(min_samples),
                 max_samples=int(max_samples),
                 region=str(region),
                 case_kind=str(case_kind),
@@ -91,9 +86,8 @@ class BinomialModeRunner:
                     if config_module_name is not None
                     else getattr(config, "__name__", None)
                 ),
-                anytime_valid=bool(anytime_valid),
             ),
-            binomial_ci_service=binomial_ci_service,
+            ebstop_service=ebstop_service,
             statistical_history_repository=statistical_history_repository,
             statistical_samples_repository=statistical_samples_repository,
             region_policy=region_policy,
@@ -160,10 +154,10 @@ class BinomialModeRunner:
         self,
         df_dataset: pd.DataFrame | None,
         *,
-        state: BinomialModeState,
+        state: EBStopModeState,
         get_random_point: Callable[[int], dict[str, object]],
     ) -> dict[str, object]:
-        report = self.binomial_ci_service.evaluate_request(
+        report = self.ebstop_service.evaluate_request(
             df_dataset,
             self._build_request(bounds=state.bounds),
         )
@@ -173,28 +167,24 @@ class BinomialModeRunner:
             return {
                 "system_command": "stop",
                 "reason": (
-                    f"Binomial CI Complete: {self.config.target} "
-                    f"CI width {report.interval_width:.5f}"
+                    f"EBStop Complete: {self.config.target} "
+                    f"estimate={report.estimate:.5f} (n={report.sample_count})"
                 ),
             }
         if report.next_action == "stop_max_samples":
             return {
                 "system_command": "stop",
-                "reason": (
-                    f"Binomial CI reached max_samples={self.config.max_samples}"
-                ),
+                "reason": f"EBStop reached max_samples={self.config.max_samples} unconverged",
             }
         if report.next_action == "error":
             return {
                 "system_command": "stop",
-                "reason": str(
-                    report.diagnostics.get("message", "Binomial CI evaluation error")
-                ),
+                "reason": str(report.diagnostics.get("message", "EBStop evaluation error")),
             }
 
         payload, state.random_index, state.dispatched_task_count = (
             self.issue_region_aware_random_task(
-                reason=f"BINOMIAL_CI: Sampling ({report.sample_count + 1})",
+                reason=f"EBSTOP: Sampling ({report.sample_count + 1})",
                 get_random_point=get_random_point,
                 random_index=state.random_index,
                 base_index=self.max_loop_num(df_dataset),
@@ -205,18 +195,16 @@ class BinomialModeRunner:
 
     def _build_request(self, *, bounds: BoundsMap | None) -> StatisticalRequest:
         return StatisticalRequest(
-            method="binomial_ci",
+            method="ebstop",
             metric=self.config.target,
             bounds=bounds,
             confidence=self.config.confidence,
-            target_width=self.config.target_width,
             options={
-                "method": self.config.method,
+                "epsilon": self.config.epsilon,
+                "value_range": self.config.value_range,
                 "region": self.config.region,
-                "reason_pattern": r"BINOMIAL_CI:",
-                "min_samples": self.config.min_samples,
+                "reason_pattern": r"EBSTOP:",
                 "max_samples": self.config.max_samples,
-                "anytime_valid": self.config.anytime_valid,
             },
         )
 
@@ -235,29 +223,26 @@ class BinomialModeRunner:
             return False
         return filtered is not None and not filtered.empty
 
-    def _append_history(self, report: object, state: BinomialModeState) -> None:
+    def _append_history(self, report: object, state: EBStopModeState) -> None:
         if not isinstance(report, StatisticalReport):
             return
         if report.diagnostics.get("status") != "success":
             return
-        if report.interval is None:
-            return
         repository = self.statistical_history_repository
-        if repository is None or not hasattr(repository, "append_binomial_ci_record"):
+        if repository is None or not hasattr(repository, "append_ebstop_record"):
             return
-        repository.append_binomial_ci_record(
+        repository.append_ebstop_record(
             {
                 "task_count": state.dispatched_task_count,
                 "metric": report.metric,
-                "method": report.diagnostics.get("method", self.config.method),
-                "confidence_level": self.config.confidence,
                 "sample_size": report.sample_count,
-                "success_count": report.diagnostics.get("success_count"),
                 "estimate": report.estimate,
-                "lower_bound": report.interval[0],
-                "upper_bound": report.interval[1],
-                "interval_width": report.interval_width,
-                "target_width": self.config.target_width,
+                "lower_bound": report.interval[0] if report.interval else None,
+                "upper_bound": report.interval[1] if report.interval else None,
+                "epsilon": report.diagnostics.get("epsilon"),
+                "value_range": report.diagnostics.get("value_range"),
+                "mean": report.diagnostics.get("mean"),
+                "std": report.diagnostics.get("std"),
             }
         )
 
@@ -267,11 +252,11 @@ class BinomialModeRunner:
             return
         filtered_df = report.diagnostics.get("filtered_df")
         if isinstance(filtered_df, pd.DataFrame):
-            repository.save_binomial_ci_samples(filtered_df)
+            repository.save_ebstop_samples(filtered_df)
 
 
 __all__ = [
-    "BinomialModeConfig",
-    "BinomialModeRunner",
-    "BinomialModeState",
+    "EBStopModeConfig",
+    "EBStopModeRunner",
+    "EBStopModeState",
 ]

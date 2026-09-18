@@ -1,0 +1,47 @@
+digraph AWSIMTree {
+  graph [fontname="Noto Sans CJK JP", nodesep=0.35, ranksep=0.55, bgcolor="#fcfcfb"];
+  node [fontname="Noto Sans CJK JP", fontsize=13, style=filled, color="#52514e"];
+  edge [fontname="Noto Sans CJK JP", fontsize=11, color="#52514e", fontcolor="#2a78d6"];
+
+  purpose [label="目的", shape=diamond, fillcolor="#eb6834", fontcolor=white, width=1.2, height=0.9];
+  explore_note [label="既存の探索モード\n(explore/margin/jama_edge/\nttc_edge/worst_ttc/boundary_gap)\n※統計手法選択の対象外", shape=box, style="filled,dashed", fillcolor="#ececec"];
+
+  goal [label="知りたいこと", shape=box, fillcolor="#cde2fb"];
+  proptype [label="指標の型", shape=box, fillcolor="#cde2fb"];
+  sound_bin [label="健全性が\n必要か", shape=box, fillcolor="#cde2fb"];
+  errtype [label="誤差の\n指定", shape=box, fillcolor="#cde2fb"];
+  setting [label="設定", shape=box, fillcolor="#cde2fb"];
+
+  sprt [label="SPRT\n--mode sprt", shape=ellipse, fillcolor="#cdeecd"];
+  clopper [label="Clopper-Pearson\n--binomial-method\nclopper-pearson", shape=box, fillcolor="#cde2fb"];
+  wilson [label="Wilson\n--binomial-method wilson\n(デフォルト、標準/不健全)", shape=box, fillcolor="#cde2fb"];
+  peeking [label="何度もチェックする間\n理論的妥当性を保ちたいか\n(repeated peeking)", shape=box, fillcolor="#cde2fb"];
+  peeking_no [label="そのまま\n(既定。--binomial-anytime-validなし)", shape=ellipse, fillcolor="#cdeecd"];
+  peeking_yes [label="+ --binomial-anytime-valid\n(必要サンプル数が約5〜8倍に増加)", shape=ellipse, fillcolor="#cdeecd"];
+  dkw_seq [label="DKW (逐次)\n--mode dkw\n--dkw_region で領域指定可", shape=ellipse, fillcolor="#cdeecd"];
+  dkw_fixed [label="DKW (固定回数)\n--mode dkw_fixed", shape=ellipse, fillcolor="#cdeecd"];
+  ebstop [label="EBStop\n--mode ebstop", shape=ellipse, fillcolor="#cdeecd"];
+
+  purpose -> explore_note [label="危険領域を探索したい"];
+  purpose -> goal [label="指標を推定/証明したい"];
+
+  goal -> sprt [label="閾値を超えるか判定したい\n(仮説検定)"];
+  goal -> proptype [label="値の範囲を推定したい\n(区間推定)"];
+
+  proptype -> sound_bin [label="二値 (例: c_collision)"];
+  proptype -> errtype [label="連続値 (例: min_ttc,\nmin_distance)"];
+
+  sound_bin -> clopper [label="yes"];
+  sound_bin -> wilson [label="no"];
+
+  clopper -> peeking;
+  wilson -> peeking;
+  peeking -> peeking_no [label="不要"];
+  peeking -> peeking_yes [label="必要"];
+
+  errtype -> setting [label="絶対誤差"];
+  errtype -> ebstop [label="相対誤差"];
+
+  setting -> dkw_seq [label="逐次"];
+  setting -> dkw_fixed [label="固定回数"];
+}

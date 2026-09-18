@@ -232,6 +232,15 @@ class DKWModeRunner:
             if report.next_action == "advance_stage":
                 state.stage += 1
 
+        if state.dispatched_task_count >= self.config.max_samples:
+            return {
+                "system_command": "stop",
+                "reason": (
+                    "DKW sequential sampling reached max_samples="
+                    f"{self.config.max_samples} without converging"
+                ),
+            }
+
         base_index = (
             len(dkw_dataset)
             if self.config.pure_smc and dkw_dataset is not None

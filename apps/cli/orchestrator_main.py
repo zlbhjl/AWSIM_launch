@@ -51,7 +51,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--mode",
         choices=LEGACY_MODES,
         default="explore",
-        help="Strategy mode label. Active strategy currently supports explore/focus/margin/jama_edge/ttc_edge/worst_ttc/dkw/dkw_fixed/verify_consistency/binomial_ci/boundary_gap.",
+        help="Strategy mode label. Active strategy currently supports explore/focus/margin/jama_edge/ttc_edge/worst_ttc/dkw/dkw_fixed/verify_consistency/binomial_ci/boundary_gap/sprt/ebstop.",
     )
     parser.add_argument(
         "--target",
@@ -465,7 +465,13 @@ def build_parser() -> argparse.ArgumentParser:
         dest="binomial_method",
         choices=["wilson", "clopper-pearson"],
         default="wilson",
-        help="Confidence interval method used in binomial_ci mode.",
+        help=(
+            "Confidence interval method used in binomial_ci mode. "
+            "'wilson' is a CLT approximation whose actual coverage can fall "
+            "below the nominal confidence level for small n or extreme p; "
+            "use 'clopper-pearson' (exact, never undershoots nominal coverage) "
+            "for safety-critical decisions."
+        ),
     )
     parser.add_argument(
         "--binomial-confidence",
@@ -490,6 +496,145 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=None,
         help="Optional minimum sample count before binomial_ci may stop early.",
+    )
+    parser.add_argument(
+        "--binomial-anytime-valid",
+        "--binomial_anytime_valid",
+        dest="binomial_anytime_valid",
+        action="store_true",
+        help=(
+            "Opt-in fix for binomial_ci's repeated-peeking problem: build each "
+            "interval with a per-sample-count alpha budget (same union-bound "
+            "schedule as ebstop, evaluation/alpha_spending.py) instead of a "
+            "fixed confidence, so it stays valid no matter how many times you "
+            "check. Costs roughly 5-8x more samples to reach the same target "
+            "width; off by default."
+        ),
+    )
+    parser.add_argument(
+        "--sprt-target",
+        "--sprt_target",
+        dest="sprt_target",
+        default="c_collision",
+        help="Binary metric column used in sprt mode.",
+    )
+    parser.add_argument(
+        "--sprt-p0",
+        "--sprt_p0",
+        dest="sprt_p0",
+        type=float,
+        default=0.1,
+        help="H0 hypothesis probability value used in sprt mode.",
+    )
+    parser.add_argument(
+        "--sprt-p1",
+        "--sprt_p1",
+        dest="sprt_p1",
+        type=float,
+        default=0.01,
+        help="H1 hypothesis probability value used in sprt mode.",
+    )
+    parser.add_argument(
+        "--sprt-beta",
+        "--sprt_beta",
+        dest="sprt_beta",
+        type=float,
+        default=0.05,
+        help="Type II error (beta) used in sprt mode.",
+    )
+    parser.add_argument(
+        "--sprt-confidence",
+        "--sprt_confidence",
+        dest="sprt_confidence",
+        type=float,
+        default=0.95,
+        help="1 - alpha (Type I error) used in sprt mode.",
+    )
+    parser.add_argument(
+        "--sprt-min-samples",
+        "--sprt_min_samples",
+        dest="sprt_min_samples",
+        type=int,
+        default=None,
+        help="Optional minimum sample count before sprt may stop early.",
+    )
+    parser.add_argument(
+        "--ebstop-target",
+        "--ebstop_target",
+        dest="ebstop_target",
+        default="min_ttc",
+        help="Bounded, continuous-valued metric column used in ebstop mode.",
+    )
+    parser.add_argument(
+        "--ebstop-epsilon",
+        "--ebstop_epsilon",
+        dest="ebstop_epsilon",
+        type=float,
+        default=0.1,
+        help="Target relative error (|estimate-true| <= epsilon*|true|) used in ebstop mode.",
+    )
+    parser.add_argument(
+        "--ebstop-value-range-min",
+        "--ebstop_value_range_min",
+        dest="ebstop_value_range_min",
+        type=float,
+        default=0.0,
+        help="Known lower bound of the metric's value range, used in ebstop mode.",
+    )
+    parser.add_argument(
+        "--ebstop-value-range-max",
+        "--ebstop_value_range_max",
+        dest="ebstop_value_range_max",
+        type=float,
+        default=10.0,
+        help="Known upper bound of the metric's value range, used in ebstop mode.",
+    )
+    parser.add_argument(
+        "--ebstop-confidence",
+        "--ebstop_confidence",
+        dest="ebstop_confidence",
+        type=float,
+        default=0.95,
+        help="1 - delta (failure probability) used in ebstop mode.",
+    )
+    parser.add_argument(
+        "--ebstop-max-samples",
+        "--ebstop_max_samples",
+        dest="ebstop_max_samples",
+        type=int,
+        default=2000,
+        help="Maximum sample count before ebstop stops without convergence.",
+    )
+    parser.add_argument(
+        "--prism-dkw-target-metric",
+        "--prism_dkw_target_metric",
+        dest="prism_dkw_target_metric",
+        default="steps_to_failure_capped",
+        help="Continuous-valued metric column used by target=prism dkw/dkw_fixed mode.",
+    )
+    parser.add_argument(
+        "--prism-dkw-confidence",
+        "--prism_dkw_confidence",
+        dest="prism_dkw_confidence",
+        type=float,
+        default=0.95,
+        help="1 - total_delta used by target=prism dkw/dkw_fixed mode.",
+    )
+    parser.add_argument(
+        "--prism-dkw-target-epsilon",
+        "--prism_dkw_target_epsilon",
+        dest="prism_dkw_target_epsilon",
+        type=float,
+        default=0.15,
+        help="Target DKW interval width used by target=prism dkw/dkw_fixed mode.",
+    )
+    parser.add_argument(
+        "--prism-dkw-base-samples",
+        "--prism_dkw_base_samples",
+        dest="prism_dkw_base_samples",
+        type=int,
+        default=20,
+        help="Stage-1 sample count for target=prism dkw's stage-based schedule.",
     )
     return parser
 
@@ -530,12 +675,33 @@ def validate_args(args: argparse.Namespace) -> None:
     prism_sampling_mode = (
         getattr(args, "target", "awsim") == "prism"
         and simulation_mode
-        and getattr(args, "mode", "explore") == "binomial_ci"
+        and getattr(args, "mode", "explore")
+        in {"binomial_ci", "sprt", "ebstop", "dkw", "dkw_fixed"}
     )
     if prism_sampling_mode and getattr(args, "max_samples", None) is None:
         raise ValueError("PRISM binomial sampling requires --max-samples")
     if prism_sampling_mode and getattr(args, "dataset_csv", None) is None:
         raise ValueError("PRISM binomial sampling requires --dataset-csv")
+    prism_supported_modes = {
+        "explore",
+        "binomial_ci",
+        "sprt",
+        "ebstop",
+        "dkw",
+        "dkw_fixed",
+    }
+    if (
+        getattr(args, "target", "awsim") == "prism"
+        and simulation_mode
+        and getattr(args, "mode", "explore") not in prism_supported_modes
+    ):
+        raise ValueError(
+            "target=prism with --param only supports "
+            f"--mode {'/'.join(sorted(prism_supported_modes))}; "
+            f"'{args.mode}' has no live PRISM execution path yet "
+            "(orchestration/orchestrator.py::_build_strategy has no branch for it, "
+            "so it would silently fall through to a single one-off case)"
+        )
     if (strategy_mode or replay_mode) and getattr(args, "dataset_csv", None) is None:
         raise ValueError("--dataset-csv is required for AWSIM strategy mode")
     if strategy_mode and getattr(args, "mode", "explore") not in {
@@ -551,10 +717,12 @@ def validate_args(args: argparse.Namespace) -> None:
         "binomial_ci",
         "boundary_gap",
         "replay",
+        "sprt",
+        "ebstop",
     }:
         raise ValueError(
             "AWSIM strategy mode currently supports "
-            "--mode explore/focus/margin/jama_edge/ttc_edge/worst_ttc/dkw/dkw_fixed/verify_consistency/binomial_ci/boundary_gap/replay only"
+            "--mode explore/focus/margin/jama_edge/ttc_edge/worst_ttc/dkw/dkw_fixed/verify_consistency/binomial_ci/boundary_gap/replay/sprt/ebstop only"
         )
     if getattr(args, "target", "awsim") != "awsim" and getattr(args, "headless", False):
         raise ValueError("--headless is only supported for target=awsim")
@@ -836,6 +1004,27 @@ def build_orchestrator_config(args: argparse.Namespace) -> OrchestratorConfig:
         binomial_confidence=getattr(args, "binomial_confidence", 0.95),
         binomial_target_width=getattr(args, "binomial_target_width", 0.02),
         binomial_min_samples=getattr(args, "binomial_min_samples", None),
+        binomial_anytime_valid=getattr(args, "binomial_anytime_valid", False),
+        sprt_target=getattr(args, "sprt_target", "c_collision"),
+        sprt_p0=getattr(args, "sprt_p0", 0.1),
+        sprt_p1=getattr(args, "sprt_p1", 0.01),
+        sprt_beta=getattr(args, "sprt_beta", 0.05),
+        sprt_confidence=getattr(args, "sprt_confidence", 0.95),
+        sprt_min_samples=getattr(args, "sprt_min_samples", None),
+        ebstop_target=getattr(args, "ebstop_target", "min_ttc"),
+        ebstop_epsilon=getattr(args, "ebstop_epsilon", 0.1),
+        ebstop_value_range=(
+            getattr(args, "ebstop_value_range_min", 0.0),
+            getattr(args, "ebstop_value_range_max", 10.0),
+        ),
+        ebstop_confidence=getattr(args, "ebstop_confidence", 0.95),
+        ebstop_max_samples=getattr(args, "ebstop_max_samples", 2000),
+        prism_dkw_target_metric=getattr(
+            args, "prism_dkw_target_metric", "steps_to_failure_capped"
+        ),
+        prism_dkw_confidence=getattr(args, "prism_dkw_confidence", 0.95),
+        prism_dkw_target_epsilon=getattr(args, "prism_dkw_target_epsilon", 0.15),
+        prism_dkw_base_samples=getattr(args, "prism_dkw_base_samples", 20),
     )
 
 

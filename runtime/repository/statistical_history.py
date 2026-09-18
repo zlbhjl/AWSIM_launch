@@ -32,6 +32,34 @@ BINOMIAL_CI_HISTORY_FIELDS = (
     "target_width",
 )
 
+SPRT_HISTORY_FIELDS = (
+    "task_count",
+    "metric",
+    "verdict",
+    "sample_size",
+    "estimate",
+    "log_likelihood_ratio",
+    "lower_log_threshold",
+    "upper_log_threshold",
+    "p0",
+    "p1",
+    "alpha",
+    "beta",
+)
+
+EBSTOP_HISTORY_FIELDS = (
+    "task_count",
+    "metric",
+    "sample_size",
+    "estimate",
+    "lower_bound",
+    "upper_bound",
+    "epsilon",
+    "value_range",
+    "mean",
+    "std",
+)
+
 
 class StatisticalHistoryRepository:
     def __init__(
@@ -41,6 +69,8 @@ class StatisticalHistoryRepository:
         traces_dir: str | Path = "~/simulation_traces",
         dkw_history_csv: str | Path | None = None,
         binomial_ci_history_csv: str | Path | None = None,
+        sprt_history_csv: str | Path | None = None,
+        ebstop_history_csv: str | Path | None = None,
     ):
         self.scenario_name = scenario_name
         self.traces_dir = Path(traces_dir).expanduser()
@@ -54,8 +84,20 @@ class StatisticalHistoryRepository:
             if binomial_ci_history_csv is not None
             else self.traces_dir / f"{scenario_name}_binomial_ci_history.csv"
         )
+        self.sprt_history_path = (
+            Path(sprt_history_csv).expanduser()
+            if sprt_history_csv is not None
+            else self.traces_dir / f"{scenario_name}_sprt_history.csv"
+        )
+        self.ebstop_history_path = (
+            Path(ebstop_history_csv).expanduser()
+            if ebstop_history_csv is not None
+            else self.traces_dir / f"{scenario_name}_ebstop_history.csv"
+        )
         self._dkw_repository = DatasetCsvRepository(self.dkw_history_path)
         self._binomial_repository = DatasetCsvRepository(self.binomial_ci_history_path)
+        self._sprt_repository = DatasetCsvRepository(self.sprt_history_path)
+        self._ebstop_repository = DatasetCsvRepository(self.ebstop_history_path)
 
     def append_dkw_record(self, record: Mapping[str, object]) -> None:
         self._dkw_repository.append_row(self._ordered_row(record, DKW_HISTORY_FIELDS))
@@ -69,11 +111,23 @@ class StatisticalHistoryRepository:
             self._ordered_row(record, BINOMIAL_CI_HISTORY_FIELDS)
         )
 
+    def append_sprt_record(self, record: Mapping[str, object]) -> None:
+        self._sprt_repository.append_row(self._ordered_row(record, SPRT_HISTORY_FIELDS))
+
+    def append_ebstop_record(self, record: Mapping[str, object]) -> None:
+        self._ebstop_repository.append_row(self._ordered_row(record, EBSTOP_HISTORY_FIELDS))
+
     def read_dkw_rows(self) -> list[dict[str, str]]:
         return self._dkw_repository.read_rows()
 
     def read_binomial_ci_rows(self) -> list[dict[str, str]]:
         return self._binomial_repository.read_rows()
+
+    def read_sprt_rows(self) -> list[dict[str, str]]:
+        return self._sprt_repository.read_rows()
+
+    def read_ebstop_rows(self) -> list[dict[str, str]]:
+        return self._ebstop_repository.read_rows()
 
     @staticmethod
     def _ordered_row(
@@ -93,5 +147,7 @@ class StatisticalHistoryRepository:
 __all__ = [
     "BINOMIAL_CI_HISTORY_FIELDS",
     "DKW_HISTORY_FIELDS",
+    "EBSTOP_HISTORY_FIELDS",
+    "SPRT_HISTORY_FIELDS",
     "StatisticalHistoryRepository",
 ]

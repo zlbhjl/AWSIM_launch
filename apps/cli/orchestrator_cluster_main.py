@@ -54,7 +54,7 @@ def _render_progress(snapshot: dict[str, object], config: OrchestratorConfig) ->
         )
         for worker_id, status in sorted(worker_statuses.items())
     )
-    if config.run_mode in {"dkw", "verify_consistency", "binomial_ci", "replay"}:
+    if config.run_mode in {"dkw", "verify_consistency", "binomial_ci", "replay", "sprt", "ebstop"}:
         line = f"[Orchestrator] 進行状況 (総ループ: {completed}) | キュー={queue_size}"
     elif config.run_mode == "boundary_gap":
         line = f"[Orchestrator] boundary_gap 継続中 | 完了={completed} | キュー={queue_size}"

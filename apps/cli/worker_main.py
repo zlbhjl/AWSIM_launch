@@ -53,6 +53,8 @@ LEGACY_MODES = [
     "binomial_ci",
     "boundary_gap",
     "replay",
+    "sprt",
+    "ebstop",
 ]
 
 

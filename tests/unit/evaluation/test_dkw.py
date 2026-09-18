@@ -151,11 +151,52 @@ def test_dkw_service_handles_evaluation_record_sequences() -> None:
     assert report.estimate == 2.0
 
 
+def test_calculate_dkw_bounds_returns_none_for_a_single_sample() -> None:
+    # n=1 is a degenerate case for the searchsorted-based quantile lookup: the
+    # single-element array always makes lower_index/upper_index resolve to
+    # the same element, reporting a spurious width-0 "converged" interval
+    # regardless of the true DKW margin. Treat it as "not enough data yet".
+    frame = pd.DataFrame({"steps_to_failure_capped": [5.0], "status": ["success"]})
+
+    result = calculate_dkw_bounds(frame, target_column="steps_to_failure_capped")
+
+    assert result is None
+
+
+def test_calculate_quantile_with_dkw_computes_a_genuine_interval_at_two_samples() -> None:
+    frame = pd.DataFrame(
+        {"steps_to_failure_capped": [1.0, 20.0], "status": ["success", "success"]}
+    )
+
+    result = calculate_quantile_with_dkw(frame, target_column="steps_to_failure_capped")
+
+    assert result is not None
+    assert result["sample_size"] == 2
+    assert result["upper_bound"] - result["lower_bound"] > 0.0
+
+
+def test_evaluate_request_reports_collect_more_samples_for_a_single_sample() -> None:
+    frame = pd.DataFrame({"steps_to_failure_capped": [5.0], "status": ["success"]})
+    request = StatisticalRequest(
+        method="dkw",
+        metric="steps_to_failure_capped",
+        confidence=0.95,
+        target_width=0.15,
+        options={"epsilon": 0.15},
+    )
+
+    report = DKWService().evaluate_request(frame, request)
+
+    assert report.next_action == "collect_more_samples"
+    assert report.diagnostics["status"] == "pending"
+    assert report.sample_count == 0
+
+
 def test_dkw_minimum_value_is_request_policy_not_metric_name() -> None:
     frame = pd.DataFrame(
         {
-            "steps_to_failure_capped": [-1, 3, 5],
-            "status": ["success", "success", "timeout"],
+            "steps_to_failure_capped": [-1, 3, 5, 7],
+            "status": ["success", "success", "timeout", "success"],
         }
     )
     request = StatisticalRequest(
@@ -166,6 +207,8 @@ def test_dkw_minimum_value_is_request_policy_not_metric_name() -> None:
 
     report = DKWService().evaluate_request(frame, request)
 
-    assert report.sample_count == 1
+    # status=timeout (5) is dropped first, then minimum_value=0.0 drops -1,
+    # leaving [3, 7] as the only valid samples.
+    assert report.sample_count == 2
     assert report.estimate == 3
     assert report.diagnostics["minimum_value"] == 0.0

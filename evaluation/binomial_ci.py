@@ -7,6 +7,7 @@ from scipy.stats import beta, norm
 
 from contracts.evaluation import EvaluationRecord
 from contracts.statistics import StatisticalReport, StatisticalRequest
+from evaluation.alpha_spending import spending_budget_at
 from evaluation.dkw import records_to_data_frame
 import point_extractors
 
@@ -20,13 +21,21 @@ def calculate_binomial_confidence_interval(
     bounds: dict[str, tuple[float, float]] | None = None,
     region: str = "custom",
     reason_pattern: str | None = None,
+    anytime_valid: bool = False,
 ) -> dict[str, object] | None:
+    # "wilson" is a CLT-approximation method: its actual coverage can fall below
+    # confidence_level when the true proportion is near 0/1 and n is still small
+    # (e.g. n=20, true p=0.05 -> ~92.5% actual coverage for a nominal 95% interval).
+    # "clopper-pearson" is exact (no CLT approximation) and never undershoots the
+    # nominal coverage, at the cost of a wider interval. Use clopper-pearson for
+    # safety-critical decisions (e.g. c_collision).
     if df is None or df.empty or target_column not in df.columns:
         return None
 
     working_df = df.copy()
-    # A metric value is statistically usable only after a completed run and
-    # successful analysis. This excludes timeout traces recovered by grace.
+    # Use only records whose final analysis succeeded. A raw execution timeout
+    # remains usable when its trace is recovered and successfully interpreted,
+    # because the resulting EvaluationRecord has final status ``success``.
     if "status" in working_df.columns:
         status_series = working_df["status"].fillna("").astype(str).str.lower()
         working_df = working_df[status_series.eq("success")]
@@ -56,7 +65,19 @@ def calculate_binomial_confidence_interval(
     n = int(len(target_valid))
     k = int((target_valid == 1).sum())
     p_hat = k / n
-    alpha = 1.0 - confidence_level
+    # anytime_valid replaces the fixed per-look alpha with a per-sample-count
+    # budget (evaluation/alpha_spending.py, the same union-bound "peeling"
+    # schedule evaluation/ebstop.py uses) so a fresh interval built at every
+    # single n remains simultaneously valid across all possible stopping
+    # points, not just at whichever n happens to be checked. The cost is real:
+    # reaching the same target width typically needs ~5-8x more samples than
+    # the fixed-alpha interval below, because the per-look budget shrinks (and
+    # the required z-value grows) as n grows.
+    alpha = (
+        spending_budget_at(n, total_delta=1.0 - confidence_level)
+        if anytime_valid
+        else 1.0 - confidence_level
+    )
 
     if method == "wilson":
         z = norm.ppf(1.0 - alpha / 2.0)
@@ -79,6 +100,8 @@ def calculate_binomial_confidence_interval(
         "target_column": target_column,
         "method": method,
         "confidence_level": confidence_level,
+        "anytime_valid": anytime_valid,
+        "effective_confidence_level": 1.0 - alpha,
         "sample_size": n,
         "success_count": k,
         "estimate": p_hat,
@@ -151,6 +174,7 @@ class BinomialCIService:
         reason_pattern = request.options.get("reason_pattern")
         if reason_pattern is not None:
             reason_pattern = str(reason_pattern)
+        anytime_valid = bool(request.options.get("anytime_valid", False))
 
         df = _ensure_data_frame(data)
         has_any_rows = df is not None and not df.empty
@@ -163,6 +187,7 @@ class BinomialCIService:
             bounds=request.bounds,
             region=region,
             reason_pattern=reason_pattern,
+            anytime_valid=anytime_valid,
         )
         if not result:
             if not has_any_rows or has_target_column:
@@ -182,6 +207,7 @@ class BinomialCIService:
                         "method": method,
                         "region": region,
                         "reason_pattern": reason_pattern,
+                        "anytime_valid": anytime_valid,
                     },
                 )
             return StatisticalReport(
@@ -200,6 +226,7 @@ class BinomialCIService:
                     "method": method,
                     "region": region,
                     "reason_pattern": reason_pattern,
+                    "anytime_valid": anytime_valid,
                 },
             )
 
@@ -240,6 +267,8 @@ class BinomialCIService:
                 "meets_target_width": meets_target_width,
                 "success_count": int(result["success_count"]),
                 "interval_width": float(result["interval_width"]),
+                "anytime_valid": anytime_valid,
+                "effective_confidence_level": float(result["effective_confidence_level"]),
                 "filtered_df": result["filtered_df"],
             },
         )

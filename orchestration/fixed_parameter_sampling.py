@@ -12,6 +12,14 @@ from contracts.execution import TestCase
 from contracts.statistics import StatisticalReport, StatisticalRequest
 from evaluation.binomial_ci import BinomialCIService
 
+# exact_model_check only ever reports failure *probabilities*
+# (eventual_failure_probability / bounded_failure_probability). Comparing those
+# against a report for any other metric (e.g. EBStop/DKW tracking a step count
+# like steps_to_failure_capped) mixes units and produces a meaningless
+# "error". Only the metric whose semantics match a failure probability is
+# eligible for the comparison.
+_EXACT_PROBABILITY_METRIC = "c_failure"
+
 
 @dataclass(frozen=True)
 class FixedParameterSamplingStrategyConfig:
@@ -234,19 +242,29 @@ class FixedParameterSamplingStrategy:
     ) -> dict[str, object] | None:
         if self.exact_model_check is None:
             return None
+        payload: dict[str, object] = {
+            **self.exact_model_check,
+            "comparison_metric": report.metric,
+        }
+        if report.metric != _EXACT_PROBABILITY_METRIC:
+            payload["ci_contains_bounded_probability"] = None
+            payload["absolute_estimation_error"] = None
+            payload["comparison_skipped_reason"] = (
+                "exact_model_check reports a failure probability; "
+                f"metric '{report.metric}' is not directly comparable to it"
+            )
+            return payload
+
         bounded = float(self.exact_model_check["bounded_failure_probability"])
         interval = report.interval
         estimate = report.estimate
-        return {
-            **self.exact_model_check,
-            "comparison_metric": report.metric,
-            "ci_contains_bounded_probability": (
-                interval is not None and interval[0] <= bounded <= interval[1]
-            ),
-            "absolute_estimation_error": (
-                None if estimate is None else abs(float(estimate) - bounded)
-            ),
-        }
+        payload["ci_contains_bounded_probability"] = (
+            interval is not None and interval[0] <= bounded <= interval[1]
+        )
+        payload["absolute_estimation_error"] = (
+            None if estimate is None else abs(float(estimate) - bounded)
+        )
+        return payload
 
     def _evaluate(self, data: pd.DataFrame | None) -> StatisticalReport | None:
         if self.statistical_service is None or self.statistical_request is None:

@@ -142,6 +142,12 @@ camera が未接続でも AWSIM と Autoware の DDS 接続や局所化の成否
 
 ### EKF 診断と MRM
 
+> **重要:** AWSIM 運用版の `autoware_internal:1.8.0-ekfdiagfix` は、MRM 本体を
+> 変更した image ではない。公式 Autoware 1.8.0 では、AWSIM の入力周期との組み合わせで
+> EKF が正常な空 queue 周期にも `delay` WARN を publish する場合があり、その診断を受けて
+> MRM が誤って `EMERGENCY_STOP` へ入る問題があった。そのため、修正版では
+> EKF 診断初期値だけを変更している。
+
 公式 Autoware 1.8.0 の `autoware_ekf_localizer` は、診断情報を毎周期初期化して
 定期 publish する更新を含む。AWSIM では EKF が 50 Hz で動く一方、NDT pose は約 10 Hz、
 gyro twist は約 20 Hz である。そのため正常な動作中でも、EKF の一部の周期では新しい
@@ -222,6 +228,12 @@ python3 master_orchestrator.py --type uturn --mode binomial_ci --binomial_target
 
 # Clopper-Pearson でより保守的に評価する場合
 python3 master_orchestrator.py --type uturn --mode binomial_ci --binomial_target c_collision --binomial_method clopper-pearson --binomial_confidence 0.95 --binomial_target_width 0.02
+```
+
+**`wilson` と `clopper-pearson` の使い分けについて:** `wilson` は中心極限定理(CLT)による近似に基づく手法で、実際のカバレッジ(信頼区間が真の値を含む頻度)が名目上の信頼水準(例: 95%)を下回ることがあります。特に真の確率が0または1に近く、サンプル数がまだ少ない段階(探索初期など)でこのズレが大きくなります(例: n=20, 真のp=0.05 のとき、名目95%のWilson区間の実際のカバレッジは約92.5%まで低下することを検証済み)。`clopper-pearson` は二項分布の厳密な計算に基づき、どんな真の確率・サンプル数でも名目の信頼水準を下回らないことが数学的に保証されています(その代わり区間はやや保守的=広めになります)。
+**衝突確率のような安全性クリティカルな判断には `clopper-pearson` を使ってください。** `wilson` はデフォルトのままですが、それは既存ワークフローとの互換性のためであり、安全性の最終判断への使用を推奨する意味ではありません。
+
+```bash
 
 # 【DKW証明モード】統計的モデル検査(SMC)で安全性を証明する
 # 1. 手動で指定した領域の安全性を証明する場合
@@ -466,6 +478,22 @@ python3 run_ft4d_smoke.py
 現在は AWSIM の `EvaluationRecord.output` に `c_collision`, `c_ttc_*` などの Maude 判定値が入り、
 その値を使って smoke を確認します。
 
+同じ確認を PRISM 側でも行えます。
+
+```bash
+python3 run_prism_ft4d_smoke.py
+```
+
+これは `tests/fixtures/prism/prism_stage2_baseline_sample41.jsonl`
+(`2026-09-15` の実クラスタ検証 baseline 条件から抜粋した実データ、exact 1件 + sample 40件)を
+`targets/prism/verification_input.py::build_verification_input_from_records -> evaluation/ft4d_service.py`
+へ通し、`verification_core/ft4d/config/tree_prism_demo.json` を用いて FT4D を計算します。
+複数の PRISM サンプル経路をまとめて1つの母集団として集約し、
+`FAILURE` / `EARLY_FAILURE` / `REPEATED_DEGRADATION` それぞれの違反率と、
+それらを OR で束ねた `top_sigma_pe` を表示します。
+`--records-jsonl` で任意の PRISM 実験 JSONL(`run_orchestrator_cluster_v2.py --target prism` の
+`--output`成果物など)を指定すれば、その実験データに対して同じ集約を実行できます。
+
 ### 5. チェッカープロセスの起動 (別ターミナル)
 生成されたシミュレーションデータ (JSON)を手動で安全性を判定するために、ターミナルでチェッカーを使ってくださいしてください。
 
@@ -599,6 +627,30 @@ python3 run_orchestrator_cluster_v2.py \
 このオプションを付けずに開始した実験では、現在の実験を安全に停止してから上記コマンドで
 再開してください。既存CSVと各ホストの `simulation_traces_sim_worker_*` は削除しません。
 
+上記コマンドの `--binomial-method wilson` は、CLT近似に基づく標準的な手法であり、
+真の衝突確率が0や1に近い・サンプル数がまだ少ない段階では、名目の信頼水準(95%)を
+実際のカバレッジが下回ることがあります(検証例: n=20, 真のp=0.05 で実カバレッジ約92.5%)。
+`c_collision` の最終的な安全性判断に使う結果は `--binomial-method clopper-pearson` で
+再評価することを推奨します(区間はやや保守的になりますが、どんな真の値でも名目の信頼水準を
+下回らないことが数学的に保証されています)。
+
+**`binomial_ci`の"repeated peeking"問題と`--binomial-anytime-valid`**: `--mode binomial_ci`は
+1標本増えるたびに同じ`--binomial-confidence`で区間を計算し直す設計のため、理論上は「何度も
+覗き見ること」自体が実効的な誤り率を悪化させうるという弱点があります(DKWのステージ制
+alpha-spendingや、SPRT・EBStopの本質的にvalidな構成とは異なり、binomial_ciにはこれに対する
+保護が組み込まれていません)。`--binomial-anytime-valid`を付けると、固定confidenceの代わりに
+EBStopと同じ`d_t = c/t^1.1`型のunion bound(`evaluation/alpha_spending.py`、Mnih, Szepesvári,
+Audibert 2008スタイルのpeeling schedule)で毎回の信頼水準を計算し直し、「何度チェックしても
+全体の誤り率が`1-confidence`を超えない」ことを数学的に保証します。
+
+ただし**このコストは大きく無視できません**: 同じtarget-widthに到達するのに必要なサンプル数は、
+実測でおよそ**5〜8倍**に増えます(例: p=0.1、target-width=0.02、confidence=95%の場合、通常は
+約3,600サンプルで収束するところ、`--binomial-anytime-valid`では約28,000サンプル必要)。
+spending exponentの調整やチェック頻度を落とす等の工夫を試しても、この倍率は大きくは改善しません
+(anytime-valid confidence sequence全般に共通する本質的なコストです)。そのため既定では無効
+(オプトイン)にしており、AWSIM/PRISMのシミュレーション1回のコストを度外視できる、安全性の
+理論的保証を最優先したい実験でのみ使うことを想定しています。
+
 ### 1.7.1 bridge worker の Python 依存 bundle
 
 `autoware171` の verified image は Autoware / AWSIM の運用状態を固定するための image ですが、現在の `AWSIM_launch` worker は起動時に `ray` と `scikit-learn` を import します。そのため、`binomial_ci` や `dkw` では `sklearn` が無いと worker がキュー取得前に落ちます。
@@ -721,6 +773,11 @@ EGO/NPC の移動と衝突判定が確認できれば `success` として採用�
 車両が動いていない試行は衝突なしには数えません。
 
 `binomial_ci` の有効標本は `status=success` かつ対象値が `0` / `1` の行だけです。
+ここで `status` はchecker解析後の最終判定を表し、scenario実行時の状態は
+`meta.raw_run_status`（dataset CSVでは `meta_raw_run_status`）へ分離して保存します。
+したがって `meta.raw_run_status=timeout` であっても、trace JSONを回収してcheckerの解析に
+成功した試行は最終的に `status=success` となり、統計検証に使用します。最終 `status=timeout` は、
+有効なtraceまたは判定結果を取得できなかった試行として統計検証から除外します。
 
 既存CSVを変更せず、timeout marker と同じ worker の local trace を再照合するには次を使います。
 実行場所は21号機です。
@@ -1124,11 +1181,15 @@ docker exec -it autoware171-x11-map bash -i -c 'source /home/passd/autoware/inst
 
 PRISM対象では、1つのworker container内でPRISMの確率モデル・ランダム経路を実行し、その経路をMaudeで判定します。判定後はAWSIM workerと同じRay queueへ共通形式の結果を返します。Autoware、ROS、AW-Runtime-Monitor、GPUは使用しません。
 
+PRISMは車両シナリオの代替ではなく、**AWSIM_launchが使っている統計的検証手法(二項CI・DKW)自体が理論通り正しく機能しているかを確認できる場**という役割も持ちます。AWSIM側は物理シミュレータのため「真の衝突確率」を解析的に求める手段がなく、統計推定の正しさをそれ自体では検算できません。一方PRISMの単純なDTMCモデルは、PRISM propertiesによるモデル検査で真の到達確率を厳密に(乱数を使わず、モデル・定数・horizonが同じなら常に同一の値として)計算できるため、その厳密値とサンプリングベースの推定値(CI/DKW)を突き合わせて答え合わせができます。既存の実クラスタ検証(下記)はこの突き合わせの一例です。
+
 実行時のcontainer名は `prism_worker_<ROS_DOMAIN_ID>` になります。既存の `sim_worker_*` を停止・置換しないため、AWSIM用container名とは衝突しません。
 
 ただし、このcluster CLIは起動時にRay headを再作成します。進行中のAWSIM cluster実験と同時には起動せず、その実験を終了してから実行してください。
 
 2026-09-15に21・22・23・24号機の実クラスタで、40本疎通試験および基準+4条件(各200〜500本、95% Wilson CI幅0.10で逐次停止)を実行して検証済みです。検証中に見つかったRay head/Pythonバージョン/JSON出力まわりの不具合と、条件ごとの結果は[PRISM対応計画の「16. 実クラスタ検証結果」](docs/prism_integration_plan.md#16-実クラスタ検証結果-2026-09-15)を参照してください。
+
+上記5条件はいずれも「厳密確率が95%CIに含まれたか」を1回ずつ確認したものであり、CIの被覆率(理論上95%であるべき割合)そのものを検証したものではありません。被覆率を実際に検証するには、同一条件・同一パラメータで実験全体(逐次サンプリング+CI計算)を数百〜数千回繰り返し、厳密確率がCIに含まれた割合が95%に近いかを集計する実験が必要です。PRISMは厳密確率を毎回同じ値で即座に計算できるため、この規模の繰り返し実験もAWSIM側では不可能な検証としてPRISM対象でのみ実行可能です。現時点では未実施で、今後の検証候補です。
 
 ```bash
 docker build \
@@ -1169,6 +1230,84 @@ python3 run_orchestrator_cluster_v2.py \
 ```
 
 `records.jsonl` は、各workerが返した完全な `EvaluationRecord` をRayの共有ストアが司令塔側で1ファイルへ直列化したものです。`dataset.csv` は、同じrecordを既存の統計評価が読める1行1標本の表へ変換したものです。workerは障害調査用のローカルJSONLも各成果物ディレクトリに保持しますが、利用者が指定した `--output` とは別物です。
+
+**DKW(逐次/固定回数)モード**: 二項ではなく`steps_to_failure_capped`のような連続値・カウント指標の分位点を、AWSIMの`--mode dkw`/`dkw_fixed`と同じ`DKWModeRunner`(ステージ制alpha-spending、`orchestration/dkw_mode.py`)で評価します。`--mode dkw`は逐次(ステージごとに評価して早期停止)、`--mode dkw_fixed`は`--max-samples`本を必ず収集してから1回だけ評価します。
+
+```bash
+python3 run_orchestrator_cluster_v2.py \
+  --target prism \
+  --container-profile prism_maude \
+  --case-kind simple_reliability_dtmc \
+  --mode dkw \
+  --prism-dkw-target-metric steps_to_failure_capped \
+  --prism-dkw-confidence 0.95 \
+  --prism-dkw-target-epsilon 0.15 \
+  --max-samples 200 \
+  --param steps=20 \
+  --param p_normal_degrade=0.1 \
+  --param p_normal_failure=0.01 \
+  --param p_degraded_normal=0.3 \
+  --param p_degraded_failure=0.1 \
+  --output /home/passd/prism_results/dkw_records.jsonl \
+  --dataset-csv /home/passd/prism_results/dkw_dataset.csv
+```
+
+PRISMは毎回新規experimentから始まりAWSIMのような既存datasetの蓄積を前提にできないため、`--mode dkw`(逐次)は最初の1標本のみで評価を開始します。標本数1件のときの分位点計算(q=0.05既定)は区間幅が数学的に必ず0になり誤って「収束」と判定される既知の挙動が実装当初あったため、`evaluation/dkw.py`にn<2を「収集継続」として扱うガードを追加済みです。また、この修正の過程で`DKWModeRunner.handle_sequential`(AWSIM/PRISM共通コード)が`max_samples`を一切チェックしていない、より深刻な既存バグも発見・修正しました(到達不可能な`--prism-dkw-target-epsilon`を指定すると標本を無限に発行し続けてしまう不具合。実際に実PRISM/Maudeバイナリで7000件超の実行を誘発したことを確認した上で修正)。現在は複数標本にわたる本来の逐次収束が正しく働き、未収束のまま`--max-samples`に達した場合は明示的に停止します。詳細は[PRISM対応計画のDKW節](docs/prism_integration_plan.md)を参照してください。同じ`--mode dkw`/`dkw_fixed`は`--target awsim`でも利用できます。
+
+**SPRT(逐次確率比検定)モード**: 信頼区間の幅ではなく、2つの仮説(`H0: p>=p0` / `H1: p<=p1`)のどちらを採択するかを逐次判定します(Wald 1945; Younes 2006の確率モデル検査向け定式化)。`--sprt-p0`/`--sprt-p1`/`--sprt-beta` で2仮説と第二種の誤り率を指定し、`--sprt-confidence` は `1-α`(第一種の誤り率)を表します。
+
+```bash
+python3 run_orchestrator_cluster_v2.py \
+  --target prism \
+  --container-profile prism_maude \
+  --case-kind simple_reliability_dtmc \
+  --mode sprt \
+  --sprt-target c_failure \
+  --sprt-p0 0.5 \
+  --sprt-p1 0.3 \
+  --sprt-beta 0.05 \
+  --sprt-confidence 0.95 \
+  --max-samples 500 \
+  --param steps=20 \
+  --param p_normal_degrade=0.1 \
+  --param p_normal_failure=0.01 \
+  --param p_degraded_normal=0.3 \
+  --param p_degraded_failure=0.1 \
+  --output /home/passd/prism_results/sprt_records.jsonl \
+  --dataset-csv /home/passd/prism_results/sprt_dataset.csv
+```
+
+`--max-samples` に達しても判定が出ない場合は `stop_max_samples` として未決着のまま停止します(誤って安全/危険と断定しません)。同じ `--mode sprt` は `--target awsim` でも利用できます(`apps/cli/orchestrator_main.py` 経由)。
+
+**EBStop(Empirical Bernstein Stopping)モード**: `binomial_ci`/`dkw`が最悪ケースを想定した固定の区間幅で判定するのに対し、EBStopは**実測した分散**を使って停止判定します(Mnih, Szepesvári, Audibert, ICML 2008)。真の分散が小さい指標ほど、DKWより少ないサンプル数で収束できます。二項指標(`c_collision`等)ではなく、`min_ttc`/`steps_to_failure_capped`のような連続値・有界な指標が対象です。目標は絶対幅ではなく**相対誤差**(`|推定値-真の値| <= ε・|真の値|`)である点が`dkw`と異なります。
+
+```bash
+python3 run_orchestrator_cluster_v2.py \
+  --target prism \
+  --container-profile prism_maude \
+  --case-kind simple_reliability_dtmc \
+  --mode ebstop \
+  --ebstop-target steps_to_failure_capped \
+  --ebstop-epsilon 0.1 \
+  --ebstop-value-range-min 0 \
+  --ebstop-value-range-max 20 \
+  --ebstop-confidence 0.95 \
+  --ebstop-max-samples 2000 \
+  --param steps=20 \
+  --param p_normal_degrade=0.1 \
+  --param p_normal_failure=0.01 \
+  --param p_degraded_normal=0.3 \
+  --param p_degraded_failure=0.1 \
+  --output /home/passd/prism_results/ebstop_records.jsonl \
+  --dataset-csv /home/passd/prism_results/ebstop_dataset.csv
+```
+
+`--ebstop-value-range-min/-max` には指標が理論上取りうる値の範囲(`R`)を指定します。同じ`--mode ebstop`は`--target awsim`でも利用できます。
+
+**どの統計手法を選べばいいか迷ったら**: `binomial_ci`/`dkw`/`sprt`/`ebstop`のどれを使うべきかを、
+PyDSMC(Gros et al., QEST 2025)のFig.4を参考にした決定木としてまとめています。
+[docs/statistical_method_selection.md](docs/statistical_method_selection.md) を参照してください
+(AWSIM用・PRISM用の2本。両者は実行アーキテクチャが異なるため、単純な葉違いではなく木の構造自体が異なります)。
 
 `apps.cli.prism_main` は削除せず、単一containerでPRISM、Maude、統計変換まで確認するsmoke/demo入口として残しています。同じ `FixedParameterSamplingStrategy` と司令塔を使用し、独自の反復loopは持ちません。
 

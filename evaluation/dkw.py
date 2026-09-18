@@ -90,6 +90,8 @@ class DKWService:
             float(minimum_value) if minimum_value is not None else None
         )
         df = _ensure_data_frame(data)
+        has_any_rows = df is not None and not df.empty
+        has_target_column = bool(has_any_rows and request.metric in df.columns)
         result = calculate_quantile_with_dkw(
             df,
             target_column=request.metric,
@@ -103,6 +105,25 @@ class DKWService:
         )
         target_width = _resolve_target_width(request, epsilon)
         if not result:
+            if not has_any_rows or has_target_column:
+                return StatisticalReport(
+                    method=request.method,
+                    metric=request.metric,
+                    sample_count=0,
+                    estimate=None,
+                    interval=None,
+                    sufficient=False,
+                    next_action="collect_more_samples",
+                    diagnostics={
+                        "status": "pending",
+                        "message": "Fewer than 2 DKW samples are available yet.",
+                        "q": q,
+                        "confidence": request.confidence,
+                        "region": region,
+                        "use_kde_weighting": use_kde_weighting,
+                        "target_width": target_width,
+                    },
+                )
             return StatisticalReport(
                 method=request.method,
                 metric=request.metric,
@@ -259,7 +280,15 @@ def calculate_dkw_bounds(
     filtered_df = filtered_df.loc[data.index].copy()
 
     sample_size = len(data)
-    if sample_size == 0:
+    # n=1 is a degenerate case for the searchsorted-based quantile lookup
+    # below (evaluate_and_summarize_dkw and calculate_quantile_with_dkw both
+    # build a single-element array to search in, so lower_index/upper_index
+    # always resolve to the same element regardless of the true DKW margin -
+    # it looks like a tight, "converged" interval width of 0 when in fact a
+    # single sample says nothing about the quantile's true uncertainty).
+    # Treating n<2 as "no result yet" (same as EBStop's own n<2 guard) lets
+    # the caller report "collect_more_samples" instead of a spurious stop.
+    if sample_size < 2:
         return None
 
     y_values = data.values

@@ -9,7 +9,15 @@ from typing import Any, Callable
 from contracts.execution import TestCase
 from contracts.statistics import StatisticalRequest
 from evaluation.binomial_ci import BinomialCIService
+from evaluation.sprt import SPRTService
+from evaluation.ebstop import EBStopService
+from evaluation.dkw import DKWService
 from orchestration.cache_policy import resolve_strategy_cache_size
+from orchestration.dkw_mode import DKWModeRunner
+from orchestration.prism_dkw_sampling import (
+    PrismDkwSamplingStrategy,
+    _RecordingDKWService,
+)
 from runtime.cluster.host_worker import HostWorkerConfig, HostWorkerManager
 from runtime.cluster.ray_queue import TaskQueue
 from runtime.cluster.task_queue_gateway import TaskQueueGateway
@@ -77,6 +85,22 @@ class OrchestratorConfig:
     binomial_confidence: float = 0.95
     binomial_target_width: float = 0.02
     binomial_min_samples: int | None = None
+    binomial_anytime_valid: bool = False
+    sprt_target: str = "c_collision"
+    sprt_p0: float = 0.1
+    sprt_p1: float = 0.01
+    sprt_beta: float = 0.05
+    sprt_confidence: float = 0.95
+    sprt_min_samples: int | None = None
+    ebstop_target: str = "min_ttc"
+    ebstop_epsilon: float = 0.1
+    ebstop_value_range: tuple[float, float] = (0.0, 10.0)
+    ebstop_confidence: float = 0.95
+    ebstop_max_samples: int = 2000
+    prism_dkw_target_metric: str = "steps_to_failure_capped"
+    prism_dkw_confidence: float = 0.95
+    prism_dkw_target_epsilon: float = 0.15
+    prism_dkw_base_samples: int = 20
     queue_actor_name: str = "local_task_queue"
     queue_namespace: str | None = None
     queue_address: str | None = None
@@ -429,8 +453,140 @@ class Orchestrator:
                         "region": "custom",
                         "min_samples": min_samples,
                         "max_samples": int(config.max_samples),
+                        "anytime_valid": config.binomial_anytime_valid,
                     },
                 ),
+            )
+
+        if (
+            config.target == "prism"
+            and config.params
+            and config.run_mode == "sprt"
+        ):
+            if config.max_samples is None:
+                raise ValueError("PRISM fixed sampling requires max_samples")
+            dataset_repository = self._build_dataset_repository(config)
+            min_samples = (
+                int(config.sprt_min_samples)
+                if config.sprt_min_samples is not None
+                else 0
+            )
+            return FixedParameterSamplingStrategy(
+                FixedParameterSamplingStrategyConfig(
+                    target=config.target,
+                    case_kind=config.case_kind,
+                    params=dict(config.params),
+                    max_samples=int(config.max_samples),
+                    experiment_id=config.experiment_id,
+                    case_id_prefix=config.case_id,
+                    reason_prefix="PRISM_FIXED_SAMPLING",
+                    tags=tuple(config.tags),
+                    run_model_check_once=True,
+                ),
+                dataset_repository=dataset_repository,
+                statistical_service=SPRTService(),
+                statistical_request=StatisticalRequest(
+                    method="sprt",
+                    metric=config.sprt_target,
+                    confidence=config.sprt_confidence,
+                    options={
+                        "p0": config.sprt_p0,
+                        "p1": config.sprt_p1,
+                        "beta": config.sprt_beta,
+                        "region": "custom",
+                        "min_samples": min_samples,
+                        "max_samples": int(config.max_samples),
+                    },
+                ),
+            )
+
+        if (
+            config.target == "prism"
+            and config.params
+            and config.run_mode == "ebstop"
+        ):
+            if config.max_samples is None:
+                raise ValueError("PRISM fixed sampling requires max_samples")
+            dataset_repository = self._build_dataset_repository(config)
+            return FixedParameterSamplingStrategy(
+                FixedParameterSamplingStrategyConfig(
+                    target=config.target,
+                    case_kind=config.case_kind,
+                    params=dict(config.params),
+                    max_samples=int(config.max_samples),
+                    experiment_id=config.experiment_id,
+                    case_id_prefix=config.case_id,
+                    reason_prefix="PRISM_FIXED_SAMPLING",
+                    tags=tuple(config.tags),
+                    run_model_check_once=True,
+                ),
+                dataset_repository=dataset_repository,
+                statistical_service=EBStopService(),
+                statistical_request=StatisticalRequest(
+                    method="ebstop",
+                    metric=config.ebstop_target,
+                    confidence=config.ebstop_confidence,
+                    options={
+                        "epsilon": config.ebstop_epsilon,
+                        "value_range": config.ebstop_value_range,
+                        "region": "custom",
+                        "max_samples": int(config.max_samples),
+                    },
+                ),
+            )
+
+        if (
+            config.target == "prism"
+            and config.params
+            and config.run_mode in ("dkw", "dkw_fixed")
+        ):
+            if config.max_samples is None:
+                raise ValueError("PRISM fixed sampling requires max_samples")
+            dataset_repository = self._build_dataset_repository(config)
+            dkw_service = _RecordingDKWService(DKWService())
+            dkw_mode_runner = DKWModeRunner.from_runtime_config(
+                param_names=[],
+                target_metric=config.prism_dkw_target_metric,
+                target_metrics=[config.prism_dkw_target_metric],
+                total_delta=1.0 - config.prism_dkw_confidence,
+                target_epsilon=config.prism_dkw_target_epsilon,
+                base_samples=config.prism_dkw_base_samples,
+                region="custom",
+                pure_smc=True,
+                simultaneous=False,
+                max_samples=int(config.max_samples),
+                dkw_service=dkw_service,
+                case_kind=config.case_kind,
+            )
+            return PrismDkwSamplingStrategy(
+                FixedParameterSamplingStrategyConfig(
+                    target=config.target,
+                    case_kind=config.case_kind,
+                    params=dict(config.params),
+                    max_samples=int(config.max_samples),
+                    experiment_id=config.experiment_id,
+                    case_id_prefix=config.case_id,
+                    reason_prefix="PRISM_FIXED_SAMPLING",
+                    tags=tuple(config.tags),
+                    run_model_check_once=True,
+                ),
+                dataset_repository=dataset_repository,
+                dkw_mode_runner=dkw_mode_runner,
+                sequential=(config.run_mode == "dkw"),
+            )
+
+        if config.params and config.target == "prism" and config.run_mode not in (
+            "explore",
+            "binomial_ci",
+            "sprt",
+            "ebstop",
+            "dkw",
+            "dkw_fixed",
+        ):
+            raise ValueError(
+                f"target=prism has no live execution path for --mode {config.run_mode!r} "
+                "(only explore/binomial_ci/sprt/ebstop/dkw/dkw_fixed are wired to a real "
+                "PRISM strategy); refusing to silently fall back to a single one-off case"
             )
 
         if config.params:
@@ -507,6 +663,18 @@ class Orchestrator:
             binomial_confidence=config.binomial_confidence,
             binomial_target_width=config.binomial_target_width,
             binomial_min_samples=config.binomial_min_samples,
+            binomial_anytime_valid=config.binomial_anytime_valid,
+            sprt_target=config.sprt_target,
+            sprt_p0=config.sprt_p0,
+            sprt_p1=config.sprt_p1,
+            sprt_beta=config.sprt_beta,
+            sprt_confidence=config.sprt_confidence,
+            sprt_min_samples=config.sprt_min_samples,
+            ebstop_target=config.ebstop_target,
+            ebstop_epsilon=config.ebstop_epsilon,
+            ebstop_value_range=config.ebstop_value_range,
+            ebstop_confidence=config.ebstop_confidence,
+            ebstop_max_samples=config.ebstop_max_samples,
             cache_size=resolve_strategy_cache_size(
                 worker_count=self._resolve_worker_count(config),
                 run_mode=config.run_mode,
@@ -701,7 +869,7 @@ class Orchestrator:
         if (
             config.target == "prism"
             and config.params
-            and config.run_mode == "binomial_ci"
+            and config.run_mode in {"binomial_ci", "sprt", "ebstop", "dkw", "dkw_fixed"}
         ):
             return None
         if config.fixture is not None or config.params:

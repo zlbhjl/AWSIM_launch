@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import pandas as pd
 
 from contracts.statistics import BoundsMap, StatisticalReport, StatisticalRequest
-from evaluation.binomial_ci import BinomialCIService
+from evaluation.sprt import SPRTService
 from contracts.statistical_region import (
     PassthroughStatisticalRegionPolicy,
     StatisticalRegionPolicy,
@@ -17,39 +17,39 @@ import point_extractors
 
 
 @dataclass(slots=True)
-class BinomialModeConfig:
+class SPRTModeConfig:
     param_names: list[str]
     target: str
-    method: str = "wilson"
+    p0: float
+    p1: float
+    beta: float
     confidence: float = 0.95
-    target_width: float = 0.02
-    min_samples: int = 100
+    min_samples: int = 0
     max_samples: int = 2000
     region: str = "custom"
     case_kind: str = "uturn"
     config_module_name: str | None = None
-    anytime_valid: bool = False
 
 
 @dataclass(slots=True)
-class BinomialModeState:
+class SPRTModeState:
     bounds: BoundsMap | None = None
     random_index: int = 0
     dispatched_task_count: int = 0
 
 
-class BinomialModeRunner:
+class SPRTModeRunner:
     def __init__(
         self,
         *,
-        config: BinomialModeConfig,
-        binomial_ci_service: BinomialCIService,
+        config: SPRTModeConfig,
+        sprt_service: SPRTService,
         statistical_history_repository: object | None = None,
         statistical_samples_repository: StatisticalSamplesRepository | None = None,
         region_policy: StatisticalRegionPolicy | None = None,
     ) -> None:
         self.config = config
-        self.binomial_ci_service = binomial_ci_service
+        self.sprt_service = sprt_service
         self.statistical_history_repository = statistical_history_repository
         self.statistical_samples_repository = statistical_samples_repository
         self.region_policy = region_policy or PassthroughStatisticalRegionPolicy()
@@ -60,28 +60,29 @@ class BinomialModeRunner:
         *,
         param_names: Sequence[str],
         target: str,
-        method: str,
+        p0: float,
+        p1: float,
+        beta: float,
         confidence: float,
-        target_width: float,
         min_samples: int,
         max_samples: int,
         region: str,
-        binomial_ci_service: BinomialCIService,
+        sprt_service: SPRTService,
         statistical_history_repository: object | None = None,
         statistical_samples_repository: StatisticalSamplesRepository | None = None,
         config: object | None = None,
         case_kind: str = "uturn",
         config_module_name: str | None = None,
         region_policy: StatisticalRegionPolicy | None = None,
-        anytime_valid: bool = False,
-    ) -> "BinomialModeRunner":
+    ) -> "SPRTModeRunner":
         return cls(
-            config=BinomialModeConfig(
+            config=SPRTModeConfig(
                 param_names=list(param_names),
                 target=str(target),
-                method=str(method),
+                p0=float(p0),
+                p1=float(p1),
+                beta=float(beta),
                 confidence=float(confidence),
-                target_width=float(target_width),
                 min_samples=int(min_samples),
                 max_samples=int(max_samples),
                 region=str(region),
@@ -91,9 +92,8 @@ class BinomialModeRunner:
                     if config_module_name is not None
                     else getattr(config, "__name__", None)
                 ),
-                anytime_valid=bool(anytime_valid),
             ),
-            binomial_ci_service=binomial_ci_service,
+            sprt_service=sprt_service,
             statistical_history_repository=statistical_history_repository,
             statistical_samples_repository=statistical_samples_repository,
             region_policy=region_policy,
@@ -160,10 +160,10 @@ class BinomialModeRunner:
         self,
         df_dataset: pd.DataFrame | None,
         *,
-        state: BinomialModeState,
+        state: SPRTModeState,
         get_random_point: Callable[[int], dict[str, object]],
     ) -> dict[str, object]:
-        report = self.binomial_ci_service.evaluate_request(
+        report = self.sprt_service.evaluate_request(
             df_dataset,
             self._build_request(bounds=state.bounds),
         )
@@ -173,28 +173,25 @@ class BinomialModeRunner:
             return {
                 "system_command": "stop",
                 "reason": (
-                    f"Binomial CI Complete: {self.config.target} "
-                    f"CI width {report.interval_width:.5f}"
+                    f"SPRT Complete: {self.config.target} "
+                    f"verdict={report.diagnostics.get('verdict')} "
+                    f"(n={report.sample_count})"
                 ),
             }
         if report.next_action == "stop_max_samples":
             return {
                 "system_command": "stop",
-                "reason": (
-                    f"Binomial CI reached max_samples={self.config.max_samples}"
-                ),
+                "reason": f"SPRT reached max_samples={self.config.max_samples} undecided",
             }
         if report.next_action == "error":
             return {
                 "system_command": "stop",
-                "reason": str(
-                    report.diagnostics.get("message", "Binomial CI evaluation error")
-                ),
+                "reason": str(report.diagnostics.get("message", "SPRT evaluation error")),
             }
 
         payload, state.random_index, state.dispatched_task_count = (
             self.issue_region_aware_random_task(
-                reason=f"BINOMIAL_CI: Sampling ({report.sample_count + 1})",
+                reason=f"SPRT: Sampling ({report.sample_count + 1})",
                 get_random_point=get_random_point,
                 random_index=state.random_index,
                 base_index=self.max_loop_num(df_dataset),
@@ -205,18 +202,18 @@ class BinomialModeRunner:
 
     def _build_request(self, *, bounds: BoundsMap | None) -> StatisticalRequest:
         return StatisticalRequest(
-            method="binomial_ci",
+            method="sprt",
             metric=self.config.target,
             bounds=bounds,
             confidence=self.config.confidence,
-            target_width=self.config.target_width,
             options={
-                "method": self.config.method,
+                "p0": self.config.p0,
+                "p1": self.config.p1,
+                "beta": self.config.beta,
                 "region": self.config.region,
-                "reason_pattern": r"BINOMIAL_CI:",
+                "reason_pattern": r"SPRT:",
                 "min_samples": self.config.min_samples,
                 "max_samples": self.config.max_samples,
-                "anytime_valid": self.config.anytime_valid,
             },
         )
 
@@ -235,29 +232,28 @@ class BinomialModeRunner:
             return False
         return filtered is not None and not filtered.empty
 
-    def _append_history(self, report: object, state: BinomialModeState) -> None:
+    def _append_history(self, report: object, state: SPRTModeState) -> None:
         if not isinstance(report, StatisticalReport):
             return
         if report.diagnostics.get("status") != "success":
             return
-        if report.interval is None:
-            return
         repository = self.statistical_history_repository
-        if repository is None or not hasattr(repository, "append_binomial_ci_record"):
+        if repository is None or not hasattr(repository, "append_sprt_record"):
             return
-        repository.append_binomial_ci_record(
+        repository.append_sprt_record(
             {
                 "task_count": state.dispatched_task_count,
                 "metric": report.metric,
-                "method": report.diagnostics.get("method", self.config.method),
-                "confidence_level": self.config.confidence,
+                "verdict": report.diagnostics.get("verdict"),
                 "sample_size": report.sample_count,
-                "success_count": report.diagnostics.get("success_count"),
                 "estimate": report.estimate,
-                "lower_bound": report.interval[0],
-                "upper_bound": report.interval[1],
-                "interval_width": report.interval_width,
-                "target_width": self.config.target_width,
+                "log_likelihood_ratio": report.diagnostics.get("log_likelihood_ratio"),
+                "lower_log_threshold": report.diagnostics.get("lower_log_threshold"),
+                "upper_log_threshold": report.diagnostics.get("upper_log_threshold"),
+                "p0": report.diagnostics.get("p0"),
+                "p1": report.diagnostics.get("p1"),
+                "alpha": report.diagnostics.get("alpha"),
+                "beta": report.diagnostics.get("beta"),
             }
         )
 
@@ -267,11 +263,11 @@ class BinomialModeRunner:
             return
         filtered_df = report.diagnostics.get("filtered_df")
         if isinstance(filtered_df, pd.DataFrame):
-            repository.save_binomial_ci_samples(filtered_df)
+            repository.save_sprt_samples(filtered_df)
 
 
 __all__ = [
-    "BinomialModeConfig",
-    "BinomialModeRunner",
-    "BinomialModeState",
+    "SPRTModeConfig",
+    "SPRTModeRunner",
+    "SPRTModeState",
 ]

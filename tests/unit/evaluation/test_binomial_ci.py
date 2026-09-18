@@ -183,6 +183,59 @@ def test_evaluate_binomial_request_returns_error_report_for_missing_metric() -> 
     assert report.diagnostics["status"] == "error"
 
 
+def test_anytime_valid_defaults_to_off_and_matches_fixed_alpha_result() -> None:
+    fixed = calculate_binomial_confidence_interval(
+        _sample_df(),
+        target_column="c_collision",
+        confidence_level=0.95,
+    )
+    default = calculate_binomial_confidence_interval(
+        _sample_df(),
+        target_column="c_collision",
+        confidence_level=0.95,
+        anytime_valid=False,
+    )
+
+    assert fixed["lower_bound"] == default["lower_bound"]
+    assert fixed["upper_bound"] == default["upper_bound"]
+    assert default["anytime_valid"] is False
+    assert default["effective_confidence_level"] == 0.95
+
+
+def test_anytime_valid_widens_the_interval() -> None:
+    fixed = calculate_binomial_confidence_interval(
+        _sample_df(),
+        target_column="c_collision",
+        confidence_level=0.95,
+        anytime_valid=False,
+    )
+    anytime_valid = calculate_binomial_confidence_interval(
+        _sample_df(),
+        target_column="c_collision",
+        confidence_level=0.95,
+        anytime_valid=True,
+    )
+
+    assert anytime_valid["anytime_valid"] is True
+    assert anytime_valid["interval_width"] > fixed["interval_width"]
+    assert anytime_valid["effective_confidence_level"] > 0.95
+
+
+def test_evaluate_request_threads_anytime_valid_option_into_diagnostics() -> None:
+    request = StatisticalRequest(
+        method="binomial_ci",
+        metric="c_collision",
+        confidence=0.95,
+        target_width=0.8,
+        options={"method": "wilson", "anytime_valid": True},
+    )
+
+    report = evaluate_binomial_request(_sample_df(), request)
+
+    assert report.diagnostics["anytime_valid"] is True
+    assert report.diagnostics["effective_confidence_level"] > 0.95
+
+
 def test_prism_metric_is_not_filtered_by_awsim_collision_sentinel() -> None:
     frame = pd.DataFrame(
         {

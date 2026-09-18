@@ -407,10 +407,11 @@ PRISM の厳密なモデル検査は sample case とは別に1回実行し、`re
 |---|---|---|---|
 | 二項信頼区間 | `failure_reached` 0/1 | horizon 内障害確率の推定 | 対応 |
 | 二項信頼区間 | `maude_violation` 0/1 | Maude 規則違反率の推定 | 対応 |
-| DKW | `steps_to_failure_capped` | 打ち切り故障stepの分布・分位点 | 対応 |
-| DKW simultaneous | 上記 + `degraded_visit_count` | 複数指標の同時評価 | 対応 |
-| GP 境界推定 | 入力定数 -> `failure_reached` | パラメータ空間の危険境界 | 対応。ただし第2段階 |
-| FT4D | Maude 違反を basic event 化 | 複数規則のフォールトツリー集約 | 対応。ただし第2段階 |
+| DKW | `steps_to_failure_capped` | 打ち切り故障stepの分布・分位点 | 対応(`2026-09-18`実装、`--mode dkw`/`dkw_fixed --target prism`、`orchestration/prism_dkw_sampling.py`) |
+| DKW simultaneous | 上記 + `degraded_visit_count` | 複数指標の同時評価 | 事後解析のみ(ライブ実行は単一指標のみ) |
+| SPRT | `c_failure` 0/1 (任意の二値metric) | H0/H1の逐次仮説検定(Wald 1945 / Younes 2006) | 対応(`2026-09-17`実装、`evaluation/sprt.py`) |
+| GP 境界推定 | 入力定数 -> `failure_reached` | パラメータ空間の危険境界 | 実装しない(`2026-09-17`決定) |
+| FT4D | Maude 違反を basic event 化 | 複数規則のフォールトツリー集約 | 対応(`2026-09-17`実装) |
 | KDE 重点補正 | 適応的に選んだ PRISM 条件 | 重点サンプルの再利用 | 初期版では無効 |
 | AWSIM 固有 edge mode | TTC / JAMA / collision region | 車両シナリオ探索 | 非対応 |
 
@@ -438,6 +439,14 @@ PRISM の1本の path 内の各 step を別標本として DKW に入れては�
 
 `steps_to_failure_capped` の DKW 結果は有限 horizon の打ち切り分布に対する評価であり、無限時間の真の故障時間分布とは表現しない。
 
+**`2026-09-18`実装時の既知の挙動と、その後の修正(`2026-09-19`)**: `--mode dkw`(逐次)は `DKWModeRunner.handle_sequential` を素の`FixedParameterSamplingStrategy`と組み合わせて再利用しているが、この実装は「評価してから次の1件を発行する」順序のため、標本が1件も無い状態(PRISMは毎回新規experimentで、AWSIMのように既存datasetの蓄積を前提にできない)でいきなり評価すると必ず失敗し、何も発行せず停止してしまう。`PrismDkwSamplingStrategy`はコールドスタート時に限り評価をスキップして最初の1件を無条件に発行することでこれを回避している。
+
+実装当初、既存の分位点探索(`calculate_quantile_with_dkw`, q=0.05既定)は標本数が1件のときに区間幅が数学的に必ず0になる(唯一の観測値がそのまま点推定になるため)実装上のアーティファクトを持っており、`sufficient=True`と誤判定されていた。これは`evaluation/dkw.py::calculate_dkw_bounds`に`sample_size < 2`のガードを追加し(EBStopの`n<2`ガードと同じ考え方)、n<2を`next_action="collect_more_samples"`として扱うことで修正済み。
+
+この修正の過程で、より深刻な既存バグ(今回のPRISM対応より前から`DKWModeRunner.handle_sequential`に存在していた)も発見・修正した: `handle_sequential`は`self.config.max_samples`を一切チェックしておらず、target_epsilonが実際には到達不可能な設定の場合、標本を無限に発行し続けてしまう(実際に実PRISM/Maudeバイナリでこの状態を誘発し、7000件を超える実行が発生したことを確認した上で停止・修正)。`handle_sequential`に`state.dispatched_task_count >= self.config.max_samples`のガードを追加し、未収束のまま`max_samples`に達したら`"DKW sequential sampling reached max_samples=... without converging"`という理由で明示的に停止するよう修正した。この修正は`orchestration/dkw_mode.py`という共通コードのため、AWSIM側の`--mode dkw`にも同様に適用される(AWSIM側は`_resolve_target_total`が`dkw`モードに上限を課さない設計のため、この修正以前は理論上同じ無限ループの可能性を抱えていた)。
+
+修正後は、n<2は正しく「収集継続」として扱われ、複数標本にわたる本来の逐次収束が働く。到達不可能なepsilonを指定した場合も`max_samples`で安全に停止する。実データ再生・実PRISM/Maudeバイナリの両方で修正後の挙動を再検証済み。
+
 #### GP 境界推定
 
 GP のデモでは、モデル定数を特徴量として複数の sampling signature を作る。
@@ -456,18 +465,31 @@ target   = failure_reached
 
 GP は同一条件の path 確率を推定するものではなく、「遷移確率パラメータを変えたときの違反境界」を近似するデモとして位置づける。同一条件の厳密値との比較は二項CIが担当する。
 
+**`2026-09-17`時点の決定: 実装しない。** PRISM の DTMC はモデル検査で任意のパラメータ条件の厳密な失敗確率をノイズなく即座に計算できるため、コストの高い実試行を前提とする GP による境界近似(不確実性の高い領域を狙い撃ちして試行回数を節約する仕組み)の動機がそもそも成立しない。境界を知りたければパラメータ格子を厳密計算で網羅すればよい。`GPBoundaryService` を PRISM でも動かすこと自体の対象非依存性デモという価値はあるが、初期版完了後に優先して着手するほどの実利用価値はないと判断し、[将来拡張](#12-将来拡張)からも外す。
+
 #### FT4D
 
 `evaluation.ft4d_service.FT4DService` と `verification_core/ft4d` は対象非依存なので、PRISM 用 `VerificationInput` builder と tree を追加して再利用する。
 
+**訂正(`2026-09-17`): 上記の「第2段階として先送りする」という方針は、実装状況を確認せずに書いた誤りだった。** 実際には次が既に揃っている。
+
 ```text
 verification_core/ft4d/config/tree_prism_demo.json
 
-TOP_FAILURE
+PRISM_TOP
   OR
+  ├── FAILURE
   ├── EARLY_FAILURE
   └── REPEATED_DEGRADATION
 ```
+
+（旧版の本節では top event id を `TOP_FAILURE` と記載していたが、実ファイルは `PRISM_TOP` であり、`FAILURE` も子イベントとして含む。表記を実体に合わせて修正した。）
+
+- `targets/prism/verification_input.py::build_verification_input(record)` — 1件の PRISM sample-path `EvaluationRecord` から `VerificationInput` を組み立てる。`apps/cli/prism_main.py` が実行のたびに最後の1件へ適用し、レポートへ `ft4d` サマリを含めている。
+- `targets/prism/verification_input.py::build_verification_input_from_records(records)`(`2026-09-17`追加) — 複数の sample-path record をまとめて1つの母集団として集約する版。`universal_dataset` をレコード集合の `case_id` 全体とし、`FAILURE`/`EARLY_FAILURE`/`REPEATED_DEGRADATION` それぞれについて `dataset_d`(母集団全体)・`dataset_e`(該当フラグが立った `case_id` の集合)を積み上げる。`exact_model_check` record は `PrismDatasetAdapter.sample_records` で除外する。1件版と異なり `sigma_pf`/`sigma_pb` をペイロードに固定値で書かず、`FT4DService` 側のフォールバック(`sigma_pb` はデータセットから `basic_error_rate` で自動計算、`sigma_pf` は `assumptions` かtree paramsから解決)に委ねる。
+- `apps/cli/prism_ft4d_smoke_main.py` / ルート shim `run_prism_ft4d_smoke.py`(`2026-09-17`追加) — `run_ft4d_smoke.py`(AWSIM用)に対応する、実データ(`tests/fixtures/prism/prism_stage2_baseline_sample41.jsonl`、2026-09-15 実クラスタ検証の baseline 条件から抜粋)を通してFT4D集約結果を表示する smoke CLI。
+
+つまり FT4D の PRISM 対応は「未着手」ではなく、既に実装・テスト済み。残っている拡張候補は、DKW/binomial_ciの逐次実行から `--dataset-csv` 経由でFT4D集約まで自動でつなぐパイプライン化程度である。
 
 - `universal_dataset`: 統計バッチ内の有効な `case_id` 集合
 - `dataset_d`: その basic event の判定対象になった `case_id` 集合
@@ -690,7 +712,7 @@ PRISM の stdout を永続的な API として直接扱わず、backend が次�
 - 別experimentまたは別sampling signatureの結果を混ぜない
 - AWSIM の既存 binomial / DKW regression test が変わらない
 
-実装済み。DKWを停止条件として使うstrategyと中断再開時の未完了task復元は、次の拡張段階で追加する。
+実装済み。DKWを停止条件として使うstrategyは`2026-09-18`に`PrismDkwSamplingStrategy`として追加した(`--mode dkw`/`dkw_fixed --target prism`)。中断再開時の未完了task復元は未対応のまま次の拡張段階の課題とする。
 
 ### Phase 5: 統計モードからAWSIM固定処理を分離
 

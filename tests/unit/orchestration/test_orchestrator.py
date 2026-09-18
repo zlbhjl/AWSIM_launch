@@ -1,3 +1,7 @@
+import itertools
+
+import pytest
+
 from contracts.evaluation import EvaluationRecord, ensure_evaluation_meta
 from contracts.execution import RunStatus, TestCase
 import orchestration.orchestrator as orchestrator_module
@@ -583,6 +587,30 @@ def test_orchestrator_dkw_fixed_still_uses_sampling_cap_as_target_total() -> Non
     ) == 16
 
 
+def test_orchestrator_prism_sprt_and_ebstop_do_not_stop_after_one_task() -> None:
+    # Found by running the real PRISM/Maude binaries end to end: without this,
+    # target=prism with --param falls through to "last_loop_num + 1", so the
+    # run stops as soon as the single exact_model_check task completes and
+    # never issues any sample-path TestCases at all.
+    orchestrator = Orchestrator()
+
+    for run_mode in ("binomial_ci", "sprt", "ebstop", "dkw", "dkw_fixed"):
+        assert (
+            orchestrator._resolve_target_total(
+                OrchestratorConfig(
+                    output="/tmp/records.jsonl",
+                    dataset_csv="/tmp/prism.csv",
+                    target="prism",
+                    run_mode=run_mode,
+                    params={"model": "simple_reliability_dtmc", "steps": 20},
+                    max_samples=8,
+                ),
+                last_loop_num=0,
+            )
+            is None
+        )
+
+
 def test_orchestrator_summary_includes_strategy_final_report() -> None:
     queue = TaskQueue()
 
@@ -634,6 +662,58 @@ def test_orchestrator_summary_includes_strategy_final_report() -> None:
 
     assert summary["final_report"]["target"] == "Binomial CI"
     assert "Binomial CI Complete" in summary["final_report"]["reason"]
+
+
+def test_build_strategy_threads_binomial_anytime_valid_into_prism_statistical_request() -> None:
+    config = OrchestratorConfig(
+        output="/tmp/prism.jsonl",
+        dataset_csv="/tmp/prism.csv",
+        target="prism",
+        case_kind="simple_reliability_dtmc",
+        run_mode="binomial_ci",
+        params={"model": "simple_reliability_dtmc", "steps": 20},
+        max_samples=20,
+        binomial_anytime_valid=True,
+    )
+
+    strategy = Orchestrator()._build_strategy(config)
+
+    assert strategy.statistical_request.options["anytime_valid"] is True
+
+
+def test_build_strategy_binomial_anytime_valid_defaults_to_false_for_prism() -> None:
+    config = OrchestratorConfig(
+        output="/tmp/prism.jsonl",
+        dataset_csv="/tmp/prism.csv",
+        target="prism",
+        case_kind="simple_reliability_dtmc",
+        run_mode="binomial_ci",
+        params={"model": "simple_reliability_dtmc", "steps": 20},
+        max_samples=20,
+    )
+
+    strategy = Orchestrator()._build_strategy(config)
+
+    assert strategy.statistical_request.options["anytime_valid"] is False
+
+
+def test_build_strategy_rejects_prism_boundary_gap_instead_of_silent_fallthrough() -> None:
+    # boundary_gap has no live branch in _build_strategy for target=prism; without
+    # this guard it would silently fall through to a single one-off
+    # ParameterCaseStrategy with no statistical evaluation at all instead of
+    # failing loudly.
+    config = OrchestratorConfig(
+        output="/tmp/prism.jsonl",
+        dataset_csv="/tmp/prism.csv",
+        target="prism",
+        case_kind="simple_reliability_dtmc",
+        run_mode="boundary_gap",
+        params={"model": "simple_reliability_dtmc", "steps": 20},
+        max_samples=20,
+    )
+
+    with pytest.raises(ValueError, match="no live execution path"):
+        Orchestrator()._build_strategy(config)
 
 
 def test_orchestrator_runs_prism_fixed_sampling_until_ci_is_sufficient(
@@ -712,3 +792,299 @@ def test_orchestrator_runs_prism_fixed_sampling_until_ci_is_sufficient(
         "ci_contains_bounded_probability": True,
         "absolute_estimation_error": 0.1,
     }
+
+
+def test_orchestrator_runs_prism_dkw_sequential_from_a_cold_start(tmp_path) -> None:
+    # DKWModeRunner.handle_sequential evaluates *before* dispatching a new
+    # sample task. With zero prior samples that evaluation fails outright and
+    # handle_sequential treats it as a terminal stop, so a genuinely fresh
+    # PRISM run (no pre-existing dataset, unlike AWSIM's usual dkw usage)
+    # would stop right after the exact_model_check without ever issuing a
+    # single sample-path task. This regression test pins the fix: at least
+    # one real sample-path task must be dispatched and evaluated.
+    queue = TaskQueue()
+    dataset_csv = tmp_path / "prism_dkw_samples.csv"
+    result_sink = SharedStoreResultSink.from_dataset_csv(dataset_csv)
+
+    def fake_worker_runner(_argv, *, task_source):
+        test_case = task_source.fetch_next()
+        assert test_case is not None
+        loop_num = int(test_case.meta["global_loop_num"])
+        is_model_check = test_case.input.get("record_kind") == "exact_model_check"
+        result_sink.save(
+            EvaluationRecord(
+                case_id=test_case.case_id,
+                target="prism",
+                case_kind=test_case.case_kind,
+                status=RunStatus.SUCCESS,
+                input=dict(test_case.input),
+                output=(
+                    {
+                        "prism_eventual_failure_probability": 1.0,
+                        "prism_bounded_failure_probability": 0.1,
+                    }
+                    if is_model_check
+                    else {"steps_to_failure_capped": 12.0}
+                ),
+                meta=ensure_evaluation_meta(
+                    {
+                        "global_loop_num": loop_num,
+                        "task_reason": test_case.reason,
+                    },
+                    source_module="tests.fake_prism_worker",
+                ),
+            )
+        )
+        task_source.report_completion(loop_num, "success")
+        return {
+            "exit_code": 0,
+            "terminal_status": "no_task",
+            "status": "success",
+        }
+
+    summary = Orchestrator(
+        queue=queue,
+        worker_runner=fake_worker_runner,
+    ).run(
+        OrchestratorConfig(
+            output=str(tmp_path / "records.jsonl"),
+            dataset_csv=str(dataset_csv),
+            target="prism",
+            case_kind="simple_reliability_dtmc",
+            run_mode="dkw",
+            params={"model": "simple_reliability_dtmc", "steps": 20},
+            experiment_id="dkw-cold-start-test",
+            max_samples=200,
+            prism_dkw_target_metric="steps_to_failure_capped",
+            prism_dkw_target_epsilon=0.3,
+            queue_high_water=1,
+            queue_low_water=0,
+        )
+    )
+
+    assert summary["enqueued"] >= 2  # model check + at least one sample-path task
+    assert summary["completed_count"] == summary["enqueued"]
+    assert "SMC Verification Complete" in summary["stop_reason"]
+    # n=1 is a degenerate case for the DKW quantile search (evaluation/dkw.py
+    # rejects it as "not enough data yet"), so at least 2 real samples must
+    # have been evaluated before a "sufficient" report is possible.
+    assert summary["statistical_report"]["sample_count"] >= 2
+    assert summary["statistical_report"]["metric"] == "steps_to_failure_capped"
+    assert summary["statistical_report"]["exact_model_check"]["comparison_skipped_reason"]
+
+
+def test_orchestrator_runs_prism_dkw_sequential_keeps_collecting_with_real_variance(
+    tmp_path,
+) -> None:
+    # With genuinely varying values (unlike the constant-value cold-start test
+    # above, which trivially converges at n=2 because the data has zero
+    # variance), sequential dkw should keep dispatching sample-path tasks
+    # past the first couple of samples instead of stopping prematurely.
+    queue = TaskQueue()
+    dataset_csv = tmp_path / "prism_dkw_variance_samples.csv"
+    result_sink = SharedStoreResultSink.from_dataset_csv(dataset_csv)
+    values = itertools.cycle([1.0, 20.0, 3.0, 18.0, 5.0, 15.0])
+
+    def fake_worker_runner(_argv, *, task_source):
+        test_case = task_source.fetch_next()
+        assert test_case is not None
+        loop_num = int(test_case.meta["global_loop_num"])
+        is_model_check = test_case.input.get("record_kind") == "exact_model_check"
+        result_sink.save(
+            EvaluationRecord(
+                case_id=test_case.case_id,
+                target="prism",
+                case_kind=test_case.case_kind,
+                status=RunStatus.SUCCESS,
+                input=dict(test_case.input),
+                output=(
+                    {
+                        "prism_eventual_failure_probability": 1.0,
+                        "prism_bounded_failure_probability": 0.1,
+                    }
+                    if is_model_check
+                    else {"steps_to_failure_capped": next(values)}
+                ),
+                meta=ensure_evaluation_meta(
+                    {
+                        "global_loop_num": loop_num,
+                        "task_reason": test_case.reason,
+                    },
+                    source_module="tests.fake_prism_worker",
+                ),
+            )
+        )
+        task_source.report_completion(loop_num, "success")
+        return {
+            "exit_code": 0,
+            "terminal_status": "no_task",
+            "status": "success",
+        }
+
+    summary = Orchestrator(
+        queue=queue,
+        worker_runner=fake_worker_runner,
+    ).run(
+        OrchestratorConfig(
+            output=str(tmp_path / "records.jsonl"),
+            dataset_csv=str(dataset_csv),
+            target="prism",
+            case_kind="simple_reliability_dtmc",
+            run_mode="dkw",
+            params={"model": "simple_reliability_dtmc", "steps": 20},
+            experiment_id="dkw-variance-test",
+            max_samples=200,
+            prism_dkw_target_metric="steps_to_failure_capped",
+            prism_dkw_target_epsilon=10.0,
+            queue_high_water=1,
+            queue_low_water=0,
+        )
+    )
+
+    assert summary["statistical_report"]["sample_count"] > 2
+    assert summary["statistical_report"]["sufficient"] is True
+    assert "SMC Verification Complete" in summary["stop_reason"]
+
+
+def test_orchestrator_runs_prism_dkw_sequential_stops_at_max_samples_without_converging(
+    tmp_path,
+) -> None:
+    # DKWModeRunner.handle_sequential previously never checked max_samples at
+    # all, so an unreachable target_epsilon would make it dispatch real
+    # sample-path tasks forever. This pins the fix: it must stop cleanly once
+    # dispatched_task_count reaches max_samples, without ever converging.
+    queue = TaskQueue()
+    dataset_csv = tmp_path / "prism_dkw_unreachable_samples.csv"
+    result_sink = SharedStoreResultSink.from_dataset_csv(dataset_csv)
+    values = itertools.cycle([1.0, 20.0, 3.0, 18.0, 5.0, 15.0])
+
+    def fake_worker_runner(_argv, *, task_source):
+        test_case = task_source.fetch_next()
+        assert test_case is not None
+        loop_num = int(test_case.meta["global_loop_num"])
+        is_model_check = test_case.input.get("record_kind") == "exact_model_check"
+        result_sink.save(
+            EvaluationRecord(
+                case_id=test_case.case_id,
+                target="prism",
+                case_kind=test_case.case_kind,
+                status=RunStatus.SUCCESS,
+                input=dict(test_case.input),
+                output=(
+                    {
+                        "prism_eventual_failure_probability": 1.0,
+                        "prism_bounded_failure_probability": 0.1,
+                    }
+                    if is_model_check
+                    else {"steps_to_failure_capped": next(values)}
+                ),
+                meta=ensure_evaluation_meta(
+                    {
+                        "global_loop_num": loop_num,
+                        "task_reason": test_case.reason,
+                    },
+                    source_module="tests.fake_prism_worker",
+                ),
+            )
+        )
+        task_source.report_completion(loop_num, "success")
+        return {
+            "exit_code": 0,
+            "terminal_status": "no_task",
+            "status": "success",
+        }
+
+    summary = Orchestrator(
+        queue=queue,
+        worker_runner=fake_worker_runner,
+    ).run(
+        OrchestratorConfig(
+            output=str(tmp_path / "records.jsonl"),
+            dataset_csv=str(dataset_csv),
+            target="prism",
+            case_kind="simple_reliability_dtmc",
+            run_mode="dkw",
+            params={"model": "simple_reliability_dtmc", "steps": 20},
+            experiment_id="dkw-unreachable-test",
+            max_samples=15,
+            prism_dkw_target_metric="steps_to_failure_capped",
+            prism_dkw_target_epsilon=1e-9,
+            queue_high_water=1,
+            queue_low_water=0,
+        )
+    )
+
+    assert "max_samples=15" in summary["stop_reason"]
+    assert "without converging" in summary["stop_reason"]
+    assert summary["statistical_report"]["sufficient"] is False
+    assert summary["statistical_report"]["sample_count"] <= 15
+
+
+def test_orchestrator_runs_prism_dkw_fixed_dispatches_all_samples_then_evaluates_once(
+    tmp_path,
+) -> None:
+    queue = TaskQueue()
+    dataset_csv = tmp_path / "prism_dkw_fixed_samples.csv"
+    result_sink = SharedStoreResultSink.from_dataset_csv(dataset_csv)
+    values = iter([5.0, 10.0, 15.0, 20.0, 25.0])
+
+    def fake_worker_runner(_argv, *, task_source):
+        test_case = task_source.fetch_next()
+        assert test_case is not None
+        loop_num = int(test_case.meta["global_loop_num"])
+        is_model_check = test_case.input.get("record_kind") == "exact_model_check"
+        result_sink.save(
+            EvaluationRecord(
+                case_id=test_case.case_id,
+                target="prism",
+                case_kind=test_case.case_kind,
+                status=RunStatus.SUCCESS,
+                input=dict(test_case.input),
+                output=(
+                    {
+                        "prism_eventual_failure_probability": 1.0,
+                        "prism_bounded_failure_probability": 0.1,
+                    }
+                    if is_model_check
+                    else {"steps_to_failure_capped": next(values)}
+                ),
+                meta=ensure_evaluation_meta(
+                    {
+                        "global_loop_num": loop_num,
+                        "task_reason": test_case.reason,
+                    },
+                    source_module="tests.fake_prism_worker",
+                ),
+            )
+        )
+        task_source.report_completion(loop_num, "success")
+        return {
+            "exit_code": 0,
+            "terminal_status": "no_task",
+            "status": "success",
+        }
+
+    summary = Orchestrator(
+        queue=queue,
+        worker_runner=fake_worker_runner,
+    ).run(
+        OrchestratorConfig(
+            output=str(tmp_path / "records.jsonl"),
+            dataset_csv=str(dataset_csv),
+            target="prism",
+            case_kind="simple_reliability_dtmc",
+            run_mode="dkw_fixed",
+            params={"model": "simple_reliability_dtmc", "steps": 20},
+            experiment_id="dkw-fixed-test",
+            max_samples=5,
+            prism_dkw_target_metric="steps_to_failure_capped",
+            prism_dkw_target_epsilon=100.0,
+            queue_high_water=1,
+            queue_low_water=0,
+        )
+    )
+
+    assert summary["enqueued"] == 6  # model check + exactly max_samples sample-path tasks
+    assert summary["completed_count"] == 6
+    assert "Fixed Sampling + DKW Complete" in summary["stop_reason"]
+    assert summary["statistical_report"]["sample_count"] == 5

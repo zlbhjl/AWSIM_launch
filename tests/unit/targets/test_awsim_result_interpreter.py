@@ -1,6 +1,8 @@
 from pathlib import Path
 
 from contracts.execution import RawRunResult, RunStatus
+from contracts.statistics import StatisticalRequest
+from evaluation.binomial_ci import BinomialCIService
 from targets.awsim.result_interpreter import ResultInterpreter, interpret_fixture
 from verifiers.maude.backend import MaudeRunResult
 
@@ -142,3 +144,58 @@ def test_result_interpreter_keeps_late_artifact_as_raw_metadata() -> None:
 
     assert record.status is RunStatus.SUCCESS
     assert record.meta["raw_timeout_reason"] == "late_artifact"
+
+
+def test_binomial_service_accepts_only_successfully_interpreted_timeout_traces() -> None:
+    interpreter = ResultInterpreter()
+    normal_trace = str(FIXTURES / "normal_trace_maude.json")
+    invalid_trace = str(FIXTURES / "maude_failure_missing_vehicle_sizes.json")
+    raw_results = [
+        RawRunResult(
+            case_id="timeout_with_trace",
+            target="awsim",
+            case_kind="uturn",
+            status=RunStatus.TIMEOUT,
+            evidence={"trace_json": normal_trace},
+            meta={"returncode": 124},
+        ),
+        RawRunResult(
+            case_id="timeout_with_late_trace",
+            target="awsim",
+            case_kind="uturn",
+            status=RunStatus.TIMEOUT,
+            evidence={"trace_json": normal_trace},
+            meta={"returncode": 124, "artifact_timing": "late"},
+        ),
+        RawRunResult(
+            case_id="timeout_without_trace",
+            target="awsim",
+            case_kind="uturn",
+            status=RunStatus.TIMEOUT,
+            meta={"returncode": 124, "artifact_timing": "missing"},
+        ),
+        RawRunResult(
+            case_id="timeout_with_invalid_trace",
+            target="awsim",
+            case_kind="uturn",
+            status=RunStatus.TIMEOUT,
+            evidence={"trace_json": invalid_trace},
+            meta={"returncode": 124},
+        ),
+    ]
+
+    records = [interpreter.interpret_raw_run_result(raw) for raw in raw_results]
+    report = BinomialCIService().evaluate_request(
+        records,
+        StatisticalRequest(method="binomial_ci", metric="c_collision"),
+    )
+
+    assert [record.status for record in records] == [
+        RunStatus.SUCCESS,
+        RunStatus.SUCCESS,
+        RunStatus.TIMEOUT,
+        RunStatus.ANALYSIS_ERROR,
+    ]
+    assert all(record.meta["raw_run_status"] == "timeout" for record in records)
+    assert report.sample_count == 2
+    assert report.estimate == 0.0
