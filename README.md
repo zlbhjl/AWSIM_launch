@@ -587,7 +587,21 @@ python3 awchecker.py --type uturn
   - 使いたい `container_profile` を 1 つ決める
   - その profile で worker / orchestrator を起動する
   - mount 済みの `cyclonedds.xml`、`VK_ICD_FILENAMES`、`DISPLAY`、map path がその profile で成立しているかを確認する
-- 画面表示や学校ネットワーク対策を含む `1.7.1` 系運用は、原則として `autoware171` profile を正本にしてください。`legacy` は互換用に残っている profile です。
+- 画面表示や学校ネットワーク対策 (下記の storm-control 対策) を含む `1.7.1` 系運用は、原則として `autoware171` profile を正本にしてください。`legacy` は互換用に残っている profile です。
+
+### 学内スイッチの storm-control 停止と bridge 化の理由 (`2026-09-28` 時点)
+
+- `2026-09-26` に、学内スイッチ `hw57-is12` が研究室の LAN ポート 21 本を error-down にしました。スイッチログの理由は `Cause=storm-control` で、各ポートが link up してから約 8〜9 秒後にストームとみられる通信を検知して止めています。
+- JAIST 情報基盤センター (CII) の対応記録は `Case#70493` です。`2026-09-28 08:45` ごろに CII 側で解除されるまで、該当ポートの号機はネットワークを使えませんでした。error-down は自動では戻らず、CII に解除を依頼する必要があります。
+- 主因と推定しているのは、`legacy` profile (`network_mode=host`、`privileged=true`) で動かしていた ROS 2 / Cyclone DDS の通信です。host モードではコンテナが物理 NIC (`enp10s0`) を直接使うため、Autoware の数百ノード分の discovery マルチキャスト (`239.255.0.1`) やトピック通信が、複数号機から学内 LAN へ流れていたと考えています。
+- `2026-08` に 24 号機で起きた `dhcp4 ... no lease` / `ip-config-unavailable` のネットワーク断 ([docs/manual_run_autoware_1_7_1_with_awsim_20260807.md](docs/manual_run_autoware_1_7_1_with_awsim_20260807.md)) も、同じ error-down だった可能性があります。
+- 対策として、`autoware171` / `autoware180*` profile では、DDS の通信を物理 NIC へ出さないために次の 3 つを重ねています (`prism_maude` も bridge・非 privileged ですが、ROS を使わないため `cyclonedds.xml` は mount しません)。
+  - `network_mode=bridge`、`privileged=false`: コンテナからは docker0 と `lo` しか見えず、docker0 上のマルチキャストは物理 NIC へ転送されません。
+  - `cyclonedds.xml` の mount: `NetworkInterface=lo`、`AllowMulticast=false`、`Peer=127.0.0.1` で、DDS を loopback だけに閉じ込めます。
+  - 手動実行時の `iptables -I DOCKER-USER 1 -i docker0 -o enp10s0 -j REJECT`: コンテナから学内 LAN への通信を止めます ([docs/node21_autoware_1_7_1_awsim_bridge_commands_20260830.md](docs/node21_autoware_1_7_1_awsim_bridge_commands_20260830.md))。
+- 号機間の通信は、Ray Client (`ray://<master-ip>:10001`) の TCP ユニキャストだけにしています。そのため、コンテナを Ray node としてクラスタに参加させないでください。
+- cluster worker を `network_mode=host` に戻したり、`cyclonedds.xml` を外したり、DDS のマルチキャストを有効にしたりしないでください。新しい profile を追加するときも、DDS の通信が物理 NIC へ出ないことを必ず確認してください。
+- CII からは、スイッチやハブのループ接続がないかも確認するよう依頼されています。物理的なループが原因の場合は、コンテナ側の設定では防げません。研究室内のハブの配線も確認してください。
 
 ### Autoware 1.7.1 クラスター標準実行コマンド
 
