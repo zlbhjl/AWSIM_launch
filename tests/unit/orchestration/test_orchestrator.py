@@ -511,6 +511,136 @@ def test_orchestrator_manages_external_workers_with_queue_watermarks() -> None:
     assert summary["stop_reason"] == "Strategist Stop"
 
 
+def test_orchestrator_finishes_when_stop_decided_but_all_workers_have_died() -> None:
+    """Regression test: if every worker exits before draining the pending
+    queue, nothing else will ever pop the leftover tasks. The orchestrator
+    must eventually cancel them and finish once the strategist has decided
+    no more samples are needed, instead of polling forever."""
+    queue = TaskQueue()
+
+    class FakeStrategy:
+        def __init__(self) -> None:
+            self.index = 0
+
+        def next_test_case(self):
+            self.index += 1
+            if self.index > 1:
+                return None
+            return TestCase(
+                case_id="strategy_case_1",
+                target="awsim",
+                case_kind="uturn",
+                input={"dx0": 1.0},
+                reason="strategy",
+            )
+
+    class StrategyOrchestrator(Orchestrator):
+        def _build_strategy(self, config):
+            return FakeStrategy()
+
+    sleeper_calls = 0
+    fake_now = 0.0
+
+    def dead_worker_sleeper(_seconds: float) -> None:
+        # Simulates every worker having already exited: nobody ever polls
+        # get_next_task(), so the queue is never drained by anyone. Advance
+        # the fake clock well past a single poll interval each call so the
+        # test doesn't need to wait out the real _STALLED_DRAIN_TIMEOUT_SEC.
+        nonlocal sleeper_calls, fake_now
+        sleeper_calls += 1
+        fake_now += 120.0
+        assert sleeper_calls < 50, "orchestrator did not finish; queue never drained"
+
+    orchestrator = StrategyOrchestrator(
+        queue=queue,
+        worker_runner=lambda *args, **kwargs: 0,
+        sleeper=dead_worker_sleeper,
+        time_func=lambda: fake_now,
+    )
+    summary = orchestrator.run(
+        OrchestratorConfig(
+            output="/tmp/records.jsonl",
+            worker_id="worker-remote",
+            dataset_csv="/tmp/uturn_dataset.csv",
+            run_inline_worker=False,
+            worker_count=1,
+            queue_high_water=2,
+            queue_low_water=1,
+            poll_interval_sec=0.0,
+        )
+    )
+
+    assert summary["queue_size"] == 0
+    assert summary["stop_reason"] == "Strategist Stop"
+    # The orphaned task was cancelled, not silently counted as completed.
+    assert summary["completed_count"] == 0
+
+
+def test_orchestrator_does_not_cancel_task_a_busy_worker_still_picks_up() -> None:
+    """A worker can be alive but simply mid-simulation for a while, not
+    polling for new work. As long as it comes back and drains the queue
+    before _STALLED_DRAIN_TIMEOUT_SEC has elapsed, its pending task must not
+    be cancelled out from under it."""
+    queue = TaskQueue()
+
+    class FakeStrategy:
+        def __init__(self) -> None:
+            self.index = 0
+
+        def next_test_case(self):
+            self.index += 1
+            if self.index > 1:
+                return None
+            return TestCase(
+                case_id="strategy_case_1",
+                target="awsim",
+                case_kind="uturn",
+                input={"dx0": 1.0},
+                reason="strategy",
+            )
+
+    class StrategyOrchestrator(Orchestrator):
+        def _build_strategy(self, config):
+            return FakeStrategy()
+
+    sleeper_calls = 0
+    fake_now = 0.0
+
+    def busy_then_returning_worker_sleeper(_seconds: float) -> None:
+        # The worker is alive but busy (e.g. running a long simulation) for
+        # several polls, well under the abandonment timeout, before it comes
+        # back and claims the still-pending task itself.
+        nonlocal sleeper_calls, fake_now
+        sleeper_calls += 1
+        fake_now += 5.0
+        if sleeper_calls >= 10:
+            payload = queue.get_next_task()
+            if payload and payload.get("system_command") != "stop":
+                queue.report_completion(int(payload["global_loop_num"]), "success")
+
+    orchestrator = StrategyOrchestrator(
+        queue=queue,
+        worker_runner=lambda *args, **kwargs: 0,
+        sleeper=busy_then_returning_worker_sleeper,
+        time_func=lambda: fake_now,
+    )
+    summary = orchestrator.run(
+        OrchestratorConfig(
+            output="/tmp/records.jsonl",
+            worker_id="worker-remote",
+            dataset_csv="/tmp/uturn_dataset.csv",
+            run_inline_worker=False,
+            worker_count=1,
+            queue_high_water=2,
+            queue_low_water=1,
+            poll_interval_sec=0.0,
+        )
+    )
+
+    assert summary["queue_size"] == 0
+    assert summary["completed_count"] == 1
+
+
 def test_orchestrator_builds_active_strategy_with_legacy_cache_policy(
     monkeypatch,
     tmp_path,

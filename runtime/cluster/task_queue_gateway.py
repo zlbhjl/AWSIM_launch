@@ -106,6 +106,11 @@ class TaskQueueGateway:
     def set_stop_signal(self, reason: str = "Target Reached or Master Stopped") -> Any:
         return self._invoke("set_stop_signal", reason, reason=reason)
 
+    def cancel_pending_tasks(self) -> int:
+        if not hasattr(self.actor, "cancel_pending_tasks"):
+            return 0
+        return self._invoke("cancel_pending_tasks")
+
     def _build_test_case(self, payload: dict[str, Any]) -> TestCase:
         task = dict(payload)
         reason = str(task.pop("reason", ""))

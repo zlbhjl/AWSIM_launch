@@ -71,3 +71,16 @@ class TaskQueue:
     def set_stop_signal(self, reason: str = "Target Reached or Master Stopped") -> None:
         self.stop_signal = True
         self.stop_reason = reason
+
+    def cancel_pending_tasks(self) -> int:
+        """Drop tasks that are still queued but not yet dispatched to any worker.
+
+        Once the strategist has decided no more samples are needed, leftover
+        pending tasks will never be claimed if the workers that would have
+        polled for them have already exited -- nothing else ever pops them,
+        so the queue would otherwise stay non-empty forever. In-flight tasks
+        (already dispatched to a worker) are left untouched.
+        """
+        cancelled = len(self.queue)
+        self.queue.clear()
+        return cancelled

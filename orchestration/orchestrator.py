@@ -210,6 +210,17 @@ def build_worker_argv(config: OrchestratorConfig) -> list[str]:
 
 
 class Orchestrator:
+    # Wall-clock seconds the pending queue must stay at the same non-zero
+    # size, after a stop has been decided, before its leftover tasks are
+    # treated as abandoned and force-cancelled. See `cancel_pending_tasks`
+    # usage in `run()`. This intentionally matches the codebase's existing
+    # `--stale-worker-timeout-sec` default (apps/cli/orchestrator_main.py) so
+    # a task isn't declared abandoned any sooner than a worker would be
+    # declared stale, and comfortably exceeds a single AWSIM scenario's
+    # timeout (up to ~300s + 10s artifact grace) so a worker that is merely
+    # busy running a simulation is not mistaken for a dead one.
+    _STALLED_DRAIN_TIMEOUT_SEC = 600.0
+
     def __init__(
         self,
         *,
@@ -219,6 +230,7 @@ class Orchestrator:
         resume_service: ResumeService | None = None,
         host_worker_manager: HostWorkerManager | None = None,
         sleeper: Callable[[float], None] | None = None,
+        time_func: Callable[[], float] | None = None,
         progress_callback: Callable[[dict[str, object], OrchestratorConfig], None] | None = None,
         maintenance_callback: Callable[
             [dict[str, object], OrchestratorConfig],
@@ -231,6 +243,7 @@ class Orchestrator:
         self.resume_service = resume_service or ResumeService()
         self.host_worker_manager = host_worker_manager or HostWorkerManager()
         self.sleeper = sleeper or time.sleep
+        self.time_func = time_func or time.monotonic
         self.progress_callback = progress_callback
         self.maintenance_callback = maintenance_callback
         if worker_runner is None:
@@ -252,6 +265,9 @@ class Orchestrator:
         host_worker_started = False
         maintenance_events: list[dict[str, object]] = []
         target_total = self._resolve_target_total(config, resume_state.last_loop_num)
+        stalled_drain_queue_size: int | None = None
+        stalled_drain_started_at: float | None = None
+        stalled_drain_last_logged_at: float | None = None
 
         try:
             if config.with_host_worker:
@@ -301,6 +317,59 @@ class Orchestrator:
                         if refill_reason:
                             stop_reason = refill_reason
                     snapshot = self.queue_gateway.get_snapshot()
+                    pending_after_stop = int(snapshot["queue_size"])
+                    if stop_reason and pending_after_stop > 0:
+                        # The strategist has decided no more samples are
+                        # needed, but tasks are still sitting unclaimed in
+                        # the pending queue. A live worker will normally
+                        # drain these within its next poll, so only treat
+                        # the queue as abandoned (e.g. all workers already
+                        # exited) once it has stopped shrinking for a
+                        # sustained period -- otherwise this could cancel
+                        # work a still-active worker, merely busy running a
+                        # long simulation, was about to pick up.
+                        if (
+                            pending_after_stop != stalled_drain_queue_size
+                            or stalled_drain_started_at is None
+                        ):
+                            print(
+                                "[Orchestrator][stalled-drain] tracking started: "
+                                f"pending={pending_after_stop} stop_reason={stop_reason!r} "
+                                f"stop_signal={bool(snapshot['stop_signal'])} "
+                                f"(previous pending was {stalled_drain_queue_size})",
+                                flush=True,
+                            )
+                            stalled_drain_queue_size = pending_after_stop
+                            stalled_drain_started_at = self.time_func()
+                            stalled_drain_last_logged_at = stalled_drain_started_at
+                        else:
+                            elapsed = self.time_func() - stalled_drain_started_at
+                            if (
+                                stalled_drain_last_logged_at is None
+                                or self.time_func() - stalled_drain_last_logged_at >= 60.0
+                            ):
+                                print(
+                                    "[Orchestrator][stalled-drain] still waiting: "
+                                    f"pending={pending_after_stop} elapsed={elapsed:.1f}s "
+                                    f"threshold={self._STALLED_DRAIN_TIMEOUT_SEC:.1f}s",
+                                    flush=True,
+                                )
+                                stalled_drain_last_logged_at = self.time_func()
+                            if elapsed >= self._STALLED_DRAIN_TIMEOUT_SEC:
+                                cancelled = self.queue_gateway.cancel_pending_tasks()
+                                print(
+                                    "[Orchestrator][stalled-drain] cancelling abandoned "
+                                    f"pending tasks: cancelled={cancelled!r}",
+                                    flush=True,
+                                )
+                                snapshot = self.queue_gateway.get_snapshot()
+                                stalled_drain_queue_size = None
+                                stalled_drain_started_at = None
+                                stalled_drain_last_logged_at = None
+                    else:
+                        stalled_drain_queue_size = None
+                        stalled_drain_started_at = None
+                        stalled_drain_last_logged_at = None
                     if int(snapshot["queue_size"]) <= 0 and stop_reason and not snapshot["stop_signal"]:
                         self.queue_gateway.set_stop_signal(stop_reason)
                         snapshot = self.queue_gateway.get_snapshot()
