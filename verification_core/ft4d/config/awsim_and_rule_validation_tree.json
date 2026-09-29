@@ -1,0 +1,19 @@
+{
+  "tree": {
+    "top_event": {
+      "id": "TOP",
+      "gate": "AND",
+      "use_dataset_aggregation": false,
+      "children": ["HIGH_SPEED", "SHORT_GAP"]
+    }
+  },
+  "params": {
+    "HIGH_SPEED": {"sigma_pf": 0.5, "sigma_pb": 0.00},
+    "SHORT_GAP": {"sigma_pf": 0.5, "sigma_pb": 0.00}
+  },
+  "labels": {
+    "TOP": "高速度 AND 短車間（単独条件から推定）",
+    "HIGH_SPEED": "高速度条件 (ego_speed >= 35)",
+    "SHORT_GAP": "短車間条件 (dx0 <= 17.5)"
+  }
+}
