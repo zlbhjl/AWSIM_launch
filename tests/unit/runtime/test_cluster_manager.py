@@ -181,6 +181,7 @@ def test_cluster_manager_syncs_default_launch_and_requested_runtime_inputs() -> 
             queue_actor_name="TaskQueueActor",
             sync_awsim_script_py=True,
             sync_autoware180_map=True,
+            sync_autoware190_map=True,
         )
     )
 
@@ -194,12 +195,14 @@ def test_cluster_manager_syncs_default_launch_and_requested_runtime_inputs() -> 
         "/home/passd/AWSIMScriptPy/",
         "/home/passd/AW-Runtime-Monitor/",
         "/home/passd/autoware180_runtime/maps/",
+        "/home/passd/autoware190_runtime/maps/",
     ]
     assert [cmd[-1] for cmd in rsync_commands] == [
         "tomita1@150.65.227.22:~/AWSIM_launch/",
         "tomita1@150.65.227.22:~/AWSIMScriptPy/",
         "tomita1@150.65.227.22:~/AW-Runtime-Monitor/",
         "tomita1@150.65.227.22:~/autoware180_runtime/maps/",
+        "tomita1@150.65.227.22:~/autoware190_runtime/maps/",
     ]
     assert "--exclude" in rsync_commands[0]
     assert ".git" in rsync_commands[0]

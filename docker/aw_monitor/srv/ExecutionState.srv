@@ -1,0 +1,6 @@
+---
+builtin_interfaces/Time stamp
+int32 motion_state
+int32 routing_state
+int32 operation_state
+bool is_autonomous_mode_available

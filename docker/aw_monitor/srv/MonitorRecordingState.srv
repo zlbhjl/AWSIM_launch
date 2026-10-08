@@ -1,0 +1,10 @@
+---
+# constants for recording state
+uint8 WAITING_RECORDING = 1
+uint8 RECORDING = 2
+uint8 WRITING_DATA = 3
+uint8 WRITING_DONE = 4
+
+# variables
+bool succeed
+uint8 state

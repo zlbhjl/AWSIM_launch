@@ -130,6 +130,7 @@ def run_cluster_orchestrator(argv: Sequence[str] | None = None) -> int:
         sync_awsim_script_py=getattr(args, "sync_awsim_script_py", False),
         sync_aw_runtime_monitor=getattr(args, "sync_aw_runtime_monitor", True),
         sync_autoware180_map=getattr(args, "sync_autoware180_map", False),
+        sync_autoware190_map=getattr(args, "sync_autoware190_map", False),
         worker_launch_stagger_sec=getattr(args, "worker_launch_stagger_sec", 20.0),
         worker_queue_connect_retries=getattr(args, "worker_queue_connect_retries", 6),
         worker_queue_connect_retry_interval_sec=getattr(

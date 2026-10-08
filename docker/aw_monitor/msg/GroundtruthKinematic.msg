@@ -1,0 +1,4 @@
+builtin_interfaces/Time stamp
+PoseTwistAccel groundtruth_ego
+GroundtruthNPCVehicle[] groundtruth_vehicles
+GroundtruthNPCPedestrian[] groundtruth_pedestrians

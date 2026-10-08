@@ -1,0 +1,4 @@
+VehicleSize[] vehicle_sizes
+float32 camera_screen_width
+float32 camera_screen_height
+string other_note

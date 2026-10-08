@@ -67,7 +67,72 @@ EXPECTED_PROFILES = {
             "{host_home}/autoware180_runtime/ml_models:{workspace}/autoware_data/ml_models",
         ),
     },
+    "autoware190": {
+        "image": "autoware_internal:1.9.0-awsim",
+        "docker_user": "root",
+        "network_mode": "bridge",
+        "privileged": False,
+        "start_ray_worker_node": False,
+        "add_host_gateway": True,
+        "required_mounts": (
+            "{host_home}/aw-cheaker:{workspace}/aw-cheaker",
+            "{host_home}/AWSIMScriptPy:{workspace}/AWSIMScriptPy",
+            "{host_home}/AW-Runtime-Monitor:{workspace}/AW-Runtime-Monitor",
+            "{host_home}/autoware190_runtime/maps:{workspace}/autoware_map",
+            "{host_home}/autoware190_runtime/ml_models:{workspace}/autoware_data/ml_models",
+        ),
+    },
+    "autoware190_ekfdiagfix": {
+        "image": "autoware_internal:1.9.0-ekfdiagfix",
+        "docker_user": "root",
+        "network_mode": "bridge",
+        "privileged": False,
+        "start_ray_worker_node": False,
+        "add_host_gateway": True,
+        "required_mounts": (
+            "{host_home}/aw-cheaker:{workspace}/aw-cheaker",
+            "{host_home}/AWSIMScriptPy:{workspace}/AWSIMScriptPy",
+            "{host_home}/AW-Runtime-Monitor:{workspace}/AW-Runtime-Monitor",
+            "{host_home}/autoware190_runtime/maps:{workspace}/autoware_map",
+            "{host_home}/autoware190_runtime/ml_models:{workspace}/autoware_data/ml_models",
+        ),
+    },
 }
+
+
+@pytest.mark.parametrize("profile_name", ("autoware190", "autoware190_ekfdiagfix"))
+def test_autoware190_differs_from_autoware180_only_by_image_runtime_and_dds_env(
+    profile_name: str,
+) -> None:
+    # Network/security settings must stay identical to 1.8.0 (campus storm-control incident).
+    reference = resolve_container_launch_profile("autoware180_ekfdiagfix")
+    profile = resolve_container_launch_profile(profile_name)
+
+    assert reference is not None and profile is not None
+    for field in (
+        "target",
+        "docker_user",
+        "network_mode",
+        "privileged",
+        "start_ray_worker_node",
+        "add_host_gateway",
+        "docker_run_args",
+        "bash_args",
+        "bootstrap_apt_packages",
+        "bootstrap_pip_packages",
+        "worker_env",
+    ):
+        assert getattr(profile, field) == getattr(reference, field), field
+    assert profile.mounts == tuple(
+        mount.replace("autoware180_runtime", "autoware190_runtime")
+        for mount in reference.mounts
+    )
+    assert "{host_home}/cyclonedds.xml:{workspace}/cyclonedds.xml:ro" in profile.mounts
+    assert dict(profile.env) == {
+        **dict(reference.env),
+        "RMW_IMPLEMENTATION": "rmw_cyclonedds_cpp",
+        "CYCLONEDDS_URI": "/home/passd/cyclonedds.xml",
+    }
 
 
 @pytest.mark.parametrize("profile_name", EXPECTED_PROFILES)

@@ -31,6 +31,8 @@ SUPPORTED_CONTAINER_PROFILES = (
     "autoware171",
     "autoware180",
     "autoware180_ekfdiagfix",
+    "autoware190",
+    "autoware190_ekfdiagfix",
     "prism_maude",
 )
 

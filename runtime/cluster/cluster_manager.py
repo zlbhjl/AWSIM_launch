@@ -41,6 +41,7 @@ class ClusterLaunchConfig:
     sync_awsim_script_py: bool = False
     sync_aw_runtime_monitor: bool = True
     sync_autoware180_map: bool = False
+    sync_autoware190_map: bool = False
     ray_head_start_timeout_sec: int = 180
     worker_launch_stagger_sec: float = 20.0
     worker_queue_connect_retries: int = 6
@@ -1057,6 +1058,15 @@ class ClusterManager:
                     source="/home/passd/autoware180_runtime/maps/",
                     remote_path="~/autoware180_runtime/maps/",
                     remote_dir="$HOME/autoware180_runtime/maps",
+                )
+            )
+        if config.sync_autoware190_map and requires_ros:
+            specs.append(
+                SyncPathSpec(
+                    label="autoware190 map",
+                    source="/home/passd/autoware190_runtime/maps/",
+                    remote_path="~/autoware190_runtime/maps/",
+                    remote_dir="$HOME/autoware190_runtime/maps",
                 )
             )
         return tuple(specs)
