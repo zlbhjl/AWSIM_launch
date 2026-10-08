@@ -44,82 +44,64 @@ AI (ガウス過程回帰モデル) を用いた **アクティブラーニン�
 - **外部検証器の legacy 互換入口**: AWSIM_launch の外側にある検証器を、対象システムと切り離したまま起動できる互換CLIを保持しています。現在の `run_external_verifier.py` は互換 adapter の入口だけを残し、中では `targets/bbsl/*` と `evaluation/ft4d_service.py` の新経路を直接呼びます。
 - **内部 FT4D コア**: FT4D を `verification_core/ft4d` として AWSIM_launch 内へ保持し、`estimator.py` から実行できます。BBSL 側は raw result を出力し、FT4D の計算本体と信頼度再構成は AWSIM_launch 側へ寄せています。
 - **BBSL raw result 連携**: `BBSL-test/examples/run_full_experiment_all.py` / `run_full_experiment.py` は `--ft4d-backend none` で raw result のみを保存でき、AWSIM_launch 側が `U / D(n) / E(n)`、`recognition_test`、信頼度伝播を再構成します。
+- **連続ダイナミクス対象 (`--target dynamics`)**: AWSIMと同じUターン条件（`dx0`・ego速度・NPC速度）をODE/SDEで高速に計算し、既存の統計モード（二項CI・SPRT・DKW・EBStop）で評価します。AWSIMとの比較用に、AWSIMの代わりに使う「判定モード」と、AWSIMで再検証する候補を拾う「スクリーニングモード」を用意しています（[詳細](#連続ダイナミクス-odesde-対象)）。
 - **FT4D ベースの司令塔補助**: `strategist.py` は FT4D 結果を読み、信頼度不足ノードの列挙だけでなく、`node_id` 単位の集約、不足理由分類、推奨アクション生成まで行えます。
 
 ## ファイル・ディレクトリ構成
 
+現在の正本は v2 フレーム (`run_*_v2.py` → `apps/cli/` → `orchestration/` / `runtime/` / `targets/`) です。
+root 直下の旧スクリプト (`master_orchestrator.py`、`run_manager.py` など) は互換用に残しているもので、
+新しい機能は v2 側にだけ追加しています。
+
 ```text
 AWSIM_launch/
-├── local_worker.py           # 【ホストワーカー】--with_host_worker 時の run_manager.py のプロセス起動・管理。
-├── master_orchestrator.py    # 【司令塔】システム全体の起動、クラスター構築、AIタスクのキュー管理/停止判断。
-├── run_manager.py            # 【ワーカー】各ノードのメインプロセス。司令塔からのタスク受信、process_controller.py を介したシミュレーション実行を管理。
-├── run_external_verifier.py  # 【外部検証器入口】legacy 互換CLI。互換入口だけを残し、中では新しい BBSL target 経路を直接束ねる。
-├── run_ft4d_smoke.py         # 【内部FT4D疎通確認】AWSIM trace fixture を新経路で流して FT4D を確認するCLI。
-├── run_bbsl_local_ft4d.py    # BBSL raw result を AWSIM_launch 側の新経路で FT4D 再計算するCLI。
-├── run_scenario.py           # 単一のシミュレーションを実行するスクリプト。動的パラメータを受け取りシナリオを構築。
-├── strategist.py             # AIの探索戦略を司る頭脳。現在のフェーズを判断し、次に検証すべきパラメータを決定。FT4D の confidence gap 集約も担当。
-├── estimator.py              # 【内部モジュール】ガウス過程回帰やDKW不等式など、統計的な評価・計算を行う数学エンジン。BBSL raw result からの FT4D 実行APIも保持。
-├── awchecker.py              # シミュレーション結果(JSON)を解析し、安全性を判定。判定結果を共有金庫へ送信。
-├── param_logger.py           # テスト実行時のパラメータを一時的に共有金庫のバッファへ送信。
-├── theoretical_calculator.py # JAMA物理モデルに基づく理論的安全領域(Zone)とマージンを計算するモジュール。
-├── point_extractors.py       # 【内部モジュール】データセットから探索候補点(JAMAエッジ等)を抽出・分類する共通アルゴリズム群。
-├── extract_region_data.py    # 【互換CLI】tools/analysis/extract_region_data.py への薄いラッパー。
-├── analyze_ttc_consistency.py # 【互換CLI】tools/analysis/analyze_ttc_consistency.py への薄いラッパー。
-├── fix_dataset_labels.py     # 過去のデータセットを最新の抽出ロジックで全号機から並列再解析し、安全に修復(更新)するスクリプト。
-├── dataset_repo.py           # データセットCSVの読み書き、--resume_from による過去データ復元
-├── verification_core/
-│   └── ft4d/                 # AWSIM_launch 内に保持する共通 FT4D コア
-├── adapters/
-│   ├── awsim/                # AWSIM 用の U/D/E 構築アダプタ骨格
-│   └── bbsl/                 # BBSL raw result を AWSIM_launch 側 FT4D 入力へ変換するアダプタ
-├── external_verifiers/
-│   ├── base.py               # 旧互換CLI用の共通インターフェース。
-│   ├── registry.py           # 旧互換CLI用アダプタの登録。
-│   └── bbsl_ft4d.py          # 旧 import 互換 wrapper。実体は verifiers/compatibility/legacy_bbsl_ft4d_adapter.py。
-├── verifiers/
-│   ├── compatibility/
-│   │   └── legacy_bbsl_ft4d_adapter.py # BBSL legacy 互換入口の実体。内部では targets/bbsl/* + evaluation/ft4d_service.py を呼ぶ。
-│   └── maude/
-│       ├── backend.py        # Maude 実行境界
-│       └── evaluator.py      # Maude 結果の評価器
-├── redis_cluster/
-│   ├── cluster_config.py     # ワーカーPCのIPやコンテナ名、通信割り当て設定などを一元管理。
-│   ├── cluster_manager.py    # 各PCにSSH接続し、Dockerコンテナを自動起動・同期するクラスター構築スクリプト。
-│   ├── process_controller.py # AWSIM/Autoware/RuntimeMonitorの起動・終了・監視、Xvfb設定をカプセル化。
-│   ├── task_queue.py         # 【司令塔キュー】TaskQueueActor。ワーカーからのタスク取得をスレッドセーフに管理するRay Actor。
-│   └── shared_store.py       # 【共有金庫】非同期で送られてくるパラメータと結果を結合し、単一のCSVに記録するスレッドセーフなRay Actor。メモリリーク防止機能付き。
-├── configs/                  # シナリオごとの設定ファイルを格納するディレクトリ。
-│   └── uturn.py              # Uターンシナリオ用の設定 (探索範囲、ターゲット優先度、タイムアウト秒数など)。
-├── visualize_traces.py       # 【legacy plot wrapper】tools/plot/visualize_traces.py を呼ぶ互換入口。
-├── visualize_traces_split.py # 【legacy plot wrapper】tools/plot/visualize_traces_split.py を呼ぶ互換入口。
-├── visualize_worker_stats.py # 【legacy plot wrapper】tools/plot/visualize_worker_stats.py を呼ぶ互換入口。
-├── visualize_min_ttc.py      # 【legacy plot wrapper】tools/plot/visualize_min_ttc.py を呼ぶ互換入口。
-├── visualize_min_ttc_3d.py   # 【legacy plot wrapper】tools/plot/visualize_min_ttc_3d.py を呼ぶ互換入口。
-├── visualize_jama_zones.py   # 【legacy plot wrapper】tools/plot/visualize_jama_zones.py を呼ぶ互換入口。
-├── visualize_risk_matrix.py  # 【legacy plot wrapper】tools/plot/visualize_risk_matrix.py を呼ぶ互換入口。
-├── visualize_collision_regions.py  # 【legacy plot wrapper】tools/plot/visualize_collision_regions.py を呼ぶ互換入口。
-├── visualize_collision_surfaces.py # 【legacy plot wrapper】tools/plot/visualize_collision_surfaces.py を呼ぶ互換入口。
-├── visualize_worker_failure_clusters.py # 【legacy plot wrapper】tools/plot/visualize_worker_failure_clusters.py を呼ぶ互換入口。
-├── analyze_boundary_gap.py         # 【互換CLI】tools/analysis/analyze_boundary_gap.py への薄いラッパー。
+├── run_orchestrator_cluster_v2.py # 【司令塔・クラスター】21号機で実行。Ray head・worker container の起動から停止判断まで行う正本の入口。
+├── run_orchestrator_v2.py         # 【司令塔・ローカル】クラスターを使わず1プロセスで回す入口 (dynamics の統計実行など)。
+├── run_worker_v2.py               # 【ワーカー】各 container 内で動き、Ray Client で司令塔のキューからケースを取って実行する。
+├── run_dynamics_awsim_compare_v2.py # 同じ入力を ODE と AWSIM の両方で実行して比べる入口。
+├── run_ft4d_smoke.py / run_prism_ft4d_smoke.py # FT4D の疎通確認 (AWSIM / PRISM)。
+├── run_bbsl_local_ft4d.py         # BBSL raw result を AWSIM_launch 側で FT4D 再計算する入口。
+├── run_external_verifier.py       # 外部検証器の legacy 互換入口。
+├── apps/cli/                      # 各 run_*.py の本体 (引数解析と組み立て)。
+├── contracts/                     # target 間で共通のデータ型 (TestCase, RawRunResult, EvaluationRecord, StatisticalReport など)。
+├── orchestration/                 # target に依存しない制御ロジック
+│   ├── orchestrator.py            # 司令塔本体。戦略に従ってケースを発行し、停止条件を判定する。
+│   ├── strategy.py                # 探索戦略 (explore / focus / boundary_gap など、GP 境界モデル)。
+│   ├── binomial_mode.py / dkw_mode.py / sprt_mode.py / ebstop_mode.py # 統計モードごとの停止判定。
+│   ├── replay.py                  # 既存 CSV のケースを再実行する replay モード。
+│   ├── random_parameter_sampling.py / fixed_parameter_sampling.py # 入力サンプリング。
+│   └── worker_loop.py             # ワーカー側のループ (取得 → 実行 → 解釈 → 保存 → 完了報告)。
+├── evaluation/                    # 統計計算 (binomial_ci, dkw, sprt, ebstop, alpha_spending, gp_boundary) と FT4D サービス。
+├── runtime/
+│   ├── cluster/                   # Ray 接続、TaskQueue / SharedStore actor、各号機の container 起動、worker watchdog、結果 sink。
+│   ├── container/                 # container 内のプロセス管理
+│   │   ├── profiles/              # container_profile 定義 (autoware171 / 180* / 190* / prism_maude など)。
+│   │   ├── supervised_process/    # PID 1 の process supervisor。
+│   │   └── launcher.py, supervisor.py, xvfb.py, gpu_health.py など
+│   └── repository/                # dataset CSV、パラメータバッファ、SharedStore、履歴・再開用データ。
+├── targets/                       # 検証対象ごとの実装
+│   ├── registry.py                # --target から backend / result_interpreter を組み立てる。
+│   ├── awsim/                     # AWSIM: case_kinds/, scenario_builders/, scenario_runner.py, backend.py, result_interpreter.py, theory_specs/
+│   ├── prism/                     # PRISM: モデル実行、-simpath 解析、Maude 判定との統合
+│   ├── dynamics/                  # ODE/SDE: models/, runners/, calibrations/
+│   └── bbsl/                      # BBSL raw result の解釈と FT4D 入力化
+├── verifiers/                     # Maude 実行境界と判定 (verifiers/maude/)、BBSL legacy 互換 adapter。
+├── verification_core/ft4d/        # AWSIM_launch 内に保持する共通 FT4D コア。
+├── scenario_specs/                # dynamics 用の入力範囲定義 (uturn.py)。
+├── configs/                       # 旧互換のシナリオ設定入口。実体は targets/awsim/case_kinds/ を再 export する。
+├── redis_cluster/cluster_config.py # 号機の IP・ユーザー・container 名・ROS_DOMAIN_ID (v2 の cluster_manager もここを読む)。
+├── docker/                        # 各 Autoware / PRISM image の Dockerfile、cyclonedds 設定、image ごとの README。
 ├── tools/
-│   ├── analysis/
-│   │   ├── extract_region_data.py           # 条件式や bounds で dataset を切り出す本体CLI。
-│   │   ├── analyze_ttc_consistency.py       # 反復テストデータからTTCのばらつきを分析し、確実/偶然リスクに分類してDKW評価を出力する本体CLI。
-│   │   ├── analyze_boundary_gap.py          # boundary_gap 用に、境界セルのサンプル不足状況と優先候補を集計する本体CLI。
-│   │   ├── consistency_summary.py           # verify_consistency の DKW summary CSV を読む本体CLI。
-│   │   └── bbsl_confidence_gap_summary.py   # BBSL confidence-gap JSON を読む閲覧用CLI。
-│   └── plot/
-│       ├── common.py                        # plot 系共通の dataset path / output path 解決。
-│       ├── visualize_traces.py              # 実行結果CSVの3D可視化の本体CLI。
-│       ├── visualize_traces_split.py        # worker ごとの分割3D可視化の本体CLI。
-│       ├── visualize_worker_stats.py        # worker 別の衝突/TTC発生率比較の本体CLI。
-│       ├── visualize_min_ttc.py             # min_ttc 段階表示の本体CLI。
-│       ├── visualize_min_ttc_3d.py          # min_ttc 連続値ベース3D可視化の本体CLI。
-│       ├── visualize_jama_zones.py          # JAMA理論安全領域可視化の本体CLI。
-│       ├── visualize_risk_matrix.py         # 衝突/TTC/距離を合わせたリスク可視化の本体CLI。
-│       ├── visualize_collision_regions.py   # 衝突/非衝突セルのボクセル表示の本体CLI。
-│       ├── visualize_collision_surfaces.py  # 衝突外縁とAI境界面の可視化の本体CLI。
-│       └── visualize_worker_failure_clusters.py # timeout / shifted success 可視化の本体CLI。
+│   ├── analysis/                  # 集計・校正・検証用 CLI (boundary_gap, version 比較, dynamics 校正・照合, FT4D AND-rule 検証など)。
+│   ├── maintenance/               # 運用補助 (clean_trash, filter_success_csv, reconcile_late_traces)。
+│   └── plot/                      # 可視化の本体 CLI。root 直下の visualize_*.py はここを呼ぶ wrapper。
+├── tests/                         # unit / smoke テスト。
+└── (旧フレーム・互換用)
+    ├── master_orchestrator.py, run_manager.py, local_worker.py, run_scenario.py
+    ├── strategist.py, estimator.py, awchecker.py, param_logger.py, theoretical_calculator.py, point_extractors.py
+    ├── redis_cluster/{cluster_manager,process_controller,task_queue,shared_store}.py
+    ├── fix_dataset_labels.py, dataset_repo.py, archive_results.py, stop_containers.py, compare_ttc_modes.py
+    └── visualize_*.py, extract_region_data.py, analyze_*.py # tools/ への薄い wrapper
 ```
 
 ## 前提環境 (Dependencies)
@@ -164,6 +146,13 @@ MRM 自体や Mahalanobis 閾値を無効化して回避してはならない。
 
 公式 `1.8.0` image はバージョン比較用として変更せず保持する。修正版を使う場合は
 `1.8.0 + EKF diagnostic overlay` と明示した別 image を作成し、公式版との比較対象を混同しない。
+
+## Autoware 1.9.0 の既知事項
+
+1.9.0 の `initialize_diagnostic_info()` は 1.8.0 と同一で、`2026-10-02` の21号機での確認でも
+同じ誤 `EMERGENCY_STOP` が再現した。そのため実験には 1.8.0 と同じ修正を当てた
+`autoware190_ekfdiagfix` を使う。無改変の公式 image は `autoware_internal:official-1.9.0` として保持する。
+確認結果と image 構成は [docker/README_autoware_1.9.0.md](docker/README_autoware_1.9.0.md) を参照。
 
 ## クイックスタート (使用方法)
 システムの起動と管理は、すべてマスター機（21号機）の単一のターミナルから行います。
@@ -495,7 +484,7 @@ python3 run_prism_ft4d_smoke.py
 `--output`成果物など)を指定すれば、その実験データに対して同じ集約を実行できます。
 
 ### 5. チェッカープロセスの起動 (別ターミナル)
-生成されたシミュレーションデータ (JSON)を手動で安全性を判定するために、ターミナルでチェッカーを使ってくださいしてください。
+生成されたシミュレーションデータ (JSON)を手動で安全性を判定するために、ターミナルでチェッカーを使ってください。
 
 ```bash
 python3 awchecker.py --type uturn
@@ -560,11 +549,12 @@ python3 awchecker.py --type uturn
 
 ### `container_profile` を切り替えるときの扱い (`2026-08-31` 時点)
 
-- 現在サポートしている `container_profile` は `legacy`、`autoware171`、`autoware180`、`autoware180_ekfdiagfix` です。
+- 現在サポートしている `container_profile` は `legacy`、`autoware171`、`autoware180`、`autoware180_ekfdiagfix`、`autoware190`、`autoware190_ekfdiagfix` です。
 - `legacy` は旧来寄りのコンテナ起動条件で、`image=autoware_internal:2026`、`network_mode=host`、`privileged=true` を使います。
 - `autoware171` は `1.7.1` 系の現在の運用条件で、`image=autoware_internal:2026-1.7.1-x11-verified-20260808`、`network_mode=bridge`、`privileged=false` を使います。
 - `autoware180` は公式 `1.8.0` 比較用、`autoware180_ekfdiagfix` は AWSIM 運用向けの EKF 診断 overlay 版です。どちらも `autoware180_runtime/maps` と `autoware180_runtime/ml_models` を mount します。
-- `autoware180` 系 image の `/docker-entrypoint.sh` は root 権限で初期化した後、`gosu passd` で実プロセスを起動します。そのため、この2 profileだけ Docker の開始userを`root`に固定します。`docker run --user passd`を指定するとentrypoint内のuser切替が`operation not permitted`で失敗します。非`privileged`運用で表示されるloopback multicastやsysctlのWARNは非致命であり、このuser切替エラーとは別です。
+- `autoware190` は公式 `1.9.0` image に AWSIM 互換層だけを重ねた比較用、`autoware190_ekfdiagfix` は 1.8.0 と同じ EKF 診断 overlay を当てた実験用です。network / privileged / user / mount は `autoware180_ekfdiagfix` と同一で、`autoware190_runtime/maps` と `autoware190_runtime/ml_models` を mount します。公式 1.9.0 image の既定 `CYCLONEDDS_URI` は multicast を許可する `/home/aw/cyclonedds.xml` なので、profile env で `/home/passd/cyclonedds.xml` を明示しています。詳細は [docker/README_autoware_1.9.0.md](docker/README_autoware_1.9.0.md) を参照してください。
+- `autoware180` / `autoware190` 系 image の `/docker-entrypoint.sh` は root 権限で初期化した後、`gosu passd` で実プロセスを起動します。そのため、この2 profileだけ Docker の開始userを`root`に固定します。`docker run --user passd`を指定するとentrypoint内のuser切替が`operation not permitted`で失敗します。非`privileged`運用で表示されるloopback multicastやsysctlのWARNは非致命であり、このuser切替エラーとは別です。
 - `autoware180` 系workerのRay Client、checker、統計処理は、全号機で固定した`awsim_python_deps/py310`を`/opt/awsim_python_deps/py310`へread-only mountして使用します。image内のuser-local packageだけに依存するとentrypointの`gosu passd`後に`grpc`が見えず、workerが`ray_control_plane_lost`で終了するためです。
 - `autoware171` / `autoware180*` では `cyclonedds.xml`、`AWSIMScriptPy`、`autoware_map`、`AW-Runtime-Monitor` などの mount を profile 側でまとめて管理しています。`docker run` を都度手で増減させるのではなく、まず profile 定義を直してください。
 - CLI では `--container-profile` だけを指定した場合、`--scenario-profile` を省略すると同じ名前が自動で入ります。
@@ -595,7 +585,7 @@ python3 awchecker.py --type uturn
 - JAIST 情報基盤センター (CII) の対応記録は `Case#70493` です。`2026-09-28 08:45` ごろに CII 側で解除されるまで、該当ポートの号機はネットワークを使えませんでした。error-down は自動では戻らず、CII に解除を依頼する必要があります。
 - 主因と推定しているのは、`legacy` profile (`network_mode=host`、`privileged=true`) で動かしていた ROS 2 / Cyclone DDS の通信です。host モードではコンテナが物理 NIC (`enp10s0`) を直接使うため、Autoware の数百ノード分の discovery マルチキャスト (`239.255.0.1`) やトピック通信が、複数号機から学内 LAN へ流れていたと考えています。
 - `2026-08` に 24 号機で起きた `dhcp4 ... no lease` / `ip-config-unavailable` のネットワーク断 ([docs/manual_run_autoware_1_7_1_with_awsim_20260807.md](docs/manual_run_autoware_1_7_1_with_awsim_20260807.md)) も、同じ error-down だった可能性があります。
-- 対策として、`autoware171` / `autoware180*` profile では、DDS の通信を物理 NIC へ出さないために次の 3 つを重ねています (`prism_maude` も bridge・非 privileged ですが、ROS を使わないため `cyclonedds.xml` は mount しません)。
+- 対策として、`autoware171` / `autoware180*` / `autoware190*` profile では、DDS の通信を物理 NIC へ出さないために次の 3 つを重ねています (`prism_maude` も bridge・非 privileged ですが、ROS を使わないため `cyclonedds.xml` は mount しません)。
   - `network_mode=bridge`、`privileged=false`: コンテナからは docker0 と `lo` しか見えず、docker0 上のマルチキャストは物理 NIC へ転送されません。
   - `cyclonedds.xml` の mount: `NetworkInterface=lo`、`AllowMulticast=false`、`Peer=127.0.0.1` で、DDS を loopback だけに閉じ込めます。
   - 手動実行時の `iptables -I DOCKER-USER 1 -i docker0 -o enp10s0 -j REJECT`: コンテナから学内 LAN への通信を止めます ([docs/node21_autoware_1_7_1_awsim_bridge_commands_20260830.md](docs/node21_autoware_1_7_1_awsim_bridge_commands_20260830.md))。
@@ -782,6 +772,21 @@ raw process の状態は `meta.raw_run_status`、timeout の内訳は `meta.raw_
 | JSON あり、formula 欠落・Maude 失敗 | `analysis_error` | 除外 |
 | JSON なし、10秒 grace 後も未到着 | `timeout` | 除外 (`meta.timeout_reason=artifact_timeout`) |
 
+連続値の `min_ttc`、`min_distance`、`min_ttb`、`z_margin` は、旧 `awchecker.py` と同じ
+`AWKinematicsPipeline` を `targets/awsim/kinematics_bridge.py` 経由で呼んで trace JSON から算出します
+(NPCは case kind の `TARGET_NPCS`、方式は `--ext_mode`)。抽出に失敗しても Maude の判定は残し、
+値を空欄にして `meta.kinematics_error` に理由を残します。Maude 解析エラー時は4値とも `-1` です。
+`2026-10-05` より前の v2 実行 (1.7.1 / 1.8.0 / 1.9.0 比較実験を含む) ではこの抽出が呼ばれておらず、
+dataset CSV のこれらの列は空です。`--mode dkw` / `dkw_fixed` / `ebstop` / `worst_ttc` / `ttc_edge` は
+これらの列を使うため、過去データで使う場合は trace JSON から再抽出してください。
+
+trace JSON の必須項目 (`planning_trajectory`、`control_cmds` など) が空の場合は、判定は続けたうえで
+`meta.empty_trace_keys` (dataset CSV では `meta_empty_trace_keys`) に項目名を残します。Runtime Monitor は
+存在しない topic を購読してもエラーにならず空配列を書くため、Autoware の更新で topic 名が変わったときは
+この列で検出してください。実例として、Autoware 1.9.0 では `/planning/scenario_planning/trajectory` の中継が
+削除され、`2026-10-05` 以前の 1.9.0 trace の `planning_trajectory` は空です。Runtime Monitor は現在
+`/planning/trajectory` を記録しており、1.7.1 / 1.8.0 でも同じ内容が記録されることを実機で確認しています。
+
 たとえば scenario 側が exit code `124` を返しても、その後に回収した JSON が checker を通り、
 EGO/NPC の移動と衝突判定が確認できれば `success` として採用します。逆に JSON があっても
 車両が動いていない試行は衝突なしには数えません。
@@ -879,6 +884,34 @@ python3 run_orchestrator_cluster_v2.py \
 再実行先で発生した`timeout`や`execution_error`もバージョン差なので削除しません。同じ出力CSVで
 再開した場合は、すでに記録済みの`meta_replay_source_loop_num`を自動的に除外します。
 
+### 1.7.1 / 1.8.0 の両方で有効だった標本を 1.9.0 で再実行する
+
+1.9.0 では、1.7.1 の二項標本 `9,066件` のうち 1.8.0 replay でも `status=success` かつ
+`c_collision` が `0` / `1` だった `8,914件` だけを再実行します。1.7.1 の無効試行
+(`execution_error` / `timeout` / `analysis_error` の `8,110件`) と、1.8.0 側で無効になった `152件` は含めません。
+入力CSVは元の`loop_num`を保持しているため、3バージョンを同じケース番号で対応付けられます。
+抽出条件とSHA-256は同じディレクトリの `*_manifest.json` に残しています。
+
+```bash
+cd /home/passd/AWSIM_launch
+
+python3 run_orchestrator_cluster_v2.py \
+  --output /home/passd/simulation_traces_autoware190_replay_20261002/uturn_records.jsonl \
+  --dataset-csv /home/passd/simulation_traces_autoware190_replay_20261002/uturn_dataset.csv \
+  --case-kind uturn \
+  --mode replay \
+  --replay-csv /home/passd/simulation_traces_autoware190_replay_input/uturn_replay_input_valid_171_180.csv \
+  --replay-expected-count 8914 \
+  --run-id autoware190_replay_20261002 \
+  --container-profile autoware190_ekfdiagfix \
+  --scenario-profile autoware171 \
+  --headless \
+  --sync-autoware190-map \
+  --auto-restart-stale-workers \
+  --auto-restart-missing-workers \
+  --auto-restart-gpu-workers
+```
+
 ### バージョン差と確率的変動を反復検証する準備
 
 反転したケースと固定seedの無作為対照群を選び、5反復ずつ実行するためのCSV、manifest、
@@ -927,7 +960,7 @@ python3 run_orchestrator_cluster_v2.py ... \
 `recorder/AWSIMClientOpStateTracker.py` の SHA-256 と構文を worker 起動前に検証します。
 さらに container 内で lifecycle tracker を import できなければ worker は起動しません。
 
-`1.8.0` 系で map を更新したい場合だけ、次を追加します。
+`1.8.0` 系で map を更新したい場合だけ、次を追加します。`1.9.0` 系では同じ用途で `--sync-autoware190-map` を使います。
 
 ```bash
 python3 run_orchestrator_cluster_v2.py ... \
@@ -1082,23 +1115,41 @@ AWSIM/Autoware を残したまま container を存続させず、同じ containe
 
 ## 分散実行アーキテクチャとデータフロー
 
-現在のフレームワークは、複数台のマシンでシミュレーションを並列実行・管理するための分散構成（Ray/Redis）で稼働しています。
+現在のフレームワークは、21号機の司令塔と各号機の worker container を Ray で結んだ分散構成で動いています。
+以下は v2 (`run_orchestrator_cluster_v2.py`) の流れです。
 
 ### 処理フローの概要
 
-1.  **インフラ構築**: `cluster_manager` が各ワーカーPCにSSH接続し、独立したDockerコンテナを起動します。
-2.  **タスク生成**: 司令塔の `strategist` (AI) が次に検証すべきパラメータを計算し、キューに積みます。
-3.  **タスク実行**: 各コンテナ内の `run_manager` (ワーカー) がタスクを受け取ります。実行直前に `param_logger` を経由してパラメータを `shared_store` (共有金庫) のメモリ上（バッファ）に一時保存し、シミュレーションを実行します。
-4.  **結果解析**: シミュレーション完了後、出力されたJSONを `awchecker` が解析します。
-5.  **データ結合**: `awchecker` は解析結果を `shared_store` に送信します。`shared_store` はバッファに保存されていた該当パラメータと結果を紐付け（結合）し、単一の `{scenario}_dataset.csv` に追記します。
-6.  **再学習**: AIは更新された単一のデータセットCSVを読み込んで再学習し、より賢い次のタスクを生成します。
+1.  **インフラ構築**: 司令塔 (`apps/cli/orchestrator_cluster_main.py`) が Ray head を起動し、
+    `TaskQueueActor` (`runtime/cluster/ray_queue.py`) と `SharedStoreActor` (`runtime/repository/shared_store.py`) を detached actor として作ります。
+    続いて `runtime/cluster/cluster_manager.py` が `redis_cluster/cluster_config.py` の各号機へ SSH し、
+    コード同期・GPU preflight の後、`container_profile` に従って worker container を起動します。
+2.  **タスク生成**: `orchestration/orchestrator.py` が、モードに応じた戦略 (`orchestration/strategy.py` の探索戦略、
+    `binomial_mode.py` / `dkw_mode.py` / `sprt_mode.py` / `ebstop_mode.py`、`replay.py` など) から次のケースを決め、キューに積みます。
+3.  **タスク実行**: 各 container では process supervisor が PID 1 で動き、その子 process の `run_worker_v2.py` が
+    Ray Client (`ray://<master-ip>:10001`) でキューからケースを取ります。`orchestration/worker_loop.py` が
+    `targets/registry.py` で選んだ target の backend (AWSIM なら `targets/awsim/backend.py`) を呼び、
+    AWSIM・Autoware・Runtime Monitor・scenario を supervisor 経由で起動します。
+4.  **結果解析**: trace JSON を target の `result_interpreter.py` が Maude checker と kinematics 抽出にかけ、
+    共通形式の `EvaluationRecord` (`contracts/evaluation.py`) にします。
+5.  **データ結合**: worker の `RaySharedStoreResultSink` (`runtime/cluster/result_sink.py`) が、実行前に入力パラメータを、
+    実行後に結果を `SharedStoreActor` へ送ります。`SharedStore` は `loop_num` で両者を結合し、
+    `--dataset-csv` (1行1標本) と `--output` (`EvaluationRecord` の JSONL) に追記します。
+6.  **完了報告と次の判断**: worker が `TaskQueueActor` に完了を報告すると、司令塔は更新された dataset を読み直し、
+    統計の停止条件の判定や次のケース生成を行います。停止条件を満たすと stop signal を出します。
+    その後もキューに残ったケースが一定時間取られない場合は、放棄されたものとして取り消し、司令塔を終了します。
 
 ### 堅牢なエラー＆タイムアウト処理
-分散システム特有の「フリーズ」や「通信エラー」から自己復旧し、AIへの悪影響を完全に遮断する仕組みが備わっています。
-- **タイムアウト**: シミュレーションが完了しない場合、`run_manager` が検知してインフラ（AWSIM等）を強制再起動し、クリーンアップします。同時に `shared_store` に直接通知して結果を `-1`（エラー）として記録させ、後続が無限ループしないようダミーJSONを発行します。
-- **解析エラー**: JSONの破損等で解析できない場合、`awchecker` がエラーを検知して結果を `-1` として記録します。
-- **ガベージコレクション**: コンテナクラッシュ等で一生結果が届かない（孤児となった）パラメータが共有金庫のバッファに残り続けるのを防ぐため、一定時間（10分）で自動破棄するクリーンアップ機能が働きます。
-- **AIへの影響遮断**: 記録された異常データ（`-1`）は、AIがデータセットをロードする際に自動でフィルタリング（除外）されるため、AIの学習モデルが汚染されることはありません。
+分散システム特有の「フリーズ」や「通信エラー」から自己復旧し、統計や探索への悪影響を遮断する仕組みが備わっています。
+- **タイムアウト**: trace JSON が scenario timeout と10秒の grace を過ぎても届かない場合は `status=timeout` とし、
+  `SharedStore.flush_timeout` で入力パラメータと合わせて記録します (詳細は「AWSIM trace timeout と late JSON の扱い」)。
+- **解析エラー**: JSON の破損・formula 欠落・車両が動いていない試行は `status=analysis_error` とし、判定値を `-1` にします。
+- **ガベージコレクション**: container のクラッシュなどで結果が届かないパラメータは、
+  `ParameterBuffer` から一定時間 (600秒) で自動破棄されます。
+- **統計・探索への影響遮断**: 統計モードと探索戦略は `status=success` かつ判定値が有効な行だけを使うため、
+  `timeout` / `execution_error` / `analysis_error` の行は標本に入りません。
+- **worker の異常**: Ray 接続断は `ray_control_plane_lost`、GPU 異常は `gpu_unavailable` として worker を止め、
+  司令塔側の watchdog が設定に応じて container を再作成します (「`container_profile` を切り替えるときの扱い」を参照)。
 
 ## 運用コマンドリファレンス
 システムの運用は、すべてマスター（21号機）のターミナルから行います。
@@ -1141,6 +1192,12 @@ python3 -m tools.plot.visualize_version_comparison \
   --output ~/simulation_traces_autoware180_replay_20260911/autoware171_vs_180_comparison.png
 ```
 
+### TTC 計算モデル (CVM / CTRV など) の比較
+
+```bash
+# 最新のシミュレーションデータで各モデルのTTCを計算し、差分をCSVに出力する場合
+python3 compare_ttc_modes.py
+
 # 対象のフォルダ（ディレクトリ）を指定する場合
 python3 compare_ttc_modes.py --dir ~/simulation_traces_shared_20260512_144346
 
@@ -1149,6 +1206,7 @@ python3 compare_ttc_modes.py --output custom_comparison_result.csv
 
 # 両方を指定する場合
 python3 compare_ttc_modes.py --dir ~/my_test_data --output my_test_diff.csv
+```
 
 ### システムの停止・強制終了
 ```bash
@@ -1371,6 +1429,234 @@ verifiers/maude/
 ```
 
 旧`targets.prism.maude_checker`は外部利用コードを壊さないための互換importだけを残しています。新規コードは`verifiers.maude.prism_checker`を使用します。
+
+## 連続ダイナミクス (ODE/SDE) 対象
+
+`--target dynamics --case-kind uturn` は、AWSIMのUターンと同じ入力（`dx0`・`ego_speed`・`npc_speed`）を
+連続モデルで計算する対象です。AWSIM・Autoware・GPUは使わず、1件あたり1秒未満で終わります。
+設計は [docs/dynamics_target_design.md](docs/dynamics_target_design.md) を参照してください。
+
+使い方は2系統あります。
+
+- **単独モード**: ODE/SDEそのものを統計的に評価します。AWSIMの結果は混ぜません。
+  既定の制動はJAMA ai_aeb profileです。Autoware校正済みの制動を使う場合は
+  `--param controller_kind=autoware171_uturn_calibrated` を付けます。
+- **AWSIM比較モード**: 同じ入力をODEとAWSIMの両方に渡して結果を比べます。
+  ODEはAutoware 1.7.1のtraceから校正した開始状態・NPC旋回・制動を使います。
+
+### 汎用モデルとUターンへの具体化
+
+モデルはすべて、離散モード $q$ を持つハイブリッド確率微分方程式として書きます。
+
+```text
+dx = f_q(t, x) dt + G_q(t, x) dW_t        （G_q = 0 なら ODE）
+ガード g(t, x) が 0 を横切ったら、リセット x+ = r(x-) を適用してモード q -> q' へ切り替える
+```
+
+- `targets/dynamics/models/base.py`: モデルが実装するインターフェース `HybridSystem`
+  （状態名、初期モード・状態、ドリフト $f_q$、拡散 $G_q$、ガードとリセット、射影）
+- `targets/dynamics/runners/ode.py`: モードごとの `solve_ivp`。ガードは終端イベントとして根を求めます。
+- `targets/dynamics/runners/sde.py`: 固定刻みEuler--Maruyama。ノイズがなければODE runnerに委譲します。
+
+新しいモデル（車線変更など）は `HybridSystem` を実装すれば、runner・統計モード・保存経路をそのまま使えます。
+Uターンはその一実装 `UTurnSystem`（[models/uturn.py](targets/dynamics/models/uturn.py)）です。
+モードは `lane` → `turn` → `exit` で、式は [設計書 6.2節](docs/dynamics_target_design.md) にあります。
+
+### Uターンモデルの中身
+
+時刻0は、AWSIMでNPCがUターンを始めた瞬間（`dx0` 到達）に揃えています。
+
+- 開始時の相対位置・速度・方位: `dx0`・ego速度・NPC速度からの線形校正
+- NPCの旋回: 姿勢原点が半径約3.35 m・約176.6°の円弧をたどる。幾何中心はその1.12 m前方
+- egoの制動: 遅れ0.616 s、立上り0.095 s、減速度3.013 m/s²（速度系列への曲線当てはめ）
+- 衝突判定: 車体寸法を使った向き付き矩形（OBB）の重なり
+- TTC: 5秒先まで0.1秒刻みの等速予測でOBBが重なる最初の時刻
+
+校正値は `targets/dynamics/calibrations/` に置いています。各実行結果の `execution` metadata には、
+解決後の初期状態・半径・旋回角・制動profile・校正元が保存されます。
+
+### 2つの判定モード
+
+同じ軌跡から、2つの判定を常に出力します。
+
+| モード | 出力列 | 判定 | 用途 |
+|---|---|---|---|
+| 判定（judgment） | `c_collision` | 車体が重なったら衝突 | AWSIMの代わりの判定 |
+| スクリーニング（screening） | `c_screening_candidate` | 車体間の隙間 `min_clearance` が1.1 m未満 | AWSIMで再検証する候補の抽出 |
+
+Autoware 1.7.1で、結果を一度も見ていない100件（衝突50・非衝突50）を1回だけ評価した結果は次のとおりです。
+
+| モード | 衝突の検出 | 見逃し | 非衝突の正判定率 | 正解率 |
+|---|---|---|---|---|
+| 判定 | 49/50 | 1 | 92% | 95% |
+| スクリーニング | 50/50 | 0 | 72% | 86% |
+
+連続TTCの平均誤差は0.039秒でした。見逃し0/50は見逃し率0を意味しません（95%上側信頼限界は約6%）。
+検証は `ego lane=514, offset=38` の配置だけで行っています。余裕幅1.1 mはAutoware校正済みの制動に対して
+決めた値なので、JAMA制動で使った場合は `screening_provenance.calibrated_for_current_controller=false` が記録されます。
+詳細は [docs/dynamics_awsim_decision_modes_20261005.md](docs/dynamics_awsim_decision_modes_20261005.md) と
+[docs/dynamics_awsim_final_validation_v2_20261005.md](docs/dynamics_awsim_final_validation_v2_20261005.md) を参照してください。
+
+### 実行例
+
+固定パラメータで1件だけ計算する場合:
+
+```bash
+python3 run_orchestrator_v2.py \
+  --target dynamics --case-kind uturn \
+  --param dx0=15 --param ego_speed=36 --param npc_speed=18 \
+  --output artifacts/dynamics/records.jsonl \
+  --dataset-csv artifacts/dynamics/dataset.csv \
+  --dynamics-output-root artifacts/dynamics/traces
+```
+
+入力を一様分布から引き、衝突確率を二項信頼区間で評価する場合（スクリーニング指標を使う例）:
+
+```bash
+python3 run_orchestrator_v2.py \
+  --target dynamics --case-kind uturn \
+  --mode binomial_ci --max-samples 1000 --seed 42 \
+  --dynamics-decision-mode screening \
+  --output artifacts/dynamics/stat.jsonl \
+  --dataset-csv artifacts/dynamics/stat.csv
+```
+
+- `--dynamics-decision-mode` は `binomial_ci` / `sprt` の2値指標を選びます（既定 `judgment` = `c_collision`）。
+  `dkw` / `dkw_fixed` / `ebstop` は常に `min_ttc` を使います。
+- 分布を指定しない場合、固定した `--param` 以外を `scenario_specs/uturn.py` の範囲から独立一様に引きます。
+  `--dynamics-input-distribution '{"dx0":{"distribution":"uniform","min":10,"max":25}}'` で指定できます。
+- 各行には seed・分布・実際に引いた値が残り、`<output>.summary.json` に統計レポート・停止理由・
+  `dynamics_decision_mode` が保存されます。
+
+1件をODEとAWSIMの両方で実行して比べる場合（AWSIMが動く環境が必要です）:
+
+```bash
+python3 run_dynamics_awsim_compare_v2.py \
+  --dx0 15 --ego-speed 36 --npc-speed 18 \
+  --decision-mode screening \
+  --output artifacts/dynamics_compare/compare.jsonl
+```
+
+比較レコードには `dynamics_decision`、`decision_agree`、`decision_missed_awsim_collision` が入ります。
+AWSIM側が失敗した場合は「不一致」ではなく `revalidation_unavailable` として保存されます。
+
+保存済みのAWSIM traceとまとめて照合する場合:
+
+```bash
+TD=/home/passd/simulation_traces_sim_worker_21_20260911_125415
+python3 tools/analysis/validate_dynamics_against_awsim.py \
+  --trace-dir $TD --records-jsonl $TD/uturn_records.jsonl \
+  --calibration-report artifacts/autoware171_uturn_screening_holdout_split_20261005.json \
+  --sources-key final_validation_sources \
+  --output-dir artifacts/my_validation
+```
+
+この照合ツールは、AWSIM側のTTCもODEと同じコードで計算し直します（`awsim_min_ttc`）。
+`AW_Kinematics_Extractor` CVMの値は `awsim_min_ttc_extractor` 列に参考として残ります。
+このextractorはワールド座標系の `twist` をyawでもう一度回転させるため、比較の基準には使いません。
+
+### 校正のやり直し
+
+2つの校正ツール（`tools/analysis/`）は、ODEをAWSIMの実際の挙動に合わせ直すためのものです。
+普段の実験で毎回動かすものではなく、AWSIM側の挙動が変わったときに動かします。
+
+- `calibrate_autoware_uturn_braking.py`: ego制動の遅れ・立上り・減速度。トリガー後2.5秒の速度系列に
+  制動曲線を最小二乗で当てはめ、校正用traceの中央値を取ります。
+- `calibrate_uturn_start_geometry.py`: Uターン開始時の相対位置・速度・方位と、NPCの旋回半径・旋回角。
+  入力（`dx0`・ego速度・NPC速度）の線形式として最小二乗で当てはめます。最終評価用の集合の選定も行います。
+
+#### どういう状況で使うか
+
+| 状況 | 例 | 動かすツール |
+|---|---|---|
+| ego車の制動の仕方が変わった | Autowareのバージョン変更、制御パラメータの変更 | 制動の校正（その後、開始状態の校正も） |
+| NPCの動き・配置が変わった | シナリオのlane/offset変更、waypoint生成の変更、AWSIM更新 | 開始状態とNPC旋回の校正 |
+| 検証でずれが見つかった | 誤検出の増加、TTCの系統的なずれ | 原因に応じてどちらか |
+| データを増やして推定を安定させたい | 新しいAWSIM実験のtraceが溜まった | 両方 |
+
+**使ってはいけない使い方**: 最終評価の数字を良くするために、評価集合を見ながら何度も校正し直すこと。
+評価の意味がなくなります。校正し直したら、未使用の集合で評価し直してください。
+
+#### 使い方（手順と順番）
+
+AWSIMのtraceディレクトリ（`uturn_eval_sim*.json` と `uturn_records.jsonl`）が必要です。
+
+**手順1: 制動を校正する**（校正用・確認用のデータ分割もここで決まります）
+
+```bash
+TD=/home/passd/simulation_traces_sim_worker_21_20260911_125415
+python3 tools/analysis/calibrate_autoware_uturn_braking.py $TD \
+  --output artifacts/autoware171_uturn_braking_calibration_v2.json \
+  --max-files 200 --calibration-fraction 0.7 --seed 20261005
+```
+
+推定結果（遅れ・立上り・減速度）と確認用traceでの誤差が表示されます。同じseedなら同じ分割になります。
+
+**手順2: 開始状態とNPC旋回を校正し、最終評価用の集合を選ぶ**
+
+```bash
+python3 tools/analysis/calibrate_uturn_start_geometry.py \
+  --trace-dir $TD --records-jsonl $TD/uturn_records.jsonl \
+  --split-report artifacts/autoware171_uturn_braking_calibration_v2.json \
+  --exclude-report artifacts/autoware171_uturn_start_geometry_calibration.json \
+  --exclude-report artifacts/autoware171_uturn_start_geometry_calibration_v2.json \
+  --seed 20261008 \
+  --output artifacts/<新しい分割>.json
+```
+
+- `--split-report`: 手順1と同じ校正用・確認用の分割を使います。
+- `--exclude-report`: 結果を見たことのある評価集合を除外します。複数指定できます。
+- `--seed`: 最終評価の100件（衝突50・非衝突50）を選ぶ乱数です。毎回新しい値にします。
+
+**手順3: 結果をODEに反映する**（現状は手作業）
+
+ツールは推定結果をファイルに出すだけです。ODEが読む同梱ファイルへは手でコピーします。
+
+- 制動: `profile` などを `targets/dynamics/calibrations/autoware171_uturn_braking.json` へ
+- 開始状態: `coefficients` などを `targets/dynamics/calibrations/autoware171_uturn_start_geometry.json` へ
+
+**手順4: 開発用データで確認する**
+
+```bash
+python3 tools/analysis/validate_dynamics_against_awsim.py \
+  --trace-dir $TD --records-jsonl $TD/uturn_records.jsonl \
+  --calibration-report artifacts/<新しい分割>.json \
+  --sources-key development_evaluation_sources \
+  --output-dir artifacts/<開発確認の出力先>
+```
+
+ここでは何度試してもかまいません。モデルや校正方法を変えるのはこの段階です。
+
+**手順5: 余裕幅を決め直す**（現状は手作業）
+
+開発用データで「AWSIMで衝突したのにODEの隙間が最大だった値 + 0.1 m」を求め、
+`targets/dynamics/calibrations/autoware171_uturn_screening.json` を更新します。
+
+**手順6: 最終評価を1回だけ行う**
+
+手順4のコマンドの `--sources-key` を `final_validation_sources` に変えて実行します。
+
+#### 現状の制約
+
+- 同梱ファイルへの反映（手順3）と余裕幅の計算（手順5）は自動化していません。
+- 同梱ファイル名と設定名はAutoware 1.7.1用です。1.8.0や1.9.0を校正すると1.7.1の値を上書きします。
+  複数バージョンを並べて使うには、バージョンごとに校正ファイルを持てるようにコードを変える必要があります。
+
+### SDE
+
+`--param` で `solver_kind=sde`・`sde_seed`・`sde_dt_sec`・`sde_noise` を渡すと、制動・NPC加速度・NPC方位にノイズを加えられます。
+
+```bash
+python3 run_worker_v2.py \
+  --target dynamics --case-kind uturn \
+  --param dx0=12 --param ego_speed=36 --param npc_speed=18 \
+  --param solver_kind=sde --param sde_seed=3 \
+  --param 'sde_noise={"ego_brake_acceleration_std":0.25}' \
+  --output artifacts/dynamics/sde.jsonl --dataset-csv artifacts/dynamics/sde.csv
+```
+
+ノイズがすべて0の場合はODEと同一の結果になります。ノイズの大きさはまだ実データから校正していないため、
+SDEの衝突率は感度分析として扱い、現実の確率とは解釈しないでください。
 
 ## 今後の拡張性
 新しくワーカーPC（例：24号機）を追加したい場合は、`redis_cluster/cluster_config.py` に新しいIPアドレスやコンテナ名、`ROS_DOMAIN_ID` を追記するだけで、システムが全自動でコンテナを構築し、クラスターの計算力（スループット）を向上させます。
