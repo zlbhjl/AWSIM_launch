@@ -71,6 +71,20 @@ def test_build_worker_argv_forwards_optional_paths() -> None:
     assert "--headless" in argv
 
 
+def test_build_worker_argv_forwards_dynamics_artifact_root() -> None:
+    config = OrchestratorConfig(
+        output="/tmp/records.jsonl",
+        target="dynamics",
+        case_kind="uturn",
+        dynamics_output_root="/tmp/dynamics_artifacts",
+    )
+
+    argv = build_worker_argv(config)
+
+    assert "--dynamics-output-root" in argv
+    assert "/tmp/dynamics_artifacts" in argv
+
+
 def test_orchestrator_enqueues_one_task_and_returns_summary() -> None:
     queue = TaskQueue()
     captured: dict[str, object] = {}
@@ -1218,3 +1232,12 @@ def test_orchestrator_runs_prism_dkw_fixed_dispatches_all_samples_then_evaluates
     assert summary["completed_count"] == 6
     assert "Fixed Sampling + DKW Complete" in summary["stop_reason"]
     assert summary["statistical_report"]["sample_count"] == 5
+
+
+def test_dynamics_decision_modes_map_to_binary_metrics() -> None:
+    from orchestration.orchestrator import DYNAMICS_DECISION_METRICS
+
+    assert DYNAMICS_DECISION_METRICS == {
+        "judgment": "c_collision",
+        "screening": "c_screening_candidate",
+    }

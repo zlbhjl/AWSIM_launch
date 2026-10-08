@@ -13,6 +13,8 @@ from targets.awsim.result_interpreter import (
 from targets.awsim.result_interpreter import ResultInterpreter as AWSIMResultInterpreter
 from targets.bbsl.backend import BBSLBackend
 from targets.bbsl.result_interpreter import ResultInterpreter as BBSLResultInterpreter
+from targets.dynamics.backend import DynamicsBackend, DynamicsBackendConfig
+from targets.dynamics.result_interpreter import DynamicsResultInterpreter
 from targets.prism.backend import PrismBackend, PrismBackendConfig
 from targets.prism.result_interpreter import PrismResultInterpreter
 
@@ -66,6 +68,7 @@ def build_target_components(
                 target=args.target,
                 case_kind=args.case_kind,
                 config_module=args.config_module,
+                kinematics_mode=getattr(args, "ext_mode", "cvm"),
             )
         )
         return TargetComponents(
@@ -77,6 +80,14 @@ def build_target_components(
         return TargetComponents(
             backend=backend or BBSLBackend(),
             result_interpreter=result_interpreter or BBSLResultInterpreter(),
+        )
+
+    if args.target == "dynamics":
+        output_root = getattr(args, "dynamics_output_root", None) or "artifacts/dynamics"
+        return TargetComponents(
+            backend=backend
+            or DynamicsBackend(DynamicsBackendConfig(output_root=Path(output_root))),
+            result_interpreter=result_interpreter or DynamicsResultInterpreter(),
         )
 
     if args.target == "prism":

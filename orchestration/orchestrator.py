@@ -40,6 +40,19 @@ from .fixed_parameter_sampling import (
     FixedParameterSamplingStrategy,
     FixedParameterSamplingStrategyConfig,
 )
+from .random_parameter_sampling import (
+    RandomParameterSamplingConfig,
+    RandomParameterSamplingStrategy,
+)
+
+
+# Binary metric per dynamics decision mode.  "judgment" uses the physical
+# overlap (AWSIM-substitute use); "screening" uses the calibrated clearance
+# margin so that candidates are re-validated in AWSIM.
+DYNAMICS_DECISION_METRICS = {
+    "judgment": "c_collision",
+    "screening": "c_screening_candidate",
+}
 
 
 @dataclass(frozen=True)
@@ -51,6 +64,10 @@ class OrchestratorConfig:
     case_kind: str = "uturn"
     run_mode: str = "explore"
     target: str = "awsim"
+    dynamics_output_root: str | None = None
+    dynamics_input_distribution: dict[str, dict[str, float | str]] | None = None
+    dynamics_decision_mode: str = "judgment"
+    sampling_seed: int = 42
     experiment_id: str | None = None
     worker_id: str = "worker_v2_local"
     reason: str = "manual_orchestrator_run"
@@ -167,6 +184,11 @@ def build_worker_argv(config: OrchestratorConfig) -> list[str]:
         config.target,
         "--config-module",
         config.config_module,
+        *(
+            ["--dynamics-output-root", config.dynamics_output_root]
+            if config.dynamics_output_root
+            else []
+        ),
         *sum([["--tag", tag] for tag in config.tags], []),
         *(["--path-root", config.path_root] if config.path_root else []),
         *(
@@ -486,6 +508,14 @@ class Orchestrator:
             )
 
         if (
+            config.target == "dynamics"
+            and config.run_mode in {"binomial_ci", "sprt", "dkw", "dkw_fixed", "ebstop"}
+        ):
+            if config.max_samples is None:
+                raise ValueError("dynamics statistical sampling requires max_samples")
+            return self._build_dynamics_sampling_strategy(config)
+
+        if (
             config.target == "prism"
             and config.params
             and config.run_mode == "binomial_ci"
@@ -759,6 +789,59 @@ class Orchestrator:
             dkw_minimum_value=statistical_profile.minimum_dkw_value,
         )
 
+    def _build_dynamics_sampling_strategy(
+        self, config: OrchestratorConfig
+    ) -> RandomParameterSamplingStrategy:
+        """Map dynamics metrics to their statistically valid estimator family."""
+        max_samples = int(config.max_samples or 0)
+        mode = config.run_mode
+        binary_metric = DYNAMICS_DECISION_METRICS[config.dynamics_decision_mode]
+        if mode == "binomial_ci":
+            service = BinomialCIService()
+            request = StatisticalRequest(
+                method="binomial_ci", metric=binary_metric,
+                confidence=config.binomial_confidence,
+                target_width=config.binomial_target_width,
+                options={"method": config.binomial_method, "region": "custom",
+                         "min_samples": config.binomial_min_samples or min(10, max_samples),
+                         "max_samples": max_samples, "anytime_valid": config.binomial_anytime_valid},
+            )
+        elif mode == "sprt":
+            service = SPRTService()
+            request = StatisticalRequest(
+                method="sprt", metric=binary_metric, confidence=config.sprt_confidence,
+                options={"p0": config.sprt_p0, "p1": config.sprt_p1,
+                         "beta": config.sprt_beta, "region": "custom",
+                         "min_samples": config.sprt_min_samples or 0, "max_samples": max_samples},
+            )
+        elif mode in {"dkw", "dkw_fixed"}:
+            service = DKWService()
+            request = StatisticalRequest(
+                method="dkw", metric="min_ttc", confidence=config.prism_dkw_confidence,
+                target_width=config.prism_dkw_target_epsilon,
+                options={"q": 0.05, "region": "custom", "use_kde_weighting": False,
+                         "epsilon": config.prism_dkw_target_epsilon, "minimum_value": 0.0},
+            )
+        else:
+            service = EBStopService()
+            request = StatisticalRequest(
+                method="ebstop", metric="min_ttc", confidence=config.ebstop_confidence,
+                options={"epsilon": config.ebstop_epsilon, "value_range": config.ebstop_value_range,
+                         "region": "custom", "max_samples": max_samples},
+            )
+        return RandomParameterSamplingStrategy(
+            RandomParameterSamplingConfig(
+                target="dynamics", case_kind=config.case_kind, params=dict(config.params),
+                max_samples=max_samples, experiment_id=config.experiment_id,
+                case_id_prefix=config.case_id, reason_prefix="DYNAMICS_IID_SAMPLING",
+                tags=tuple(config.tags), input_distribution=config.dynamics_input_distribution,
+                seed=config.sampling_seed,
+            ),
+            dataset_repository=self._build_dataset_repository(config),
+            statistical_service=service,
+            statistical_request=request,
+        )
+
     def validate_replay_source(self, config: OrchestratorConfig) -> dict[str, object] | None:
         if config.replay_csv is None:
             return None
@@ -936,6 +1019,9 @@ class Orchestrator:
 
     def _resolve_target_total(self, config: OrchestratorConfig, last_loop_num: int) -> int | None:
         if (
+            config.target == "dynamics"
+            and config.run_mode in {"binomial_ci", "sprt", "ebstop", "dkw", "dkw_fixed"}
+        ) or (
             config.target == "prism"
             and config.params
             and config.run_mode in {"binomial_ci", "sprt", "ebstop", "dkw", "dkw_fixed"}

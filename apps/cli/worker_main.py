@@ -187,8 +187,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--target",
         default="awsim",
-        choices=["awsim", "bbsl", "prism"],
+        choices=["awsim", "bbsl", "dynamics", "prism"],
         help="Target name for the worker.",
+    )
+    parser.add_argument(
+        "--dynamics-output-root",
+        default=None,
+        help="Optional directory for target=dynamics raw trajectory artifacts.",
     )
     parser.add_argument("--worker-id", default="worker_v2_local", help="Worker identifier.")
     parser.add_argument("--reason", default="manual_local_run", help="Task reason label.")
@@ -300,7 +305,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--container-profile",
         choices=SUPPORTED_CONTAINER_PROFILES,
         default=None,
-        help="Optional named container runtime profile (for example: legacy, autoware171, autoware180).",
+        help="Optional named container runtime profile (for example: legacy, autoware171, autoware180, autoware190).",
     )
     parser.add_argument(
         "--scenario-profile",
@@ -324,6 +329,8 @@ def validate_args(args: argparse.Namespace) -> None:
         raise ValueError("Do not mix --fixture with --param key=value")
     if args.target != "awsim" and args.headless:
         raise ValueError("--headless is only supported for target=awsim")
+    if args.target == "dynamics" and args.case_kind != "uturn":
+        raise ValueError("target=dynamics currently supports only --case-kind uturn")
     queue_connect_timeout = getattr(args, "queue_connect_timeout", 30.0)
     if queue_connect_timeout is not None and float(queue_connect_timeout) < 0.0:
         raise ValueError("--queue-connect-timeout must be non-negative")
@@ -385,7 +392,11 @@ def normalize_args(
 
     if args.target != "awsim":
         if args.config_module is None:
-            args.config_module = "targets.awsim.case_kinds.uturn"
+            args.config_module = (
+                "scenario_specs.uturn"
+                if args.target == "dynamics"
+                else "targets.awsim.case_kinds.uturn"
+            )
         return args
 
     if (

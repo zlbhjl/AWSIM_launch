@@ -1,0 +1,47 @@
+{
+  "calibration_trace_count": 56,
+  "controller_kind": "autoware171_uturn_calibrated",
+  "empirical_intervals": {
+    "a_max": {
+      "q10": 2.979087,
+      "q90": 3.029075
+    },
+    "t_delay": {
+      "q10": 0.485174,
+      "q90": 0.727496
+    },
+    "t_jerk": {
+      "q10": 0.010059,
+      "q90": 0.394982
+    }
+  },
+  "held_out_errors": {
+    "a_max": {
+      "median_absolute_error": 0.003644
+    },
+    "t_delay": {
+      "median_absolute_error": 0.063824
+    },
+    "t_jerk": {
+      "median_absolute_error": 0.085156
+    }
+  },
+  "inspected_file_count": 200,
+  "method": {
+    "aggregate": "component-wise median",
+    "profile_fit": "least-squares fit of delay/ramp/deceleration to raw ego speed 0-2.5 s after trigger",
+    "speed_smoothing_window_sec": 0.2,
+    "trigger": "first NPC heading change >2 deg while speed >0.5 m/s",
+    "usable_trace": "sustained braking onset >0.5 m/s^2 for 0.15 s within 3 s"
+  },
+  "profile": {
+    "a_max": 3.01339,
+    "t_delay": 0.616189,
+    "t_jerk": 0.095315
+  },
+  "provenance": "artifacts/autoware171_uturn_braking_calibration_v2.json",
+  "schema_version": 2,
+  "selection_seed": 20261005,
+  "usable_trace_count": 80,
+  "validation_trace_count": 24
+}

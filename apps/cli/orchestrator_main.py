@@ -56,8 +56,31 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--target",
         default="awsim",
-        choices=["awsim", "bbsl", "prism"],
+        choices=["awsim", "bbsl", "dynamics", "prism"],
         help="Target name for the worker.",
+    )
+    parser.add_argument(
+        "--dynamics-output-root",
+        default=None,
+        help="Optional directory for target=dynamics raw trajectory artifacts.",
+    )
+    parser.add_argument(
+        "--dynamics-input-distribution",
+        default=None,
+        help="JSON uniform input distributions for target=dynamics statistical sampling.",
+    )
+    parser.add_argument(
+        "--dynamics-decision-mode",
+        choices=["judgment", "screening"],
+        default="judgment",
+        help=(
+            "target=dynamics binary metric for binomial_ci/sprt: judgment=c_collision "
+            "(AWSIM substitute), screening=c_screening_candidate (AWSIM re-validation candidates)."
+        ),
+    )
+    parser.add_argument(
+        "--seed", type=int, default=42,
+        help="Deterministic seed for target=dynamics statistical sampling.",
     )
     parser.add_argument("--worker-id", default="worker_v2_local", help="Worker identifier.")
     parser.add_argument(
@@ -266,7 +289,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--container-profile",
         choices=SUPPORTED_CONTAINER_PROFILES,
         default=None,
-        help="Optional named container runtime profile (for example: legacy, autoware171, autoware180).",
+        help="Optional named container runtime profile (for example: legacy, autoware171, autoware180, autoware190).",
     )
     parser.add_argument(
         "--scenario-profile",
@@ -310,6 +333,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--sync-autoware180-map",
         action="store_true",
         help="Cluster mode only. Also rsync ~/autoware180_runtime/maps to remote worker nodes.",
+    )
+    parser.add_argument(
+        "--sync-autoware190-map",
+        action="store_true",
+        help="Cluster mode only. Also rsync ~/autoware190_runtime/maps to remote worker nodes.",
     )
     parser.add_argument(
         "--with-host-worker",
@@ -670,8 +698,23 @@ def validate_args(args: argparse.Namespace) -> None:
         destination = Path(str(args.dataset_csv)).expanduser().resolve()
         if source == destination:
             raise ValueError("--replay-csv and --dataset-csv must be different files")
-    if strategy_mode and getattr(args, "target", "awsim") != "awsim":
+    dynamics_statistical_mode = (
+        getattr(args, "target", "awsim") == "dynamics"
+        and getattr(args, "mode", "explore")
+        in {"binomial_ci", "sprt", "dkw", "dkw_fixed", "ebstop"}
+    )
+    if (
+        strategy_mode
+        and getattr(args, "target", "awsim") != "awsim"
+        and not dynamics_statistical_mode
+    ):
         raise ValueError("Strategy mode without --fixture/--param is only supported for target=awsim")
+    if getattr(args, "target", "awsim") == "dynamics" and getattr(args, "case_kind", "uturn") != "uturn":
+        raise ValueError("target=dynamics currently supports only --case-kind uturn")
+    if dynamics_statistical_mode and getattr(args, "max_samples", None) is None:
+        raise ValueError("dynamics statistical sampling requires --max-samples")
+    if dynamics_statistical_mode and getattr(args, "dataset_csv", None) is None:
+        raise ValueError("dynamics statistical sampling requires --dataset-csv")
     prism_sampling_mode = (
         getattr(args, "target", "awsim") == "prism"
         and simulation_mode
@@ -880,7 +923,35 @@ def normalize_args(
                 "prism"
             ).binary_metric
         if getattr(args, "config_module", None) is None:
-            args.config_module = f"targets.awsim.case_kinds.{args.case_kind}"
+            args.config_module = (
+                "scenario_specs.uturn"
+                if getattr(args, "target", "") == "dynamics"
+                else f"targets.awsim.case_kinds.{args.case_kind}"
+            )
+        if (
+            getattr(args, "target", "") == "dynamics"
+            and getattr(args, "mode", "explore")
+            in {"binomial_ci", "sprt", "dkw", "dkw_fixed", "ebstop"}
+        ):
+            from orchestration.random_parameter_sampling import normalize_input_distribution
+            from scenario_specs.uturn import PARAM_RANGES
+
+            raw_distribution = getattr(args, "dynamics_input_distribution", None)
+            if raw_distribution is None:
+                fixed = parse_param_assignments(getattr(args, "params", []))
+                raw_distribution = {
+                    key: {"distribution": "uniform", "min": lower, "max": upper}
+                    for key, (lower, upper) in PARAM_RANGES.items()
+                    if key not in fixed
+                }
+            else:
+                try:
+                    raw_distribution = json.loads(raw_distribution)
+                except json.JSONDecodeError as exc:
+                    raise ValueError("--dynamics-input-distribution must be valid JSON") from exc
+            if not isinstance(raw_distribution, dict):
+                raise ValueError("--dynamics-input-distribution must decode to an object")
+            args.dynamics_input_distribution = normalize_input_distribution(raw_distribution)
         return args
 
     if (
@@ -948,6 +1019,10 @@ def build_orchestrator_config(args: argparse.Namespace) -> OrchestratorConfig:
         case_kind=getattr(args, "case_kind", "uturn"),
         run_mode=getattr(args, "mode", "explore"),
         target=getattr(args, "target", "awsim"),
+        dynamics_output_root=getattr(args, "dynamics_output_root", None),
+        dynamics_input_distribution=getattr(args, "dynamics_input_distribution", None),
+        dynamics_decision_mode=getattr(args, "dynamics_decision_mode", "judgment"),
+        sampling_seed=getattr(args, "seed", 42),
         experiment_id=getattr(args, "experiment_id", None),
         worker_id=getattr(args, "worker_id", "worker_v2_local"),
         reason=getattr(args, "reason", "manual_orchestrator_run"),
@@ -1043,6 +1118,18 @@ def run_orchestrator(
     args = normalize_args(args, argv=argv_list)
     orchestrator = Orchestrator(queue=queue)
     summary = orchestrator.run(build_orchestrator_config(args))
+    if (
+        args.target == "dynamics"
+        and args.mode in {"binomial_ci", "sprt", "dkw", "dkw_fixed", "ebstop"}
+    ):
+        artifact_path = Path(f"{Path(args.output).expanduser()}.summary.json").resolve()
+        artifact_path.parent.mkdir(parents=True, exist_ok=True)
+        summary["statistical_artifact"] = str(artifact_path)
+        summary["dynamics_decision_mode"] = args.dynamics_decision_mode
+        artifact_path.write_text(
+            json.dumps(summary, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
     for worker_summary in summary.get("worker_summaries", []):
         print(json.dumps(worker_summary, ensure_ascii=False))
     print(json.dumps(summary, ensure_ascii=False))

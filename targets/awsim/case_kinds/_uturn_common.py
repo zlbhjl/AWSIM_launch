@@ -1,11 +1,15 @@
 from __future__ import annotations
 
-NPC_START_TRIGGER_EGO_ACCELERATION = 2.0
-NPC_START_TRIGGER_MARGIN_SEC = 0.3
-NPC_START_TRIGGER_EXTRA_MARGIN_RATIO = 0.03
-NPC_START_TRIGGER_RATIO_RANGE = (0.85, 0.98)
-
-SCENARIO_TYPE = "uturn"
+from scenario_specs.uturn import (
+    JAMA_PROFILES,
+    NPC_START_TRIGGER_EGO_ACCELERATION,
+    NPC_START_TRIGGER_EXTRA_MARGIN_RATIO,
+    NPC_START_TRIGGER_MARGIN_SEC,
+    NPC_START_TRIGGER_RATIO_RANGE,
+    PARAM_RANGES,
+    SCENARIO_TYPE,
+    estimate_npc_start_speed_ratio,
+)
 
 # Legacy worker loops still read this upper bound while the v2 path migrates.
 REPEAT_COUNT = 10000
@@ -57,12 +61,6 @@ TARGET_PRIORITIES = [
     "c_ttc_1.5",
 ]
 
-PARAM_RANGES = {
-    "dx0": (10.0, 25.0),
-    "ego_speed": (30.0, 40.0),
-    "npc_speed": (10.0, 25.0),
-}
-
 INITIAL_EXPLORATION_LIMIT = 100
 MIN_SAMPLES = 500
 MAX_SAMPLES = 10000
@@ -86,19 +84,6 @@ FOCUS_POINTS = [
     {"dx0": 11.17, "ego_speed": 31.90, "npc_speed": 11.91},
 ]
 FOCUS_NOISE = 0.05
-
-JAMA_PROFILES = {
-    "human": {
-        "t_delay": 0.75,
-        "t_jerk": 0.6,
-        "a_max": 7.58,
-    },
-    "ai_aeb": {
-        "t_delay": 0.1,
-        "t_jerk": 0.1,
-        "a_max": 8.33,
-    },
-}
 
 TTC_EDGE_THRESHOLD = 1.5
 
@@ -132,22 +117,6 @@ EVENT_DEFINITIONS = {
     for label in RESULT_LABELS
     if label.startswith("c_")
 }
-
-
-def estimate_npc_start_speed_ratio(
-    *,
-    ego_speed: float,
-    ego_acceleration: float = NPC_START_TRIGGER_EGO_ACCELERATION,
-    margin_sec: float = NPC_START_TRIGGER_MARGIN_SEC,
-    extra_margin_ratio: float = NPC_START_TRIGGER_EXTRA_MARGIN_RATIO,
-) -> float:
-    v_target = ego_speed / 3.6
-    if v_target <= 0.0:
-        return 1.0
-
-    ratio = 1.0 - (ego_acceleration * margin_sec / v_target) - extra_margin_ratio
-    lower, upper = NPC_START_TRIGGER_RATIO_RANGE
-    return round(min(max(ratio, lower), upper), 4)
 
 
 def build_case_definition(
