@@ -9,11 +9,14 @@ from typing import Any
 
 from contracts.evaluation import EvaluationRecord, ensure_evaluation_meta
 from contracts.execution import RawRunResult, RunStatus
-from targets.awsim.case_kinds import load_rule_spec
+from targets.awsim.case_kinds import load_rule_spec, resolve_case_kind_module
+from targets.awsim.kinematics_bridge import extract_kinematics_metrics
 from verifiers.maude.backend import MaudeRunResult, run_checker
 from verifiers.maude.evaluator import FormulaSpec, evaluate_formula_results
 
 
+# Continuous metrics that the legacy awchecker extracted with AWKinematicsPipeline.
+KINEMATICS_OUTPUT_KEYS = ("min_ttc", "min_distance", "min_ttb", "z_margin")
 REQUIRED_TOP_LEVEL_KEYS = {
     "groundtruth_size",
     "groundtruth_kinematic",
@@ -33,6 +36,7 @@ class InterpretationContext:
     source_module: str = "targets.awsim.result_interpreter"
     schema_version: int = 1
     config_module: str = "targets.awsim.case_kinds.uturn"
+    kinematics_mode: str = "cvm"
 
 
 class ResultInterpreter:
@@ -40,9 +44,11 @@ class ResultInterpreter:
         self,
         context: InterpretationContext | None = None,
         maude_runner: Callable[[Path, Sequence[str]], MaudeRunResult] | None = None,
+        kinematics_extractor: Callable[[Path], Mapping[str, object]] | None = None,
     ):
         self.context = context or InterpretationContext()
         self.maude_runner = maude_runner or self._default_maude_runner
+        self.kinematics_extractor = kinematics_extractor or self._default_kinematics_extractor
         self.formula_specs, self.invalid_conditions = self._load_rule_spec()
 
     def interpret_fixture(self, fixture_path: str | Path) -> EvaluationRecord:
@@ -165,12 +171,23 @@ class ResultInterpreter:
                 error_message=reason,
             )
 
+        # A recorder subscribed to a topic that no longer exists writes an empty list
+        # silently (e.g. planning_trajectory on Autoware 1.9.0), so surface it per record.
+        empty_trace_keys = _empty_trace_keys(payload)
+        if empty_trace_keys:
+            common_meta["empty_trace_keys"] = ",".join(empty_trace_keys)
+
         output = {
             "groundtruth_kinematic_count": len(payload["groundtruth_kinematic"]),
             "perception_objects_count": len(payload["perception_objects"]),
             "boundingbox_perception_objects_count": len(payload.get("boundingbox_perception_objects", [])),
             "vehicle_sizes_count": len(payload["groundtruth_size"]["vehicle_sizes"]),
         }
+        # Added before Maude so the collision rule can still force min_distance to 0.
+        kinematics_output, kinematics_error = self._extract_kinematics(path)
+        output.update(kinematics_output)
+        if kinematics_error is not None:
+            common_meta["kinematics_error"] = kinematics_error
 
         try:
             maude_result = self.maude_runner(
@@ -184,7 +201,7 @@ class ResultInterpreter:
                 status=RunStatus.EXECUTION_ERROR,
                 common_meta=common_meta,
                 error_message=f"maude_execution_failed:{exc}",
-                output=output,
+                output=_invalidate_kinematics(output),
                 extra_meta={"analysis_pipeline": ["fixture_decode", "structural_validation", "maude_backend"]},
             )
 
@@ -195,7 +212,7 @@ class ResultInterpreter:
                 status=RunStatus.ANALYSIS_ERROR,
                 common_meta=common_meta,
                 error_message=f"maude_returncode:{maude_result.returncode}",
-                output=output,
+                output=_invalidate_kinematics(output),
                 extra_meta={
                     "analysis_pipeline": ["fixture_decode", "structural_validation", "maude_backend"],
                     "maude_stderr": maude_result.stderr,
@@ -217,7 +234,7 @@ class ResultInterpreter:
                 status=RunStatus.ANALYSIS_ERROR,
                 common_meta=common_meta,
                 error_message="maude_evaluation_error",
-                output=output,
+                output=_invalidate_kinematics(output),
                 extra_meta={
                     "analysis_pipeline": [
                         "fixture_decode",
@@ -300,6 +317,29 @@ class ResultInterpreter:
             specs.append(FormulaSpec(formula=formula, header=header))
         return specs, invalid_conditions
 
+    def _extract_kinematics(self, path: Path) -> tuple[dict[str, object], str | None]:
+        try:
+            metrics = self.kinematics_extractor(path)
+        except Exception as exc:  # noqa: BLE001 - a failed extraction must not drop the Maude result
+            return {key: "" for key in KINEMATICS_OUTPUT_KEYS}, f"{type(exc).__name__}: {exc}"
+        return {key: metrics.get(key, "") for key in KINEMATICS_OUTPUT_KEYS}, None
+
+    def _default_kinematics_extractor(self, path: Path) -> Mapping[str, object]:
+        return extract_kinematics_metrics(
+            path,
+            mode=self.context.kinematics_mode,
+            target_npcs=self._target_npcs(),
+        )
+
+    def _target_npcs(self) -> list[str]:
+        if not hasattr(self, "_cached_target_npcs"):
+            module = resolve_case_kind_module(
+                case_kind=self.context.case_kind,
+                module_name=self.context.config_module,
+            )
+            self._cached_target_npcs = list(getattr(module, "TARGET_NPCS", ["npc1"]))
+        return self._cached_target_npcs
+
     def _default_maude_runner(
         self,
         evidence_path: Path,
@@ -371,6 +411,18 @@ class ResultInterpreter:
             common_meta=meta,
             output=output,
         )
+
+
+def _empty_trace_keys(payload: Mapping[str, Any]) -> list[str]:
+    return sorted(
+        key
+        for key in REQUIRED_TOP_LEVEL_KEYS
+        if isinstance(payload.get(key), (list, dict)) and len(payload[key]) == 0
+    )
+
+
+def _invalidate_kinematics(output: Mapping[str, object]) -> dict[str, object]:
+    return {**output, **{key: -1 for key in KINEMATICS_OUTPUT_KEYS}}
 
 
 def interpret_fixture(fixture_path: str | Path) -> EvaluationRecord:

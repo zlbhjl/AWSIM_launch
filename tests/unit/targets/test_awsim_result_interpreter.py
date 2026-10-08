@@ -199,3 +199,83 @@ def test_binomial_service_accepts_only_successfully_interpreted_timeout_traces()
     assert all(record.meta["raw_run_status"] == "timeout" for record in records)
     assert report.sample_count == 2
     assert report.estimate == 0.0
+
+
+def test_result_interpreter_records_kinematics_metrics_like_legacy_awchecker() -> None:
+    from targets.awsim.kinematics_bridge import extract_kinematics_metrics
+
+    fixture = FIXTURES / "normal_trace_maude.json"
+    expected = extract_kinematics_metrics(fixture)
+
+    record = ResultInterpreter().interpret_fixture(fixture)
+
+    assert record.status is RunStatus.SUCCESS
+    for key in ("min_ttc", "min_distance", "min_ttb", "z_margin"):
+        assert record.output[key] == expected[key]
+    # Maude stays the source of truth for the collision verdict.
+    assert record.output["c_collision"] == 0
+
+
+def test_result_interpreter_keeps_maude_result_when_kinematics_extraction_fails() -> None:
+    def failing_extractor(_: Path) -> dict[str, object]:
+        raise RuntimeError("broken trace")
+
+    record = ResultInterpreter(kinematics_extractor=failing_extractor).interpret_fixture(
+        FIXTURES / "normal_trace_maude.json"
+    )
+
+    assert record.status is RunStatus.SUCCESS
+    assert record.output["min_ttc"] == ""
+    assert record.output["c_collision"] == 0
+    assert record.meta["kinematics_error"] == "RuntimeError: broken trace"
+
+
+def test_result_interpreter_forces_zero_distance_on_collision() -> None:
+    interpreter = ResultInterpreter(kinematics_extractor=lambda _: {"min_ttc": 0.4, "min_distance": 0.7})
+    stdout = "".join(
+        f"Checking formula: {spec.formula}\nModel checking result: "
+        f"{'False' if spec.header == 'c_collision' else 'True'}\n"
+        for spec in interpreter.formula_specs
+    )
+    interpreter.maude_runner = lambda _path, _formulas: MaudeRunResult(
+        command=["python3", "aw_checkerpy.py"], workdir="/tmp", returncode=0, stdout=stdout, stderr=""
+    )
+
+    record = interpreter.interpret_fixture(FIXTURES / "normal_trace_maude.json")
+
+    assert record.output["c_collision"] == 1
+    assert record.output["min_distance"] == 0.0
+    assert record.output["min_ttc"] == 0.4
+
+
+def test_result_interpreter_invalidates_kinematics_on_maude_error() -> None:
+    def fake_runner(_: Path, __: list[str]) -> MaudeRunResult:
+        return MaudeRunResult(command=["python3"], workdir="/tmp", returncode=1, stdout="", stderr="boom")
+
+    record = ResultInterpreter(
+        maude_runner=fake_runner,
+        kinematics_extractor=lambda _: {"min_ttc": 2.0, "min_distance": 3.0, "min_ttb": 1.0, "z_margin": 3.0},
+    ).interpret_fixture(FIXTURES / "normal_trace_maude.json")
+
+    assert record.status is RunStatus.ANALYSIS_ERROR
+    assert {record.output[key] for key in ("min_ttc", "min_distance", "min_ttb", "z_margin")} == {-1}
+
+
+def test_result_interpreter_flags_empty_required_trace_sections(tmp_path: Path) -> None:
+    import json
+
+    payload = json.loads((FIXTURES / "normal_trace_maude.json").read_text(encoding="utf-8"))
+    payload["planning_trajectory"] = []
+    trace_path = tmp_path / "uturn_eval_sim1.json"
+    trace_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    record = ResultInterpreter().interpret_path(trace_path)
+
+    assert record.status is RunStatus.SUCCESS
+    assert record.meta["empty_trace_keys"] == "planning_trajectory"
+
+
+def test_result_interpreter_does_not_flag_complete_trace() -> None:
+    record = ResultInterpreter().interpret_fixture(FIXTURES / "normal_trace_maude.json")
+
+    assert "empty_trace_keys" not in record.meta
