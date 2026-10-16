@@ -1,4 +1,5 @@
-from types import SimpleNamespace
+import sys
+from types import ModuleType, SimpleNamespace
 from targets.awsim.scenario_runner import (
     _install_scenario_goal_timeout,
     build_scenario,
@@ -529,7 +530,15 @@ def test_run_scenario_case_runs_manager_once_for_swerve() -> None:
     assert fake_manager.runs[0][0].kind == "swerve"
 
 
-def test_install_scenario_goal_timeout_marks_timeout_and_returns() -> None:
+def test_install_scenario_goal_timeout_marks_timeout_and_returns(monkeypatch) -> None:
+    # rclpy は ROS 環境にしかないため、import だけ通る偽モジュールを入れる (spin_once は下で注入する)。
+    fake_executors = ModuleType("rclpy.executors")
+    fake_executors.ExternalShutdownException = type("ExternalShutdownException", (Exception,), {})
+    fake_rclpy = ModuleType("rclpy")
+    fake_rclpy.executors = fake_executors
+    monkeypatch.setitem(sys.modules, "rclpy", fake_rclpy)
+    monkeypatch.setitem(sys.modules, "rclpy.executors", fake_executors)
+
     warnings: list[str] = []
     spin_calls: list[float] = []
 

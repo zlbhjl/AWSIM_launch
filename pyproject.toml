@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "awsim-launch"
+version = "0.1.0"
+description = "Adaptive safety testing framework for AWSIM / Autoware with statistical model checking and importance sampling"
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+requires-python = ">=3.10"
+authors = [{ name = "zlbhjl" }]
+# 下限はホスト (Python 3.10)・worker container・CI で動作を確認した版に合わせている。
+dependencies = [
+    "numpy>=1.24",
+    "pandas>=1.3",
+    "scipy>=1.8",
+    "scikit-learn>=1.7",
+]
+
+[project.optional-dependencies]
+# Ray による分散実行 (run_orchestrator_cluster_v2.py / run_worker_v2.py)
+cluster = ["ray[client]>=2.55"]
+# Maude による判定 (verifiers/maude)
+maude = ["maude>=1.6"]
+# 可視化 (tools/plot, visualize_*.py)
+plot = ["matplotlib>=3.5"]
+# 運用補助 (tools/maintenance)
+tools = ["pexpect>=4.8"]
+test = ["pytest>=6.2", "matplotlib>=3.5"]
+
+[project.urls]
+Repository = "https://github.com/zlbhjl/AWSIM_launch"
+
+[tool.setuptools]
+# リポジトリ直下から実行する構成のため、パッケージとしては配布しない (依存関係の導入だけに使う)。
+packages = []
+py-modules = []
+
+[tool.pytest.ini_options]
+testpaths = ["tests/unit"]
+pythonpath = ["."]
