@@ -1,0 +1,10 @@
+# Runtime and test dependencies required by the PRISM target and existing
+# statistical evaluation modules. Keep this file intentionally independent of
+# the Autoware container dependency bundle.
+maude==1.6.0
+numpy==1.26.4
+pandas==2.2.3
+scipy==1.14.1
+scikit-learn==1.5.2
+pytest==8.3.5
+ray[client]==2.55.0

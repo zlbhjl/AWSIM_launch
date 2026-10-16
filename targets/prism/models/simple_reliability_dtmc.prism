@@ -1,0 +1,26 @@
+dtmc
+
+const double P_NORMAL_DEGRADE;
+const double P_NORMAL_FAILURE;
+const double P_DEGRADED_NORMAL;
+const double P_DEGRADED_FAILURE;
+const int STEPS;
+
+module reliability
+  state : [0..2] init 0;
+
+  [] state=0 ->
+       P_NORMAL_DEGRADE : (state'=1)
+     + P_NORMAL_FAILURE : (state'=2)
+     + 1-P_NORMAL_DEGRADE-P_NORMAL_FAILURE : (state'=0);
+
+  [] state=1 ->
+       P_DEGRADED_NORMAL : (state'=0)
+     + P_DEGRADED_FAILURE : (state'=2)
+     + 1-P_DEGRADED_NORMAL-P_DEGRADED_FAILURE : (state'=1);
+
+  [] state=2 -> 1 : (state'=2);
+endmodule
+
+label "failure" = state=2;
+label "degraded" = state=1;

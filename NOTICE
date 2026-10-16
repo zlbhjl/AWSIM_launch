@@ -1,0 +1,26 @@
+AWSIM Adaptive Safety Testing Framework (AWSIM_launch)
+Copyright 2026 zlbhjl
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+verification_core/ft4d is an original implementation written for this project,
+based on the FT4D method described in research from the Japan Advanced Institute
+of Science and Technology (JAIST).
+
+Third-party software
+--------------------
+The following projects are NOT included in this repository. They are required
+for the AWSIM target and must be obtained separately from their authors under
+their own terms:
+
+- AWSIM-Labs (simulator):       https://github.com/duongtd23/AWSIM-Labs
+- AW-Runtime-Monitor
+  (incl. aw_monitor msg/srv):   https://github.com/duongtd23/AW-Runtime-Monitor
+- AW-CheckerPy
+  (aw_checkerpy.py, *.maude):   https://github.com/duongtd23/AW-CheckerPy
+- Autoware:                     https://github.com/autowarefoundation/autoware
+- PRISM:                        https://github.com/prismmodelchecker/prism
+- Maude:                        https://github.com/maude-lang/Maude
+
+AW_Kinematics_Extractor/ re-implements, in Python, the kinematics and TTC logic
+specified in the AW-CheckerPy Maude specifications.

@@ -1,0 +1,19 @@
+{
+  "calibrated_for_controller_kind": "autoware171_uturn_calibrated",
+  "decision_kind": "autoware171_uturn_screening_v1",
+  "development_data": {
+    "awsim_collision_count": 123,
+    "awsim_noncollision_count": 157,
+    "case_count": 280,
+    "false_negative_at_margin": 0,
+    "false_positive_at_margin": 34,
+    "source_reports": [
+      "artifacts/autoware171_uturn_start_geometry_calibration_v2.json (training_sources, development_validation_sources, development_evaluation_sources)",
+      "artifacts/dynamics_awsim_final_validation_v2_20261005/per_case.csv (v2 final set, inspected)"
+    ]
+  },
+  "model_kind": "autoware171_uturn_start_linear_v2 + autoware171_uturn_calibrated (schema 2)",
+  "schema_version": 1,
+  "screening_clearance_margin_m": 1.1,
+  "selection_rule": "largest dynamics min_clearance among AWSIM collisions in the development data (0.996 m), plus a 0.1 m buffer, rounded up to 0.1 m"
+}

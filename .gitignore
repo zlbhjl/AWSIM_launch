@@ -1,0 +1,18 @@
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Simulation trace outputs
+simulation_traces/
+simulation_traces_host/
+simulation_traces_*/
+*.log
+verification_results/
+
+# PRISM/Maude and other run artifacts, scratch output
+artifacts/
+tmp/
+
+# Office lock files
+.~lock.*#

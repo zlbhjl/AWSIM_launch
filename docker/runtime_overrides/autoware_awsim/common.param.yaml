@@ -1,0 +1,16 @@
+/**:
+  ros__parameters:
+    # Values used by the verified Autoware 1.7.1 AWSIM experiment image.
+    max_vel: 16.667
+
+    normal:
+      min_acc: -6.5
+      max_acc: 6.0
+      min_jerk: -13.0
+      max_jerk: 13.0
+
+    limit:
+      min_acc: -8.33
+      max_acc: 5.0
+      min_jerk: -83.33
+      max_jerk: 5.0

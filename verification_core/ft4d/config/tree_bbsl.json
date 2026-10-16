@@ -1,0 +1,41 @@
+{
+  "tree": {
+    "top_event": {
+      "id": "TOP",
+      "gate": "OR",
+      "children": [
+        {
+          "id": "SINGLE_NOISE",
+          "gate": "OR",
+          "children": ["SALT_PEPPER", "OCCLUSION", "BLUR"]
+        },
+        {
+          "id": "COMPOSITE_NOISE",
+          "gate": "OR",
+          "children": ["SP_OCC", "SP_BLUR", "OCC_BLUR", "ALL_THREE"]
+        }
+      ]
+    }
+  },
+  "params": {
+    "SALT_PEPPER": {"sigma_pf": 0.10, "sigma_pb": 0.00},
+    "OCCLUSION":   {"sigma_pf": 0.05, "sigma_pb": 0.00},
+    "BLUR":        {"sigma_pf": 0.08, "sigma_pb": 0.00},
+    "SP_OCC":      {"sigma_pf": 0.03, "sigma_pb": 0.00},
+    "SP_BLUR":     {"sigma_pf": 0.03, "sigma_pb": 0.00},
+    "OCC_BLUR":    {"sigma_pf": 0.03, "sigma_pb": 0.00},
+    "ALL_THREE":   {"sigma_pf": 0.02, "sigma_pb": 0.00}
+  },
+  "labels": {
+    "TOP":         "AIが危険な車を見逃す",
+    "SINGLE_NOISE": "単一ノイズ条件",
+    "COMPOSITE_NOISE": "複合ノイズ条件",
+    "SALT_PEPPER": "Salt & Pepper（雨）",
+    "OCCLUSION":   "オクルージョン（隠れ）",
+    "BLUR":        "ブラー（霧）",
+    "SP_OCC":      "SP + Occlusion（雨+隠れ）",
+    "SP_BLUR":     "SP + Blur（雨+霧）",
+    "OCC_BLUR":    "Occlusion + Blur（隠れ+霧）",
+    "ALL_THREE":   "SP + Occ + Blur（雨+隠れ+霧）"
+  }
+}
