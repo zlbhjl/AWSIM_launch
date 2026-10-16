@@ -3,6 +3,26 @@
 [BBSL-test](https://github.com/IOKENTOI/BBSL-test) (画像認識へのノイズ付与・推論・判定を行う実験エンジン) の
 raw result を、AWSIM_launch 内の FT4D コア (`verification_core/ft4d`) で評価します。
 FT4D の手法は [Aoki et al., "Dataset Fault Tree Analysis for Systematic Evaluation of Machine Learning Systems", PRDC 2020](https://doi.org/10.1109/PRDC50213.2020.00021) に基づきます。
+
+### 論文のうち実装している範囲
+
+実装しているもの:
+
+- 故障木の構造 (基本事象・中間事象・TOP 事象、AND / OR ゲート) と、universal dataset `U`・failure dataset `D(n)`・error dataset `E(n)`
+- 故障率 σpf = |D(n)|/|U|、誤り率 σpe = |E(n)|/|U|、基本事象での σpe = σpf · σpb
+- 伝播: OR ゲートは和、AND ゲートは `min` (論文の上限評価)。比較用に `--and-rule product` も選べます (論文の上限ではありません)
+- Chernoff-Hoeffding の不等式による標本数 n = ⌈ln(2/δ) / (2ε²)⌉ と合否判定、Bonferroni 補正による信頼度の伝播
+
+実装していないもの:
+
+- 基本事象が不合格のときに、安全機構で故障率を下げて TOP 事象まで再計算する手順 (論文の実験で行っている改善のループ)
+- 標本数が Chernoff-Hoeffding の必要数に足りないときの、自動での追加サンプリング
+- BBSL-test 以外の形式のデータからの `U`・`D(n)`・`E(n)` の自動抽出
+
+> **注意**: AND ゲートの `min` が上限になるのは、論文の定義どおり、AND 事象の error dataset が子事象の error dataset の
+> 積集合になっている場合です。複合条件で新しく生じる誤り (単独のノイズでは起きないが、組み合わさると起きる見逃し) があると
+> この前提が成り立たず、過小評価になります。例えば子事象の一方の誤り率が 0 だと、AND 事象も 0 と推定されます。
+> 重要な判断に使う場合は、複合条件の一部を直接実測して確認してください。
 以下の例の `--target-repo` は、BBSL-test を clone したディレクトリに読み替えてください。
 
 ## legacy 互換入口から起動する

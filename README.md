@@ -1,10 +1,12 @@
 # AWSIM Adaptive Safety Testing Framework
 
-自動運転ソフトウェアのシナリオベース安全性テストを、統計的な停止基準つきで自動実行するフレームワークです。
-シミュレータ AWSIM と Autoware を複数台の GPU マシンで並列に動かし、衝突確率や TTC などの指標を
-二項信頼区間・DKW・SPRT・EBStop で評価します。
+検証対象を確率モデルへ抽象化せずに直接実行し、その結果を統計的に評価する、汎用の統計的検証フレームワークです。
+**シミュレータ (対象の実行)・判定器・統計評価を分離**し、対象ごとに変わる部分 (`targets/`、`verifiers/`) だけを
+差し替えて、シミュレーション管理・コンテナでの並列実行・統計評価 (二項信頼区間・DKW・SPRT・EBStop) を共通に使います。
 
-同じ司令塔と統計処理を、AWSIM 以外の検証対象にも使えます。
+- 標準構成として、マルコフ連鎖 (PRISM) とLTL判定器 (Maude) による従来型の統計的モデル検査をそのまま実行できます。
+- 差し替えにより、Autoware + AWSIM の自動運転 AI や、YOLO + BBSL の画像認識 AI も同じ枠組みで評価できます。
+- 実行環境 (OS、ライブラリ、Autoware のバージョンなど) の違いは対象ごとのコンテナに閉じ込めます。
 
 | 対象 (`--target`) | 内容 | 必要な環境 |
 |---|---|---|
@@ -30,6 +32,14 @@
   P/Q の重みを記録します (PRISM の遷移確率、ODE/SDE の入力とノイズ経路、AWSIM の速度入力)。
   通常の P 標本と同じ標本数で、推定値・ESS・区間幅・最大重みを比較できます。
 - **FT4D**: データセットに対する故障木解析と統計的検定に基づく信頼度評価 (`verification_core/ft4d`、[Aoki et al., PRDC 2020](https://doi.org/10.1109/PRDC50213.2020.00021))。
+
+## 関連ツールとの違い
+
+従来の統計的モデル検査ツール (UPPAAL、PRISM、Storm など) は、対象をツールが扱える形式の確率モデルとして記述する必要があります。
+AI を直接扱う研究 (DSMC [Gros et al., FORTE 2020]、PyDSMC [Gros et al., QEST+FORMATS 2025]、MoGym [Gros et al., CAV 2022]、
+COOL-MC [Gross et al., SETTA 2022]) も、形式 MDP や Gymnasium API などの特定の環境・性質記述を前提とします。
+このフレームワークは、対象・実行環境・判定条件の記述形式に依存する部分を分離し、それらを差し替えて
+多様な対象に同じ統計評価を適用することを目指しています。
 
 ## アーキテクチャ
 
@@ -173,6 +183,16 @@ python3 -m apps.cli.dynamics_importance_main \
   --max-samples 1000 --sampling-seed 20261011
 ```
 
+## 適用例
+
+性質の異なる 3 種類の対象に、同じ統計評価を適用しています。
+
+| 対象 | 判定器 | 評価の例 |
+|---|---|---|
+| Autoware + AWSIM (自動運転 AI) | AW-Checker (LTL) | U ターンなどのシナリオでの衝突確率 ([Tran et al., 2025] の実験を、このフレームワーク上で再現) |
+| YOLO + KITTI + ノイズ生成 (画像認識 AI) | BBSL | ノイズ (雨・遮蔽・ぼかし) による危険の見逃し確率と、FT4D による全体のリスク評価 |
+| PRISM (マルコフ連鎖) | Maude (LTL) | DTMC の故障確率の推定と、モデル検査による厳密値との比較 |
+
 ## 出力
 
 | ファイル | 内容 |
@@ -226,6 +246,27 @@ FT4D による評価を使う場合は、次の論文も引用してください
 > Toshiaki Aoki, Daisuke Kawakami, Nobuo Chida, Takashi Tomita. Dataset Fault Tree Analysis for Systematic Evaluation of
 > Machine Learning Systems. In *2020 IEEE 25th Pacific Rim International Symposium on Dependable Computing (PRDC)*,
 > pp. 100–109, 2020. doi:[10.1109/PRDC50213.2020.00021](https://doi.org/10.1109/PRDC50213.2020.00021)
+
+## 関連文献
+
+- AW-Checker (AWSIM の trace に対する LTL 判定): D. D. Tran, T. Tomita, T. Aoki. Safety Analysis of Autonomous Driving Systems:
+  A Simulation-Based Runtime Verification Approach. *IEEE Transactions on Reliability*, 74(4):4574–4588, 2025.
+  doi:[10.1109/TR.2025.3561455](https://doi.org/10.1109/TR.2025.3561455)
+- BBSL (画像認識の形式仕様記述言語と仕様ベーステスト): K. Tanaka, T. Aoki, T. Tomita, D. Kawakami, N. Chida.
+  Specification-Based Testing of the Image-Recognition Performance of Automated Driving Systems.
+  *IEEE Access*, 13:6321–6349, 2025. doi:[10.1109/ACCESS.2024.3516082](https://doi.org/10.1109/ACCESS.2024.3516082)
+  (初出: K. Tanaka et al. Specification Based Testing of Object Detection for Automated Driving Systems via BBSL. *ENASE 2023*, pp. 250–261.)
+- DSMC: T. P. Gros et al. Deep Statistical Model Checking. *FORTE 2020*, LNCS 12136, pp. 96–114. doi:[10.1007/978-3-030-50086-3_6](https://doi.org/10.1007/978-3-030-50086-3_6)
+- PyDSMC: T. P. Gros et al. PyDSMC: Statistical Model Checking for Neural Agents Using the Gymnasium Interface.
+  *QEST+FORMATS 2025*, LNCS 16143, pp. 134–156. doi:[10.1007/978-3-032-05792-1_8](https://doi.org/10.1007/978-3-032-05792-1_8)
+- MoGym: T. P. Gros et al. MoGym: Using Formal Models for Training and Verifying Decision-making Agents. *CAV 2022*,
+  LNCS 13372, pp. 430–443. doi:[10.1007/978-3-031-13188-2_21](https://doi.org/10.1007/978-3-031-13188-2_21)
+- COOL-MC: D. Gross et al. COOL-MC: A Comprehensive Tool for Reinforcement Learning and Model Checking. *SETTA 2022*,
+  LNCS 13649, pp. 41–49. doi:[10.1007/978-3-031-21213-0_3](https://doi.org/10.1007/978-3-031-21213-0_3)
+
+## 謝辞
+
+本研究は、JST 戦略的創造研究推進事業 CREST「次世代車載基盤システムのための形式手法と検証ツールの創出」の支援を受けて実施しました。
 
 ## ライセンス
 

@@ -2,7 +2,10 @@ cff-version: 1.2.0
 message: "If you use this software, please cite it as below. If you use the FT4D evaluation, please also cite the referenced paper."
 title: "AWSIM Adaptive Safety Testing Framework"
 authors:
-  - alias: zlbhjl
+  - family-names: Zhu
+    given-names: Fengyi
+    alias: zlbhjl
+    affiliation: "Japan Advanced Institute of Science and Technology (JAIST)"
 version: 0.1.0
 date-released: 2026-10-16
 license: Apache-2.0
