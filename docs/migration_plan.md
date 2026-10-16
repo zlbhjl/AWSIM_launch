@@ -234,4 +234,4 @@
 ## 6. 補助資料
 
 - 旧 `run_manager.py` の棚卸しと `fallback 専用` / `削除可能` の分類:
-  [`docs/run_manager_legacy_inventory.md`](/home/passd/AWSIM_launch/docs/run_manager_legacy_inventory.md:1)
+  [`docs/run_manager_legacy_inventory.md`](run_manager_legacy_inventory.md)

@@ -2486,4 +2486,4 @@ BBSL を拡張するときも
 
 この文書は、今後の分解・移植・新規実装の基準とする。
 
-追加の実装ルールは [implementation_rules.md](/home/passd/AWSIM_launch/docs/implementation_rules.md) を参照する。
+追加の実装ルールは [implementation_rules.md](implementation_rules.md) を参照する。

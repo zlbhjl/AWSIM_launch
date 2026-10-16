@@ -2,7 +2,7 @@
 
 ## 1. 目的
 
-この文書は、旧 [`run_manager.py`](/home/passd/AWSIM_launch/run_manager.py:1) にまだ残っている責務を、
+この文書は、旧 [`run_manager.py`](../run_manager.py) にまだ残っている責務を、
 
 - `fallback 専用`
 - `もう削除可能`
