@@ -47,7 +47,7 @@ def test_cluster_manager_starts_head_and_launches_v2_workers() -> None:
             "container": {
                 "name": "sim_worker_21",
                 "ros_domain_id": 21,
-                "password": "passd",
+                "password": "dummy-password",
                 "user": "passd",
                 "workspace": "/home/passd",
                 "image": "autoware_internal:2026",
@@ -61,7 +61,7 @@ def test_cluster_manager_starts_head_and_launches_v2_workers() -> None:
             "container": {
                 "name": "sim_worker_22",
                 "ros_domain_id": 22,
-                "password": "passd",
+                "password": "dummy-password",
                 "user": "passd",
                 "workspace": "/home/passd",
                 "image": "autoware_internal:2026",
@@ -171,7 +171,7 @@ def test_cluster_manager_syncs_default_launch_and_requested_runtime_inputs() -> 
                 "container": {
                     "name": "sim_worker_22",
                     "ros_domain_id": 22,
-                    "password": "passd",
+                    "password": "dummy-password",
                     "user": "passd",
                     "workspace": "/home/passd",
                     "image": "autoware_internal:2026",
@@ -334,7 +334,7 @@ def test_cluster_manager_uses_named_container_and_scenario_profiles() -> None:
                 "container": {
                     "name": "sim_worker_21",
                     "ros_domain_id": 21,
-                    "password": "passd",
+                    "password": "dummy-password",
                     "user": "passd",
                     "workspace": "/home/passd",
                     "image": "autoware_internal:2026",
@@ -398,7 +398,7 @@ def test_cluster_manager_skips_ray_worker_node_for_bridge_profile() -> None:
                 "container": {
                     "name": "sim_worker_22",
                     "ros_domain_id": 22,
-                    "password": "passd",
+                    "password": "dummy-password",
                     "user": "passd",
                     "workspace": "/home/passd",
                     "image": "autoware_internal:2026",
@@ -450,7 +450,7 @@ def test_cluster_manager_starts_autoware180_entrypoint_as_root() -> None:
         "container": {
             "name": "sim_worker_21",
             "ros_domain_id": 21,
-            "password": "passd",
+            "password": "dummy-password",
             "user": "passd",
             "workspace": "/home/passd",
         },
@@ -501,7 +501,7 @@ def test_cluster_manager_uses_ray_client_address_for_bridge_shared_store() -> No
                 "container": {
                     "name": "sim_worker_22",
                     "ros_domain_id": 22,
-                    "password": "passd",
+                    "password": "dummy-password",
                     "user": "passd",
                     "workspace": "/home/passd",
                     "image": "autoware_internal:2026",
@@ -552,7 +552,7 @@ def test_cluster_manager_uses_configured_node_ip_for_legacy_profile_ray_worker()
                 "container": {
                     "name": "sim_worker_22",
                     "ros_domain_id": 22,
-                    "password": "passd",
+                    "password": "dummy-password",
                     "user": "passd",
                     "workspace": "/home/passd",
                     "image": "autoware_internal:2026",

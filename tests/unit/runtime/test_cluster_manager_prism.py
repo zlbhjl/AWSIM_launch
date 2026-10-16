@@ -19,7 +19,7 @@ def _node(*, ip: str = "192.0.2.22") -> dict[str, object]:
         "container": {
             "name": "sim_worker_22",
             "ros_domain_id": 22,
-            "password": "passd",
+            "password": "dummy-password",
             "user": "passd",
             "workspace": "/home/passd",
             "image": "must-not-be-used",

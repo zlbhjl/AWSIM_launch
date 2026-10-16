@@ -173,7 +173,7 @@ def test_cluster_launch_keeps_awsim_gpu_and_security_settings(profile_name: str)
         "container": {
             "name": "sim_worker_21",
             "ros_domain_id": 21,
-            "password": "passd",
+            "password": "dummy-password",
             "user": "passd",
             "workspace": "/home/passd",
             "image": "node-default:latest",
