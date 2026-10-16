@@ -29,7 +29,7 @@
 - **重点サンプリング (固定P・固定Q)**: 評価したい分布 P を固定したまま、人間が設定した提案分布 Q で標本を生成し、
   P/Q の重みを記録します (PRISM の遷移確率、ODE/SDE の入力とノイズ経路、AWSIM の速度入力)。
   通常の P 標本と同じ標本数で、推定値・ESS・区間幅・最大重みを比較できます。
-- **FT4D**: 故障木に基づく信頼度評価 (`verification_core/ft4d`)。
+- **FT4D**: データセットに対する故障木解析と統計的検定に基づく信頼度評価 (`verification_core/ft4d`、[Aoki et al., PRDC 2020](https://doi.org/10.1109/PRDC50213.2020.00021))。
 
 ## アーキテクチャ
 
@@ -217,6 +217,15 @@ ROS・AWSIM・GPU は不要です。AW-CheckerPy や AW-Runtime-Monitor が必�
 | [docs/network_storm_control_guide.md](docs/network_storm_control_guide.md) | DDS と storm-control の対策 |
 | [docs/legacy.md](docs/legacy.md) | 旧フレームのコマンド (通常は使わない) |
 | [docs/refactor_design.md](docs/refactor_design.md)、[docs/implementation_rules.md](docs/implementation_rules.md) | 設計方針と実装ルール |
+
+## 引用
+
+このソフトウェアを引用する場合は [CITATION.cff](CITATION.cff) を参照してください (GitHub の「Cite this repository」からも取得できます)。
+FT4D による評価を使う場合は、次の論文も引用してください。
+
+> Toshiaki Aoki, Daisuke Kawakami, Nobuo Chida, Takashi Tomita. Dataset Fault Tree Analysis for Systematic Evaluation of
+> Machine Learning Systems. In *2020 IEEE 25th Pacific Rim International Symposium on Dependable Computing (PRDC)*,
+> pp. 100–109, 2020. doi:[10.1109/PRDC50213.2020.00021](https://doi.org/10.1109/PRDC50213.2020.00021)
 
 ## ライセンス
 

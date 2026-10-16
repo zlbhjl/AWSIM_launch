@@ -4,8 +4,12 @@ Copyright 2026 zlbhjl
 This product is licensed under the Apache License, Version 2.0 (see LICENSE).
 
 verification_core/ft4d is an original implementation written for this project,
-based on the FT4D method described in research from the Japan Advanced Institute
-of Science and Technology (JAIST).
+based on the dataset fault tree analysis (FT4D) method described in:
+
+  Toshiaki Aoki, Daisuke Kawakami, Nobuo Chida, Takashi Tomita.
+  "Dataset Fault Tree Analysis for Systematic Evaluation of Machine Learning
+  Systems." In 2020 IEEE 25th Pacific Rim International Symposium on Dependable
+  Computing (PRDC), pp. 100-109, 2020. doi:10.1109/PRDC50213.2020.00021
 
 Third-party software
 --------------------

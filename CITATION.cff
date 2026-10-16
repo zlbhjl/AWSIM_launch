@@ -1,0 +1,33 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below. If you use the FT4D evaluation, please also cite the referenced paper."
+title: "AWSIM Adaptive Safety Testing Framework"
+authors:
+  - alias: zlbhjl
+version: 0.1.0
+date-released: 2026-10-16
+license: Apache-2.0
+repository-code: "https://github.com/zlbhjl/AWSIM_launch"
+keywords:
+  - automated driving
+  - scenario-based testing
+  - statistical model checking
+  - importance sampling
+  - AWSIM
+  - Autoware
+references:
+  - type: conference-paper
+    title: "Dataset Fault Tree Analysis for Systematic Evaluation of Machine Learning Systems"
+    authors:
+      - family-names: Aoki
+        given-names: Toshiaki
+      - family-names: Kawakami
+        given-names: Daisuke
+      - family-names: Chida
+        given-names: Nobuo
+      - family-names: Tomita
+        given-names: Takashi
+    collection-title: "2020 IEEE 25th Pacific Rim International Symposium on Dependable Computing (PRDC)"
+    start: 100
+    end: 109
+    year: 2020
+    doi: 10.1109/PRDC50213.2020.00021

@@ -2,6 +2,7 @@
 
 [BBSL-test](https://github.com/IOKENTOI/BBSL-test) (画像認識へのノイズ付与・推論・判定を行う実験エンジン) の
 raw result を、AWSIM_launch 内の FT4D コア (`verification_core/ft4d`) で評価します。
+FT4D の手法は [Aoki et al., "Dataset Fault Tree Analysis for Systematic Evaluation of Machine Learning Systems", PRDC 2020](https://doi.org/10.1109/PRDC50213.2020.00021) に基づきます。
 以下の例の `--target-repo` は、BBSL-test を clone したディレクトリに読み替えてください。
 
 ## legacy 互換入口から起動する
