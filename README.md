@@ -110,7 +110,18 @@ AWSIM_launch/
 - **Autoware**: `~/autoware`
 - **AW-Runtime-Monitor**: `~/AW-Runtime-Monitor` (<https://github.com/duongtd23/AW-Runtime-Monitor>)。`aw_monitor` ROS パッケージ (msg/srv) もこのリポジトリ由来です。`docker/autoware_1.9.0_awsim.Dockerfile` を使う場合は `docker/aw_monitor/` に配置してください。
 - **AW-CheckerPy (Maude)**: `~/aw-cheaker/Maude-3.5.1/AW-CheckerPy` (<https://github.com/duongtd23/AW-CheckerPy>)。`AW_Kinematics_Extractor/` で参照する `*.maude` と `aw_checkerpy.py` もこのリポジトリから取得して配置してください。
-- **Python パッケージ**: `numpy`, `pandas`, `scipy`, `scikit-learn`
+- **Python パッケージ**: Python 3.10 以上。依存は `pyproject.toml` で管理しています。
+
+```bash
+# 基本の依存 (numpy, pandas, scipy, scikit-learn)
+python3 -m pip install .
+# 用途に応じた追加: cluster (Ray), maude, plot (matplotlib), tools (pexpect), test
+python3 -m pip install ".[cluster,maude,plot]"
+
+# ユニットテスト (ROS・AWSIM・GPU は不要)
+python3 -m pip install ".[test]"
+python3 -m pytest
+```
 
 ## Autoware 1.8.0 の既知事項
 
