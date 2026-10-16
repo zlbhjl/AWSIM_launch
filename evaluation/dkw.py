@@ -172,6 +172,9 @@ class DKWService:
                 "interval_width": interval_width,
                 "region": region,
                 "use_kde_weighting": use_kde_weighting,
+                # sample_count は互換性のため従来どおり (KDE 時は有効標本数を整数化した値)。
+                "raw_sample_count": int(result["raw_sample_count"]),
+                "effective_sample_size": float(result["sample_size"]),
                 "stage_target_samples": resolved_stage_target_samples,
                 "minimum_value": resolved_minimum_value,
                 "filtered_df": result["filtered_df"],
@@ -244,6 +247,42 @@ class DKWService:
             "reports": reports,
             "sample_count": sample_count,
         }
+
+
+DKW_GUARANTEE_DKW = "dkw"
+DKW_GUARANTEE_APPROXIMATE_SEQUENTIAL = "approximate_sequential"
+DKW_GUARANTEE_APPROXIMATE_SEQUENTIAL_KDE = "approximate_sequential_kde"
+DKW_GUARANTEE_APPROXIMATE_KDE = "approximate_kde"
+DKW_GUARANTEE_NONE_MIXED_SAMPLES = "none_mixed_samples"
+
+
+def classify_dkw_guarantee(
+    *,
+    sequential: bool,
+    use_kde_weighting: bool,
+    mixed_samples: bool,
+) -> str:
+    """Classify whether the DKW inequality's guarantee applies to an evaluation.
+
+    The guarantee holds only for a single evaluation of samples drawn
+    uniformly and independently from the target region (``dkw``).
+    ``sequential`` evaluations re-check after every new sample while the error
+    budget is split per stage only, so repeated checks within a stage are not
+    covered. KDE weights are estimated and clipped, so they are an empirical
+    correction. Unweighted samples that were not drawn uniformly (for example,
+    exploration data) give no guarantee.
+    """
+    if use_kde_weighting:
+        return (
+            DKW_GUARANTEE_APPROXIMATE_SEQUENTIAL_KDE
+            if sequential
+            else DKW_GUARANTEE_APPROXIMATE_KDE
+        )
+    if mixed_samples:
+        return DKW_GUARANTEE_NONE_MIXED_SAMPLES
+    if sequential:
+        return DKW_GUARANTEE_APPROXIMATE_SEQUENTIAL
+    return DKW_GUARANTEE_DKW
 
 
 def calculate_dkw_bounds(
@@ -340,6 +379,7 @@ def calculate_dkw_bounds(
         "delta": delta,
         "delta_margin": delta_margin,
         "sample_size": effective_sample_size,
+        "raw_sample_count": int(sample_size),
         "filtered_df": filtered_df,
     }
 
@@ -385,6 +425,7 @@ def calculate_quantile_with_dkw(
         "lower_bound": x[lower_index] if lower_index < len(x) else x[-1],
         "upper_bound": x[upper_index] if upper_index < len(x) else x[-1],
         "sample_size": dkw_bounds["sample_size"],
+        "raw_sample_count": dkw_bounds["raw_sample_count"],
         "filtered_df": dkw_bounds["filtered_df"],
     }
 
@@ -512,7 +553,13 @@ def evaluate_statistical_request_multiple_summary(
 
 
 __all__ = [
+    "DKW_GUARANTEE_APPROXIMATE_KDE",
+    "DKW_GUARANTEE_APPROXIMATE_SEQUENTIAL",
+    "DKW_GUARANTEE_APPROXIMATE_SEQUENTIAL_KDE",
+    "DKW_GUARANTEE_DKW",
+    "DKW_GUARANTEE_NONE_MIXED_SAMPLES",
     "DKWService",
+    "classify_dkw_guarantee",
     "calculate_dkw_bounds",
     "calculate_quantile_with_dkw",
     "evaluate_and_summarize_dkw",

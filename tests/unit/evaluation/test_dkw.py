@@ -212,3 +212,64 @@ def test_dkw_minimum_value_is_request_policy_not_metric_name() -> None:
     assert report.sample_count == 2
     assert report.estimate == 3
     assert report.diagnostics["minimum_value"] == 0.0
+
+
+def test_classify_dkw_guarantee_holds_only_for_a_single_uniform_evaluation() -> None:
+    from evaluation.dkw import classify_dkw_guarantee
+
+    assert classify_dkw_guarantee(sequential=False, use_kde_weighting=False, mixed_samples=False) == "dkw"
+    assert (
+        classify_dkw_guarantee(sequential=True, use_kde_weighting=False, mixed_samples=False)
+        == "approximate_sequential"
+    )
+    assert (
+        classify_dkw_guarantee(sequential=True, use_kde_weighting=True, mixed_samples=True)
+        == "approximate_sequential_kde"
+    )
+    assert (
+        classify_dkw_guarantee(sequential=False, use_kde_weighting=True, mixed_samples=False)
+        == "approximate_kde"
+    )
+    assert (
+        classify_dkw_guarantee(sequential=False, use_kde_weighting=False, mixed_samples=True)
+        == "none_mixed_samples"
+    )
+
+
+def test_evaluate_request_reports_raw_and_effective_sample_counts() -> None:
+    request = StatisticalRequest(
+        method="dkw",
+        metric="min_ttc",
+        confidence=0.9,
+        target_width=3.5,
+        options={"q": 0.5},
+    )
+
+    report = evaluate_statistical_request(_sample_df(), request)
+
+    assert report.diagnostics["raw_sample_count"] == 4
+    assert report.diagnostics["effective_sample_size"] == 4.0
+    assert report.sample_count == 4
+
+
+def test_evaluate_request_keeps_raw_count_when_kde_lowers_effective_size() -> None:
+    df = pd.DataFrame(
+        {
+            "dx0": [10.0, 10.1, 10.2, 10.3, 10.4, 20.0],
+            "ego_speed": [30.0, 30.1, 30.2, 30.3, 30.4, 39.0],
+            "min_ttc": [1.0, 1.1, 1.2, 1.3, 1.4, 4.0],
+        }
+    )
+    request = StatisticalRequest(
+        method="dkw",
+        metric="min_ttc",
+        confidence=0.9,
+        target_width=10.0,
+        options={"q": 0.5, "use_kde_weighting": True},
+    )
+
+    report = DKWService(feature_names=["dx0", "ego_speed"]).evaluate_request(df, request)
+
+    assert report.diagnostics["raw_sample_count"] == 6
+    assert report.diagnostics["effective_sample_size"] < 6.0
+    assert report.sample_count == int(report.diagnostics["effective_sample_size"])

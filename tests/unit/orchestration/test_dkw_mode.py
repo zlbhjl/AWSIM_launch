@@ -229,3 +229,96 @@ def test_dkw_mode_runner_saves_samples_on_stop() -> None:
     assert payload["reason"] == "SMC Verification Complete"
     assert samples_repo.saved_dkw_samples is not None
     assert list(samples_repo.saved_dkw_samples["dx0"]) == [14.0]
+
+
+def _report_with_rows(rows, *, next_action="collect_more_samples") -> StatisticalReport:
+    return StatisticalReport(
+        method="dkw",
+        metric="min_ttc",
+        sample_count=len(rows),
+        estimate=1.0,
+        interval=(0.9, 1.1),
+        sufficient=next_action == "stop",
+        next_action=next_action,
+        diagnostics={"status": "success", "filtered_df": pd.DataFrame(rows)},
+    )
+
+
+class _FixedReportService:
+    def __init__(self, report):
+        self.report = report
+
+    def evaluate_request(self, _data, _request):
+        return self.report
+
+    def evaluate_request_multiple_summary(self, _data, *, metrics, request):
+        return {
+            "status": "success",
+            "next_action": self.report.next_action,
+            "reports": {metric: self.report for metric in metrics},
+            "sample_count": self.report.sample_count,
+        }
+
+
+def _point(_index):
+    return {"dx0": 15.0, "ego_speed": 35.0, "npc_speed": 15.0}
+
+
+def test_dkw_fixed_with_uniform_samples_has_the_dkw_guarantee_and_no_notice(capsys) -> None:
+    rows = [{"min_ttc": 1.0, "reason": "SMC: Fixed Sampling (1/2)"},
+            {"min_ttc": 2.0, "reason": "SMC: Fixed Sampling (2/2)"}]
+    report = _report_with_rows(rows, next_action="stop")
+    runner = _make_runner(dkw_service=_FixedReportService(report), max_samples=2)
+
+    runner.handle_fixed(pd.DataFrame(rows), state=DKWModeState(dispatched_task_count=2), get_random_point=_point)
+
+    assert report.diagnostics["guarantee"] == "dkw"
+    assert capsys.readouterr().err == ""
+
+
+def test_dkw_fixed_with_exploration_rows_has_no_guarantee(capsys) -> None:
+    rows = [{"min_ttc": 1.0, "reason": "SMC: Fixed Sampling (1/2)"},
+            {"min_ttc": 2.0, "reason": "Boundary exploration"}]
+    report = _report_with_rows(rows, next_action="stop")
+    runner = _make_runner(dkw_service=_FixedReportService(report), max_samples=2)
+
+    runner.handle_fixed(pd.DataFrame(rows), state=DKWModeState(dispatched_task_count=2), get_random_point=_point)
+
+    assert report.diagnostics["guarantee"] == "none_mixed_samples"
+    assert "--dkw-pure-smc" in capsys.readouterr().err
+
+
+def test_dkw_sequential_is_approximate_and_the_notice_is_shown_once(capsys) -> None:
+    rows = [{"min_ttc": 1.0, "reason": "SMC: Sequential-DKW Sampling (Stage 1)"},
+            {"min_ttc": 2.0, "reason": "SMC: Sequential-DKW Sampling (Stage 1)"}]
+    report = _report_with_rows(rows)
+    runner = _make_runner(dkw_service=_FixedReportService(report), pure_smc=True, max_samples=10)
+    state = DKWModeState()
+
+    runner.handle_sequential(pd.DataFrame(rows), state=state, get_random_point=_point)
+    runner.handle_sequential(pd.DataFrame(rows), state=state, get_random_point=_point)
+
+    assert report.diagnostics["guarantee"] == "approximate_sequential"
+    assert capsys.readouterr().err.count("[DKW]") == 1
+
+
+def test_dkw_sequential_without_pure_smc_is_marked_as_kde_approximation(capsys) -> None:
+    rows = [{"min_ttc": 1.0, "reason": "Boundary exploration"},
+            {"min_ttc": 2.0, "reason": "SMC: Sequential-DKW Sampling (Stage 1)"}]
+    report = _report_with_rows(rows)
+    runner = _make_runner(dkw_service=_FixedReportService(report), pure_smc=False, max_samples=10)
+
+    runner.handle_sequential(pd.DataFrame(rows), state=DKWModeState(), get_random_point=_point)
+
+    assert report.diagnostics["guarantee"] == "approximate_sequential_kde"
+    assert "KDE" in capsys.readouterr().err
+
+
+def test_dkw_guarantee_is_recorded_for_each_simultaneous_metric() -> None:
+    rows = [{"min_ttc": 1.0, "min_distance": 2.0, "reason": "SMC: Fixed Sampling (1/1)"}]
+    report = _report_with_rows(rows, next_action="stop")
+    runner = _make_runner(dkw_service=_FixedReportService(report), simultaneous=True, max_samples=1)
+
+    runner.handle_fixed(pd.DataFrame(rows), state=DKWModeState(dispatched_task_count=1), get_random_point=_point)
+
+    assert report.diagnostics["guarantee"] == "dkw"

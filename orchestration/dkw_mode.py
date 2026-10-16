@@ -1,12 +1,20 @@
 from __future__ import annotations
 
+import sys
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 
 import pandas as pd
 
 from contracts.statistics import BoundsMap, StatisticalReport, StatisticalRequest
-from evaluation.dkw import DKWService
+from evaluation.dkw import (
+    DKW_GUARANTEE_APPROXIMATE_SEQUENTIAL,
+    DKW_GUARANTEE_APPROXIMATE_SEQUENTIAL_KDE,
+    DKW_GUARANTEE_DKW,
+    DKW_GUARANTEE_NONE_MIXED_SAMPLES,
+    DKWService,
+    classify_dkw_guarantee,
+)
 from contracts.statistical_region import (
     PassthroughStatisticalRegionPolicy,
     StatisticalRegionPolicy,
@@ -14,6 +22,27 @@ from contracts.statistical_region import (
 from runtime.repository.statistical_samples import StatisticalSamplesRepository
 
 import point_extractors
+
+# DKWModeRunner が発行する一様標本の reason に必ず含まれる印 (_select_dataset と同じ基準)。
+SMC_REASON_MARKER = "SMC"
+
+_GUARANTEE_NOTICES = {
+    DKW_GUARANTEE_APPROXIMATE_SEQUENTIAL: (
+        "[DKW] --mode dkw re-checks the interval after every new sample, but the error budget "
+        "is split per stage only, so the interval is approximate. For the DKW guarantee, use "
+        "--mode dkw_fixed with --dkw-pure-smc and a sample size n >= ln(2/delta) / (2 epsilon^2)."
+    ),
+    DKW_GUARANTEE_APPROXIMATE_SEQUENTIAL_KDE: (
+        "[DKW] --mode dkw without --dkw-pure-smc reuses exploration data with estimated KDE "
+        "weights, and re-checks after every new sample; the interval is approximate. For the "
+        "DKW guarantee, use --mode dkw_fixed with --dkw-pure-smc."
+    ),
+    DKW_GUARANTEE_NONE_MIXED_SAMPLES: (
+        "[DKW] The evaluated samples include rows that were not drawn uniformly by this mode "
+        "(for example, exploration data from --resume-from), used without weighting; the DKW "
+        "guarantee does not hold. Use --dkw-pure-smc to evaluate uniform samples only."
+    ),
+}
 
 
 @dataclass(slots=True)
@@ -56,6 +85,7 @@ class DKWModeRunner:
         self.statistical_history_repository = statistical_history_repository
         self.statistical_samples_repository = statistical_samples_repository
         self.region_policy = region_policy or PassthroughStatisticalRegionPolicy()
+        self._guarantee_notice_shown = False
 
     @classmethod
     def from_runtime_config(
@@ -192,6 +222,9 @@ class DKWModeRunner:
                     bounds=state.bounds,
                 ),
             )
+            self._annotate_guarantee_from_summary(
+                summary, sequential=True, use_kde_weighting=not self.config.pure_smc
+            )
             self._append_history_from_summary(summary, state)
             if summary.get("next_action") == "stop":
                 self._save_samples_from_summary(summary)
@@ -216,6 +249,9 @@ class DKWModeRunner:
                     stage_target_samples=target_samples,
                     bounds=state.bounds,
                 ),
+            )
+            self._annotate_guarantee(
+                report, sequential=True, use_kde_weighting=not self.config.pure_smc
             )
             self._append_history(report, state)
             if report.next_action == "stop":
@@ -295,6 +331,9 @@ class DKWModeRunner:
                     bounds=state.bounds,
                 ),
             )
+            self._annotate_guarantee_from_summary(
+                summary, sequential=False, use_kde_weighting=False
+            )
             self._append_history_from_summary(summary, state)
             if summary.get("next_action") == "stop":
                 self._save_samples_from_summary(summary)
@@ -315,6 +354,7 @@ class DKWModeRunner:
                     bounds=state.bounds,
                 ),
             )
+            self._annotate_guarantee(report, sequential=False, use_kde_weighting=False)
             self._append_history(report, state)
             if report.next_action == "stop":
                 self._save_samples_from_report(report)
@@ -371,6 +411,43 @@ class DKWModeRunner:
         except Exception:
             return False
         return filtered is not None and not filtered.empty
+
+    def _annotate_guarantee(
+        self,
+        report: object,
+        *,
+        sequential: bool,
+        use_kde_weighting: bool,
+    ) -> None:
+        """Record in the report whether the DKW guarantee applies, and say so once."""
+        if not isinstance(report, StatisticalReport):
+            return
+        if report.diagnostics.get("status") != "success":
+            return
+        guarantee = classify_dkw_guarantee(
+            sequential=sequential,
+            use_kde_weighting=use_kde_weighting,
+            mixed_samples=_has_non_smc_samples(report.diagnostics.get("filtered_df")),
+        )
+        report.diagnostics["guarantee"] = guarantee
+        if guarantee != DKW_GUARANTEE_DKW and not self._guarantee_notice_shown:
+            self._guarantee_notice_shown = True
+            print(_GUARANTEE_NOTICES.get(guarantee, f"[DKW] guarantee={guarantee}"), file=sys.stderr)
+
+    def _annotate_guarantee_from_summary(
+        self,
+        summary: Mapping[str, object],
+        *,
+        sequential: bool,
+        use_kde_weighting: bool,
+    ) -> None:
+        reports = summary.get("reports")
+        if not isinstance(reports, Mapping):
+            return
+        for report in reports.values():
+            self._annotate_guarantee(
+                report, sequential=sequential, use_kde_weighting=use_kde_weighting
+            )
 
     def _append_history(self, report: object, state: DKWModeState) -> None:
         if not isinstance(report, StatisticalReport):
@@ -450,6 +527,21 @@ class DKWModeRunner:
                 if repository is not None:
                     repository.save_dkw_samples(filtered_df)
                 return
+
+
+def _has_non_smc_samples(filtered_df: object) -> bool:
+    """Return True when evaluated rows include samples this mode did not draw uniformly.
+
+    Rows are recognized as uniform samples by the same ``reason`` marker that
+    ``--dkw-pure-smc`` filters on. Without a ``reason`` column the origin is
+    unknown, so the rows are treated as mixed.
+    """
+    if not isinstance(filtered_df, pd.DataFrame) or filtered_df.empty:
+        return False
+    if "reason" not in filtered_df.columns:
+        return True
+    reasons = filtered_df["reason"].fillna("").astype(str)
+    return not bool(reasons.str.contains(SMC_REASON_MARKER, regex=False).all())
 
 
 __all__ = [

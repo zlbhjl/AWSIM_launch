@@ -158,7 +158,7 @@ python3 run_orchestrator_cluster_v2.py \
 |---|---|---|
 | `binomial_ci` | 0/1 指標 (`c_collision` など) の確率の信頼区間 | 区間幅が目標以下 |
 | `sprt` | 確率が `p0` 以上か `p1` 以下かの仮説検定 | どちらかの仮説を採択 |
-| `dkw` / `dkw_fixed` | 連続値 (`min_ttc` など) の分位点 | 逐次 (段階的 alpha-spending) / 指定数の標本後に 1 回 |
+| `dkw_fixed` / `dkw` | 連続値 (`min_ttc` など) の分位点 | 指定数の標本後に 1 回 (保証あり) / 逐次 (早く止まるが近似) |
 | `ebstop` | 有界な連続値の平均 (相対誤差) | 実測の分散に基づく区間が目標以下 |
 | `replay` | 既存 dataset のケースの再実行 | 入力のケースを使い切る |
 | `explore` ほか | 衝突境界の探索 (GP) | 探索戦略ごとの条件 (`--max-samples` など) |
@@ -167,7 +167,9 @@ python3 run_orchestrator_cluster_v2.py \
 
 - `binomial_ci` は既定で、標本が増えるたびに同じ信頼水準で区間を計算し直します。何度も確認すること自体による誤り率の増加を抑えるには、`--binomial-anytime-valid` を使います (必要な標本数は増えます)。
 - 安全性の判断に使う確率の区間には、`--binomial-method clopper-pearson` を使ってください。Wilson は近似のため、真の確率が 0 や 1 に近いと実際のカバレッジが名目の水準を下回ることがあります。
-- `dkw` は既定で、KDE で推定した重みにより探索モードの標本も再利用します。これは経験的な補正で、DKW 不等式の保証はそのままでは成り立ちません。保証が必要な場合は `--dkw-pure-smc` を指定し、新しい一様標本だけで評価してください。
+- DKW 不等式の保証が成り立つのは、**`--mode dkw_fixed` を一様な標本だけで 1 回評価する場合**です (`--dkw-pure-smc`、または過去の探索データを引き継がない新規実行)。標本数は事前に n ≥ ln(2/δ)/(2ε²) で決めます (例: ε = 0.02、δ = 0.05 で n ≥ 4,611)。
+- `--mode dkw` (逐次) は、新しい標本ごとに区間を確認しますが、誤り率はステージ単位でしか配分していないため近似です。`--dkw-pure-smc` を付けないと、探索データを KDE で推定した重みで再利用するので、さらに近似が重なります。
+- 各評価の `diagnostics.guarantee` に、保証の種類 (`dkw` / `approximate_sequential` / `approximate_sequential_kde` / `none_mixed_samples`) が記録されます。
 
 ### 重点サンプリング
 

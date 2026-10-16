@@ -106,9 +106,9 @@ python3 master_orchestrator.py --type uturn --mode dkw --dkw_region intersect_sa
 #  union_safe: 上記2つのどちらかを満たす（OR）、少し広めの安全領域。
 python3 master_orchestrator.py --type uturn --mode dkw --dkw_region union_safe
 
-# 3. 過去の探索データを使わず、新しい一様標本だけで評価する場合 (DKW 不等式の保証が成り立つのはこの指定のとき)
+# 3. 過去の探索データを使わず、新しい一様標本だけで評価する場合 (逐次評価のため近似。保証が必要なら 5. の dkw_fixed)
 # (既定では、KDE で推定した重みで AI の探索データも再利用します。重みが推定値で標本も適応的に選ばれているため、
-#  これは経験的な補正であり、DKW 不等式の保証はそのままでは成り立ちません)
+#  これは経験的な補正であり、DKW 不等式の保証はそのままでは成り立ちません。逐次評価もステージ内の繰り返しの確認を含むため近似です)
 python3 master_orchestrator.py --type uturn --mode dkw --dkw_region intersect_safe --dkw_pure_smc
 
 # 4. TTCや距離など、複数の指標を同時に評価し、ボンフェローニ補正を用いた絶対的な同時保証を行う場合
@@ -118,10 +118,10 @@ python3 master_orchestrator.py --type uturn --mode dkw --dkw_simultaneous
 python3 master_orchestrator.py --type uturn --mode dkw --dkw_region intersect_safe --dkw_simultaneous --resume_from ~/simulation_traces_shared_20260611_104737
 
 # 【固定サンプリング+一括DKW評価モード (dkw_fixed)】指定回数サンプリング後に一括DKW評価
-# 5. 純粋SMC: 過去データを使わず、新規6000回のサンプリングのみで評価する場合
+# 5. 純粋SMC: 過去データを使わず、新規6000回のサンプリングのみで評価する場合 (DKW 不等式の保証が成り立つ構成)
 python3 master_orchestrator.py --type uturn --mode dkw_fixed --dkw_region intersect_safe --dkw_simultaneous --max_samples 6000 --dkw_pure_smc
 
-# 6. 全データ利用: resume_fromの過去データ＋新規サンプルで評価する場合 (経験的な評価)
+# 6. 全データ利用: resume_fromの過去データ＋新規サンプルで評価する場合 (探索データを重みなしで使うため保証なし)
 python3 master_orchestrator.py --type uturn --mode dkw_fixed --dkw_region intersect_safe --dkw_simultaneous --resume_from ~/simulation_traces_shared_20260611_104737 --max_samples 6000
 
 # 7. 中断再開: 途中まで終わった dkw_fixed を再開する場合（_dataset.csv の続きから）
