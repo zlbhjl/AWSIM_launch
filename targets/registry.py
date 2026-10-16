@@ -49,7 +49,13 @@ def build_target_components(
                     scenario_profile=getattr(args, "scenario_profile", None),
                 ),
                 manage_infra=True,
-                reuse_infra_between_runs=True,
+                # Normal AWSIM workflows retain their existing reuse default.
+                # The importance-sampling CLI opts into a fresh simulation
+                # world per record to prevent a rejected trace from affecting
+                # the next proposal sample.
+                reuse_infra_between_runs=not bool(
+                    getattr(args, "fresh_infra_per_sample", False)
+                ),
                 initial_warmup_sec=40.0,
                 extra_refresh_warmup_sec=15.0,
                 infra_ext_mode=getattr(args, "ext_mode", "cvm"),

@@ -21,6 +21,11 @@ from .calibration import (
 )
 from .models.uturn import UTurnODEConfig, VehicleState
 from .models.uturn_sde import UTurnSDEConfig, UTurnSDENoise
+from .runners.sde import (
+    DefensiveGaussianNoiseProposal,
+    GaussianDriftNoisePath,
+    GaussianDriftScheduleEntry,
+)
 
 
 # The AWSIM scenario constructs a half circle from the NPC front centre to the
@@ -96,6 +101,9 @@ class DynamicsExecutionProfile:
             meta["sde_seed"] = self.sde_config.seed
             meta["sde_dt_sec"] = self.sde_config.dt_sec
             meta["sde_noise"] = dict(vars(self.sde_config.noise))
+            if self.sde_config.noise_proposal is not None:
+                meta["noise_path_q"] = _noise_path_definition(self.sde_config.noise_proposal)
+            meta["noise_path_p"] = _noise_path_definition(self.sde_config.noise_target)
             meta["effective_solver_kind"] = "ode" if zero_noise else "sde"
             meta["zero_noise_reduction"] = zero_noise
         else:
@@ -271,6 +279,10 @@ def build_execution_profile(
                 ego_brake_acceleration_std=_optional_float(noise, "ego_brake_acceleration_std", default=0.0),
                 npc_heading_std_rad_per_sqrt_sec=_optional_float(noise, "npc_heading_std_rad_per_sqrt_sec", default=0.0),
             ),
+            noise_target=_gaussian_noise_path(inputs.get("noise_path_p")),
+            noise_proposal=_sde_noise_proposal(
+                inputs.get("noise_path_q", inputs.get("sde_noise_proposal"))
+            ),
         )
         sde_config.validate()
 
@@ -327,6 +339,104 @@ def _mapping(value: object | None, *, name: str) -> Mapping[str, object]:
     if not isinstance(value, Mapping):
         raise ValueError(f"{name} must be a mapping")
     return value
+
+
+def _gaussian_noise_path(value: object | None) -> GaussianDriftNoisePath:
+    if value is None:
+        return GaussianDriftNoisePath()
+    spec = _mapping(value, name="noise_path_p")
+    if spec.get("distribution") != "gaussian_drift":
+        raise ValueError("noise_path_p.distribution must be 'gaussian_drift'")
+    return GaussianDriftNoisePath(
+        channel_drifts=_noise_channel_drifts(spec, name="noise_path_p"),
+        drift_schedule=_noise_drift_schedule(spec, name="noise_path_p"),
+    )
+
+
+def _sde_noise_proposal(
+    value: object | None,
+) -> GaussianDriftNoisePath | DefensiveGaussianNoiseProposal | None:
+    if value is None:
+        return None
+    spec = _mapping(value, name="noise_path_q")
+    distribution = spec.get("distribution")
+    if distribution == "gaussian_drift":
+        return GaussianDriftNoisePath(
+            channel_drifts=_noise_channel_drifts(spec, name="noise_path_q"),
+            drift_schedule=_noise_drift_schedule(spec, name="noise_path_q"),
+        )
+    if distribution != "defensive_gaussian_drift":
+        raise ValueError("noise_path_q.distribution must be 'gaussian_drift' or 'defensive_gaussian_drift'")
+    base_weight = _optional_float(spec, "base_weight", default=float("nan"))
+    return DefensiveGaussianNoiseProposal(
+        base_weight=base_weight,
+        channel_drifts=_noise_channel_drifts(spec, name="noise_path_q"),
+        drift_schedule=_noise_drift_schedule(spec, name="noise_path_q"),
+    )
+
+
+def _noise_channel_drifts(spec: Mapping[str, object], *, name: str) -> dict[str, float]:
+    drifts = _mapping(spec.get("channel_drifts", {}), name=f"{name}.channel_drifts")
+    allowed = {"ego_brake_acceleration", "npc_acceleration", "npc_heading"}
+    if not set(drifts) <= allowed:
+        raise ValueError(f"{name} has an unsupported Brownian channel")
+    return {
+        str(channel): _optional_float(drifts, str(channel), default=float("nan"))
+        for channel in drifts
+    }
+
+
+def _noise_drift_schedule(
+    spec: Mapping[str, object],
+    *,
+    name: str,
+) -> tuple[GaussianDriftScheduleEntry, ...]:
+    raw_schedule = spec.get("drift_schedule", [])
+    if not isinstance(raw_schedule, list):
+        raise ValueError(f"{name}.drift_schedule must be a list")
+    entries: list[GaussianDriftScheduleEntry] = []
+    for index, raw_entry in enumerate(raw_schedule):
+        entry = _mapping(raw_entry, name=f"{name}.drift_schedule[{index}]")
+        raw_time = entry.get("time", [0.0, float("inf")])
+        if not isinstance(raw_time, (list, tuple)) or len(raw_time) != 2:
+            raise ValueError(f"{name}.drift_schedule[{index}].time must contain [start, end]")
+        start = _number(raw_time[0], name=f"{name}.drift_schedule[{index}].time[0]")
+        end_raw = raw_time[1]
+        end = float("inf") if end_raw in {None, "inf"} else _number(end_raw, name=f"{name}.drift_schedule[{index}].time[1]")
+        mode = entry.get("mode")
+        if mode is not None and not isinstance(mode, str):
+            raise ValueError(f"{name}.drift_schedule[{index}].mode must be a string")
+        entries.append(GaussianDriftScheduleEntry(
+            start_sec=start,
+            end_sec=end,
+            mode=mode,
+            channel_drifts=_noise_channel_drifts(entry, name=f"{name}.drift_schedule[{index}]"),
+        ))
+    return tuple(entries)
+
+
+def _noise_path_definition(
+    path: GaussianDriftNoisePath | DefensiveGaussianNoiseProposal,
+) -> dict[str, object]:
+    definition: dict[str, object] = {
+        "distribution": (
+            "defensive_gaussian_drift"
+            if isinstance(path, DefensiveGaussianNoiseProposal)
+            else "gaussian_drift"
+        ),
+        "channel_drifts": dict(path.channel_drifts),
+        "drift_schedule": [
+            {
+                "time": [entry.start_sec, entry.end_sec],
+                **({"mode": entry.mode} if entry.mode is not None else {}),
+                "channel_drifts": dict(entry.channel_drifts),
+            }
+            for entry in path.drift_schedule
+        ],
+    }
+    if isinstance(path, DefensiveGaussianNoiseProposal):
+        definition["base_weight"] = path.base_weight
+    return definition
 
 
 def _resolve_vehicle_geometry(
@@ -415,6 +525,15 @@ def _optional_float(values: Mapping[str, object], key: str, *, default: float) -
     if not math.isfinite(value):
         raise ValueError(f"Invalid numeric dynamics input: {key}")
     return value
+
+
+def _number(value: object, *, name: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"Invalid numeric dynamics input: {name}")
+    parsed = float(value)
+    if not math.isfinite(parsed):
+        raise ValueError(f"Invalid numeric dynamics input: {name}")
+    return parsed
 
 
 __all__ = [

@@ -9,6 +9,7 @@ from typing import Any
 
 from contracts.evaluation import EvaluationRecord, ensure_evaluation_meta
 from contracts.execution import RawRunResult, RunStatus
+from contracts.sampling import copy_sampling_metadata
 from targets.awsim.case_kinds import load_rule_spec, resolve_case_kind_module
 from targets.awsim.kinematics_bridge import extract_kinematics_metrics
 from verifiers.maude.backend import MaudeRunResult, run_checker
@@ -78,7 +79,7 @@ class ResultInterpreter:
                 case_kind=raw_run_result.case_kind,
                 status=final_status,
                 meta=ensure_evaluation_meta(
-                    meta,
+                    copy_sampling_metadata(raw_run_result.meta, meta),
                     source_module=self.context.source_module,
                     schema_version=self.context.schema_version,
                     created_at=datetime.now().astimezone().isoformat(timespec="seconds"),
@@ -94,6 +95,7 @@ class ResultInterpreter:
         record.evidence = merged_evidence
         record.meta.setdefault("raw_run_status", raw_run_result.status.value)
         record.meta.setdefault("raw_run_meta", dict(raw_run_result.meta))
+        record.meta = copy_sampling_metadata(raw_run_result.meta, record.meta)
         record.meta.setdefault("execution_status", raw_run_result.status.value)
         record.meta.setdefault("analysis_status", record.status.value)
         if raw_run_result.status is RunStatus.TIMEOUT:

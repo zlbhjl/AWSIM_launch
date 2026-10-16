@@ -8,6 +8,7 @@ from typing import Mapping
 
 from contracts.evaluation import EvaluationRecord, ensure_evaluation_meta
 from contracts.execution import RunStatus
+from contracts.sampling import copy_sampling_metadata
 from verifiers.maude.prism_checker import PrismMaudeChecker
 from verifiers.maude.prism_trace_evaluator import PrismTraceEvaluator
 
@@ -38,7 +39,13 @@ class PrismResultInterpreter:
             return self._error(raw_run_result, "missing_raw_result_json")
         try:
             payload = json.loads(Path(raw_path).read_text(encoding="utf-8"))
-            return self.interpret_payload(payload, case_id=raw_run_result.case_id, raw_path=raw_path)
+            record = self.interpret_payload(
+                payload,
+                case_id=raw_run_result.case_id,
+                raw_path=raw_path,
+            )
+            record.meta = copy_sampling_metadata(raw_run_result.meta, record.meta)
+            return record
         except (OSError, ValueError, TypeError, RuntimeError) as exc:
             return self._error(raw_run_result, str(exc))
 
@@ -127,5 +134,12 @@ class PrismResultInterpreter:
             case_kind=raw.case_kind,
             status=RunStatus.ANALYSIS_ERROR if raw.status == RunStatus.SUCCESS else raw.status,
             evidence=dict(raw.evidence),
-            meta=ensure_evaluation_meta({"error_message": message, "raw_run_status": raw.status.value}, source_module=self.context.source_module, schema_version=self.context.schema_version),
+            meta=ensure_evaluation_meta(
+                copy_sampling_metadata(
+                    raw.meta,
+                    {"error_message": message, "raw_run_status": raw.status.value},
+                ),
+                source_module=self.context.source_module,
+                schema_version=self.context.schema_version,
+            ),
         )

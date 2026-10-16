@@ -7,6 +7,9 @@ import pytest
 
 from targets.dynamics.models.base import Transition
 from targets.dynamics.runners import (
+    DefensiveGaussianNoiseProposal,
+    GaussianDriftNoisePath,
+    GaussianDriftScheduleEntry,
     ODESolverSettings,
     SDESolverSettings,
     solve_hybrid_ode,
@@ -114,3 +117,88 @@ def test_sde_runner_without_noise_is_the_ode_solution() -> None:
 
     assert np.array_equal(stochastic.times_sec, deterministic.times_sec)
     assert np.array_equal(stochastic.states, deterministic.states)
+
+
+def test_sde_defensive_gaussian_drift_records_exact_bounded_path_ratio() -> None:
+    system = DecayThenHold(x_switch=-10.0, sigma=0.3)
+    dt, steps, seed, base_weight, control = 0.01, 4, 19, 0.7, 1.25
+    trajectory = solve_hybrid_sde(
+        system,
+        SDESolverSettings(
+            horizon_sec=dt * steps,
+            dt_sec=dt,
+            seed=seed,
+            ode_fallback=_ode(),
+            noise_proposal=DefensiveGaussianNoiseProposal(
+                base_weight=base_weight, channel_drifts={"w": control}
+            ),
+        ),
+    )
+
+    rng = np.random.default_rng(seed)
+    tilted = rng.random() >= base_weight
+    mean = control * math.sqrt(dt)
+    innovations = np.array([rng.normal() + (mean if tilted else 0.0) for _ in range(steps)])
+    log_p = float(-0.5 * np.sum(innovations**2 + math.log(2.0 * math.pi)))
+    log_r = float(-0.5 * np.sum((innovations - mean) ** 2 + math.log(2.0 * math.pi)))
+    log_q = float(np.logaddexp(math.log(base_weight) + log_p, math.log(1.0 - base_weight) + log_r))
+
+    assert trajectory.noise_sample_count == steps
+    assert trajectory.noise_log_p == pytest.approx(log_p)
+    assert trajectory.noise_log_q == pytest.approx(log_q)
+    assert trajectory.noise_log_p - trajectory.noise_log_q <= -math.log(base_weight) + 1e-12
+
+
+def test_sde_defensive_proposal_with_unit_base_weight_is_nominal_path() -> None:
+    system = DecayThenHold(x_switch=-10.0, sigma=0.3)
+    nominal = solve_hybrid_sde(
+        system, SDESolverSettings(horizon_sec=0.1, dt_sec=0.01, seed=23, ode_fallback=_ode())
+    )
+    q_equals_p = solve_hybrid_sde(
+        system,
+        SDESolverSettings(
+            horizon_sec=0.1, dt_sec=0.01, seed=23, ode_fallback=_ode(),
+            noise_proposal=DefensiveGaussianNoiseProposal(
+                base_weight=1.0, channel_drifts={"w": 2.0}
+            ),
+        ),
+    )
+
+    assert np.array_equal(q_equals_p.states, nominal.states)
+    assert q_equals_p.noise_log_p == pytest.approx(q_equals_p.noise_log_q)
+
+
+def test_sde_direct_gaussian_p_q_schedules_evaluate_the_same_innovations() -> None:
+    system = DecayThenHold(x_switch=-10.0, sigma=0.3)
+    dt, steps, seed = 0.01, 3, 31
+    p_control, q_control = 0.5, -1.25
+    trajectory = solve_hybrid_sde(
+        system,
+        SDESolverSettings(
+            horizon_sec=dt * steps,
+            dt_sec=dt,
+            seed=seed,
+            ode_fallback=_ode(),
+            noise_target=GaussianDriftNoisePath(
+                drift_schedule=(GaussianDriftScheduleEntry(
+                    start_sec=0.0, end_sec=1.0, mode="decay",
+                    channel_drifts={"w": p_control},
+                ),),
+            ),
+            noise_proposal=GaussianDriftNoisePath(
+                drift_schedule=(GaussianDriftScheduleEntry(
+                    start_sec=0.0, end_sec=1.0, mode="decay",
+                    channel_drifts={"w": q_control},
+                ),),
+            ),
+        ),
+    )
+
+    rng = np.random.default_rng(seed)
+    innovations = np.array([rng.normal() + q_control * math.sqrt(dt) for _ in range(steps)])
+    p_mean, q_mean = p_control * math.sqrt(dt), q_control * math.sqrt(dt)
+    expected_p = float(-0.5 * np.sum((innovations - p_mean) ** 2 + math.log(2.0 * math.pi)))
+    expected_q = float(-0.5 * np.sum((innovations - q_mean) ** 2 + math.log(2.0 * math.pi)))
+
+    assert trajectory.noise_log_p == pytest.approx(expected_p)
+    assert trajectory.noise_log_q == pytest.approx(expected_q)

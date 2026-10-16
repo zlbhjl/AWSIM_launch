@@ -98,6 +98,9 @@ class HybridTrajectory:
     states: np.ndarray
     modes: tuple[str, ...]
     mode_entry_times: dict[str, float]
+    noise_log_p: float = 0.0
+    noise_log_q: float = 0.0
+    noise_sample_count: int = 0
 
 
 __all__ = ["Guard", "HybridSystem", "HybridTrajectory", "Reset", "Transition"]

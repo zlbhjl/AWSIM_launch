@@ -1,0 +1,36 @@
+schema_version: 1
+experiment_id: prism_rare_event_q2_v1
+target: prism
+
+target_measure:
+  id: simple_reliability_rare_p_v1
+  definition:
+    model: simple_reliability_dtmc
+    constants:
+      p_normal_degrade: 0.02
+      p_normal_failure: 0.001
+      p_degraded_normal: 0.30
+      p_degraded_failure: 0.02
+
+proposal:
+  id: rare_failure_strong_bias_q2
+  mode: manual_proposal
+  definition:
+    transition_probabilities:
+      normal:   {normal: 0.92, degraded: 0.05, failure: 0.03}
+      degraded: {normal: 0.25, degraded: 0.60, failure: 0.15}
+      failure:  {failure: 1.00}
+  constraints:
+    preserve_support: true
+    max_weight: 100.0
+
+adaptive_update:
+  enabled: false
+  policy: disabled
+
+# 安全要求を人間が決定した後だけ有効化する。
+# H0: p <= null_upper、H1: p >= alternative_lower。
+# 両者の間は保留域であり、標本を増やしても判定目的を満たさない。
+# sequential_decision:
+#   null_upper: <安全側の境界>
+#   alternative_lower: <危険側の境界>

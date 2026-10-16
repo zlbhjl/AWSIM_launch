@@ -1,0 +1,29 @@
+schema_version: 1
+experiment_id: dynamics_uturn_q_equals_p_v1
+target: dynamics
+
+# Baseline validation plan: Q is intentionally identical to P.
+target_measure:
+  id: uturn_uniform_input_p_v1
+  definition:
+    model_id: uturn
+    case_kind: uturn
+    execution:
+      solver_kind: ode
+      jama_profile: ai_aeb
+      controller_kind: jama_ai_aeb
+      alignment_mode: uturn_trigger_aligned
+    parameters:
+      dx0:       {distribution: uniform, min: 10.0, max: 25.0}
+      ego_speed: {distribution: uniform, min: 30.0, max: 40.0}
+      npc_speed: {distribution: uniform, min: 10.0, max: 25.0}
+
+# No bias: this confirms that input generation and P/Q accounting agree.
+proposal:
+  id: uturn_uniform_q_equals_p_v1
+  mode: manual_proposal
+  definition:
+    parameters:
+      dx0:       {distribution: uniform, min: 10.0, max: 25.0}
+      ego_speed: {distribution: uniform, min: 30.0, max: 40.0}
+      npc_speed: {distribution: uniform, min: 10.0, max: 25.0}

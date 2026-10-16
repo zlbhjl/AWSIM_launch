@@ -13,6 +13,7 @@ from .runner import (
     run_prism_model_check,
     run_prism_sample_path,
 )
+from .sampling import run_importance_sample_path, run_target_sample_path
 from .trace_parser import parse_simpath_csv, summarize_trace
 
 
@@ -70,13 +71,45 @@ class PrismBackend:
                     "property_results_csv": str(model_check.result_csv),
                 }
             elif execution_kind == "sample_path":
-                sample = run_prism_sample_path(
-                    definition,
-                    constants=constants,
-                    horizon=horizon,
-                    output_dir=run_dir,
-                    prism_executable=prism_executable,
-                    timeout_sec=timeout_sec,
+                sampling_plan_path = test_case.input.get("sampling_plan_path")
+                sampling_metadata: dict[str, object] | None = None
+                target_adapter = test_case.input.get("sampling_engine") == "target_adapter"
+                if target_adapter:
+                    sample = run_target_sample_path(
+                        definition, constants=constants, horizon=horizon, output_dir=run_dir,
+                        seed=_optional_seed(test_case.input.get("sampling_seed")),
+                    )
+                elif sampling_plan_path is None:
+                    sample = run_prism_sample_path(
+                        definition,
+                        constants=constants,
+                        horizon=horizon,
+                        output_dir=run_dir,
+                        prism_executable=prism_executable,
+                        timeout_sec=timeout_sec,
+                    )
+                else:
+                    sample = run_importance_sample_path(
+                        definition,
+                        constants=constants,
+                        horizon=horizon,
+                        output_dir=run_dir,
+                        sampling_plan_path=str(sampling_plan_path),
+                        seed=_optional_seed(test_case.input.get("sampling_seed")),
+                        proposal_definition=test_case.input.get("proposal_definition"),
+                        proposal_id=_optional_string(test_case.input.get("proposal_id")),
+                        proposal_version=_optional_positive_int(test_case.input.get("proposal_version")),
+                        sampling_mode=_optional_string(test_case.input.get("proposal_sampling_mode")),
+                    )
+                    sampling_metadata = sample.sampling_metadata
+                trace_execution = (
+                    _execution_payload(sample.execution)
+                    if sampling_metadata is None and not target_adapter
+                    else {
+                        "command": ["targets.prism.sampling.run_importance_sample_path"],
+                        "returncode": 0,
+                        "elapsed_sec": None,
+                    }
                 )
                 trace = parse_simpath_csv(sample.trace_csv)
                 trace_summary = summarize_trace(trace, horizon=horizon)
@@ -88,7 +121,7 @@ class PrismBackend:
                     "trace_summary": trace_summary,
                     "trace_csv": str(sample.trace_csv),
                     "executions": {
-                        "trace": _execution_payload(sample.execution),
+                        "trace": trace_execution,
                     },
                 }
                 evidence = {
@@ -102,13 +135,21 @@ class PrismBackend:
             raw_path = run_dir / "raw_result.json"
             raw_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
             evidence["raw_result_json"] = str(raw_path)
+            meta: dict[str, object] = {
+                "source_module": self.config.source_module,
+                "path_root": str(run_dir),
+            }
+            if execution_kind == "sample_path" and sampling_metadata is not None:
+                meta["sampling"] = sampling_metadata
+            if execution_kind == "sample_path" and target_adapter:
+                meta["sampling_engine"] = "target_adapter"
             return RawRunResult(
                 case_id=test_case.case_id,
                 target="prism",
                 case_kind=test_case.case_kind,
                 status=RunStatus.SUCCESS,
                 evidence=evidence,
-                meta={"source_module": self.config.source_module, "path_root": str(run_dir)},
+                meta=meta,
             )
         except PrismExecutionError as exc:
             return self._error_result(test_case, RunStatus.EXECUTION_ERROR, str(exc), execution=exc.execution)
@@ -141,3 +182,25 @@ class PrismBackend:
 
 def _execution_payload(execution) -> dict[str, object]:
     return {"command": list(execution.command), "returncode": execution.returncode, "elapsed_sec": execution.elapsed_sec}
+
+
+def _optional_seed(value: object) -> int | None:
+    if value is None:
+        return None
+    return int(value)
+
+
+def _optional_string(value: object) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError("optional proposal string must be a non-empty string")
+    return value
+
+
+def _optional_positive_int(value: object) -> int | None:
+    if value is None:
+        return None
+    if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+        raise ValueError("proposal_version must be a positive integer")
+    return value

@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from contracts.execution import RawRunResult, RunStatus, TestCase
+from contracts.sampling import copy_sampling_metadata, sampling_metadata_from_meta
 
 from .models.uturn import UTurnSimulationResult, simulate_uturn
 from .models.uturn_sde import simulate_uturn_sde
@@ -63,9 +64,36 @@ class DynamicsBackend:
                 "source_module": self.config.source_module,
                 "path_root": str(run_dir),
                 "backend_mode": profile.solver_kind,
-                **profile.to_meta(),
+                **self._result_meta(test_case, profile, result),
             },
         )
+
+    @staticmethod
+    def _result_meta(
+        test_case: TestCase,
+        profile: DynamicsExecutionProfile,
+        result: UTurnSimulationResult,
+    ) -> dict[str, object]:
+        meta = profile.to_meta()
+        if profile.sde_config is None:
+            return meta
+        meta["sde_path_log_p"] = result.noise_log_p
+        meta["sde_path_log_q"] = result.noise_log_q
+        meta["sde_path_noise_sample_count"] = result.noise_sample_count
+        sampling = sampling_metadata_from_meta(test_case.meta)
+        if sampling is None or sampling.get("importance_weight_status") != "available":
+            return meta
+        # The input sampler supplied its P_input/Q_input ratio.  When this
+        # run also changed the Brownian path law, append its exact realised
+        # Euler--Maruyama path likelihood ratio.
+        if profile.sde_config.noise_proposal is not None:
+            sampling["log_p"] = float(sampling["log_p"]) + result.noise_log_p
+            sampling["log_q"] = float(sampling["log_q"]) + result.noise_log_q
+            sampling["log_importance_weight"] = (
+                float(sampling["log_p"]) - float(sampling["log_q"])
+            )
+            meta = copy_sampling_metadata({"sampling": sampling}, meta)
+        return meta
 
     def _create_run_dir(self, output_root: Path, case_id: str) -> Path:
         safe_case_id = "".join(
@@ -104,13 +132,19 @@ class DynamicsBackend:
                 writer.writerow([float(time_sec), *[float(value) for value in state]])
 
         raw_path = run_dir / "raw_result.json"
+        execution = {
+            **profile.to_meta(),
+            "sde_path_log_p": result.noise_log_p,
+            "sde_path_log_q": result.noise_log_q,
+            "sde_path_noise_sample_count": result.noise_sample_count,
+        }
         payload = {
             "schema_version": 1,
             "model_id": profile.model_id,
             "case_id": test_case.case_id,
             "case_kind": test_case.case_kind,
             "input": profile.source_input,
-            "execution": profile.to_meta(),
+            "execution": execution,
             "events": {
                 "npc_start_time_sec": result.npc_start_time_sec,
                 "uturn_start_time_sec": result.uturn_start_time_sec,

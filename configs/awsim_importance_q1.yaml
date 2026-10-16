@@ -1,0 +1,39 @@
+schema_version: 1
+experiment_id: awsim_uturn_histogram_p_v1
+target: awsim
+target_measure:
+  id: synthetic_uturn_speed_histogram_p_v1
+  definition:
+    case_kind: uturn
+    fixed_inputs:
+      dx0: 15.0
+    execution: {}
+    # Software-validation P only.  It is not a claim about real traffic.
+    parameters:
+      ego_speed:
+        distribution: histogram
+        bins:
+          - {min: 30.0, max: 35.0, weight: 0.5}
+          - {min: 35.0, max: 40.0, weight: 0.5}
+      npc_speed:
+        distribution: histogram
+        bins:
+          - {min: 10.0, max: 15.0, weight: 0.6}
+          - {min: 15.0, max: 20.0, weight: 0.4}
+proposal:
+  id: high_ego_low_npc_q1
+  mode: manual_proposal
+  definition:
+    parameters:
+      ego_speed:
+        distribution: mixture_target_focus
+        base_weight: 0.8
+        focus:
+          distribution: histogram
+          bins: [{min: 35.0, max: 40.0, weight: 1.0}]
+      npc_speed:
+        distribution: mixture_target_focus
+        base_weight: 0.8
+        focus:
+          distribution: histogram
+          bins: [{min: 10.0, max: 15.0, weight: 1.0}]

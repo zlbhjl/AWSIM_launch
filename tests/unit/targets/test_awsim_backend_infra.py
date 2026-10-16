@@ -456,6 +456,53 @@ def test_awsim_backend_reuses_infra_between_runs_and_warms_up_once(
     assert sleep_calls == [40.0]
 
 
+def test_awsim_backend_fresh_infra_mode_shuts_down_after_each_success(
+    tmp_path: Path,
+) -> None:
+    trace_path = tmp_path / "uturn_test_sim1.json"
+    process_manager = FakeProcessManager(trace_path)
+    backend = AWSIMBackend(
+        config=AWSIMBackendConfig(
+            runtime_profile=build_runtime_profile(
+                case_kind="uturn",
+                source_setup_script=None,
+                launch_dir=tmp_path,
+            ),
+            output_dir=tmp_path,
+            timeout_sec=0.1,
+            poll_interval_sec=0.0,
+            settle_time_sec=0.0,
+            manage_infra=True,
+            reuse_infra_between_runs=False,
+        ),
+        process_manager=process_manager,
+    )
+
+    first = backend.run(
+        TestCase(
+            case_id="backend_infra_fresh_1",
+            target="awsim",
+            case_kind="uturn",
+            input={"dx0": 15.0, "ego_speed": 35.0, "npc_speed": 14.0},
+        )
+    )
+    second = backend.run(
+        TestCase(
+            case_id="backend_infra_fresh_2",
+            target="awsim",
+            case_kind="uturn",
+            input={"dx0": 16.0, "ego_speed": 35.0, "npc_speed": 14.0},
+        )
+    )
+
+    assert first.status is RunStatus.SUCCESS
+    assert second.status is RunStatus.SUCCESS
+    assert len(process_manager.infra_calls) == 2
+    assert len(process_manager.client_calls) == 2
+    assert process_manager.stop_case_client_calls == 0
+    assert process_manager.shutdown_all_calls == 2
+
+
 def test_awsim_backend_reuse_mode_cleans_up_all_on_timeout(
     tmp_path: Path,
 ) -> None:

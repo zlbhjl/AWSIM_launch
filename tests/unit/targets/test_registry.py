@@ -19,3 +19,22 @@ def test_build_target_components_disables_awchecker_for_v2_awsim() -> None:
     assert components.backend.config.manage_infra is True
     assert components.backend.config.include_awchecker is False
     assert components.backend.config.runtime_profile.container_profile == "autoware171"
+    assert components.backend.config.reuse_infra_between_runs is True
+
+
+def test_build_target_components_can_use_fresh_awsim_infra_per_sample() -> None:
+    args = SimpleNamespace(
+        target="awsim",
+        case_kind="uturn",
+        headless=False,
+        container_profile="autoware171",
+        scenario_profile="autoware171",
+        ext_mode="cvm",
+        config_module=None,
+        fresh_infra_per_sample=True,
+    )
+
+    components = build_target_components(args)
+
+    assert components.backend.config.manage_infra is True
+    assert components.backend.config.reuse_infra_between_runs is False

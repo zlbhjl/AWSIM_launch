@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 from contracts.execution import RawRunResult, RunStatus, TestCase as ExecutionTestCase
+from orchestration.worker_loop import WorkerLoop
 from targets.dynamics.backend import DynamicsBackend, DynamicsBackendConfig
 from targets.dynamics.calibration import (
     AUTOWARE171_UTURN_CONTROLLER_KIND,
@@ -109,6 +110,91 @@ def test_dynamics_backend_persists_sde_provenance(tmp_path: Path) -> None:
     record = DynamicsResultInterpreter().interpret_raw_run_result(raw)
     assert record.status is RunStatus.SUCCESS
     assert record.meta["solver_kind"] == "sde"
+
+
+def test_sde_noise_path_ratio_is_combined_with_input_sampling_ratio(tmp_path: Path) -> None:
+    case = ExecutionTestCase(
+        case_id="dynamics_sde_is",
+        target="dynamics",
+        case_kind="uturn",
+        input={
+            "dx0": 15.0, "ego_speed": 36.0, "npc_speed": 18.0,
+            "solver_kind": "sde", "sde_seed": 17, "sde_dt_sec": 0.01,
+            "max_step_sec": 0.01,
+            "sde_noise": {"npc_acceleration_std": 0.2},
+            "sde_noise_proposal": {
+                "distribution": "defensive_gaussian_drift",
+                "base_weight": 0.8,
+                "channel_drifts": {"npc_acceleration": -0.4},
+            },
+            "output_root": str(tmp_path),
+        },
+        meta={"sampling": {
+            "plan_id": "sde_is", "target_measure_id": "uturn_sde_p",
+            "sampling_mode": "manual_proposal", "proposal_id": "noise_q",
+            "importance_weight_status": "available",
+            "log_p": -1.0, "log_q": -1.2, "log_importance_weight": 0.2,
+            "importance_weight_upper_bound": 1.25,
+        }},
+    )
+    record = WorkerLoop(
+        backend=DynamicsBackend(), result_interpreter=DynamicsResultInterpreter()
+    ).run_once(case)
+
+    assert record is not None and record.status is RunStatus.SUCCESS
+    sampling = record.meta["sampling"]
+    assert float(sampling["log_importance_weight"]) == pytest.approx(
+        float(sampling["log_p"]) - float(sampling["log_q"])
+    )
+    assert float(sampling["log_importance_weight"]) <= -math.log(0.8) + 0.2 + 1e-12
+    assert record.meta["raw_run_meta"]["sde_path_noise_sample_count"] > 0
+
+
+def test_sde_direct_noise_p_q_schedules_are_persisted_and_weighted(tmp_path: Path) -> None:
+    case = ExecutionTestCase(
+        case_id="dynamics_sde_direct_is",
+        target="dynamics",
+        case_kind="uturn",
+        input={
+            "dx0": 15.0, "ego_speed": 36.0, "npc_speed": 18.0,
+            "solver_kind": "sde", "sde_seed": 41, "sde_dt_sec": 0.01,
+            "max_step_sec": 0.01,
+            "sde_noise": {"npc_acceleration_std": 0.2},
+            "noise_path_p": {
+                "distribution": "gaussian_drift",
+                "drift_schedule": [{
+                    "time": [0.0, 1.0],
+                    "channel_drifts": {"npc_acceleration": 0.2},
+                }],
+            },
+            "noise_path_q": {
+                "distribution": "gaussian_drift",
+                "drift_schedule": [{
+                    "time": [0.0, 1.0],
+                    "channel_drifts": {"npc_acceleration": -0.4},
+                }],
+            },
+            "output_root": str(tmp_path),
+        },
+        meta={"sampling": {
+            "plan_id": "sde_direct_is", "target_measure_id": "uturn_sde_p",
+            "sampling_mode": "manual_proposal", "proposal_id": "noise_q",
+            "importance_weight_status": "available",
+            "log_p": -1.0, "log_q": -1.0, "log_importance_weight": 0.0,
+        }},
+    )
+
+    record = WorkerLoop(
+        backend=DynamicsBackend(), result_interpreter=DynamicsResultInterpreter()
+    ).run_once(case)
+
+    assert record is not None and record.status is RunStatus.SUCCESS
+    sampling = record.meta["sampling"]
+    assert float(sampling["log_importance_weight"]) == pytest.approx(
+        float(sampling["log_p"]) - float(sampling["log_q"])
+    )
+    assert record.meta["raw_run_meta"]["noise_path_p"]["distribution"] == "gaussian_drift"
+    assert record.meta["raw_run_meta"]["noise_path_q"]["distribution"] == "gaussian_drift"
 
 
 def test_zero_noise_sde_records_ode_reduction(tmp_path: Path) -> None:

@@ -20,6 +20,51 @@ class RecordingSink:
         self.records.append(record)
 
 
+def test_worker_loop_carries_sampling_provenance_from_case_to_raw_and_record() -> None:
+    sampling = {
+        "plan_id": "awsim_uturn_is_v1",
+        "target_measure_id": "normal_input_v1",
+        "proposal_id": "near_collision_v1",
+        "proposal_version": 1,
+        "importance_weight_status": "available",
+        "log_p": -4.25,
+        "log_q": -2.5,
+        "log_importance_weight": -1.75,
+        "sampling_mode": "manual_proposal",
+    }
+    test_case = TestCase(
+        case_id="sampling_1",
+        target="awsim",
+        case_kind="uturn",
+        meta={"sampling": sampling},
+    )
+    received_raw: list[RawRunResult] = []
+
+    def backend(case: TestCase) -> RawRunResult:
+        return RawRunResult(
+            case_id=case.case_id,
+            target=case.target,
+            case_kind=case.case_kind,
+            status=RunStatus.SUCCESS,
+            meta={"source_module": "test.backend"},
+        )
+
+    def interpreter(raw: RawRunResult) -> EvaluationRecord:
+        received_raw.append(raw)
+        return EvaluationRecord(
+            case_id=raw.case_id,
+            target=raw.target,
+            case_kind=raw.case_kind,
+            status=raw.status,
+        )
+
+    record = WorkerLoop(backend=backend, result_interpreter=interpreter).run_once(test_case)
+
+    assert received_raw[0].meta["sampling"] == sampling
+    assert record is not None
+    assert record.meta["sampling"] == sampling
+
+
 def test_worker_loop_runs_successful_case_and_saves_record() -> None:
     test_case = TestCase(
         case_id="loop_1",

@@ -1,0 +1,22 @@
+schema_version: 1
+experiment_id: dynamics_uturn_dx0_narrow_q2
+target: dynamics
+target_measure:
+  id: uturn_uniform_input_p_v1
+  definition:
+    model_id: uturn
+    case_kind: uturn
+    execution: {solver_kind: ode, jama_profile: ai_aeb, controller_kind: jama_ai_aeb, alignment_mode: uturn_trigger_aligned}
+    parameters:
+      dx0:       {distribution: uniform, min: 10.0, max: 25.0}
+      ego_speed: {distribution: uniform, min: 30.0, max: 40.0}
+      npc_speed: {distribution: uniform, min: 10.0, max: 25.0}
+proposal:
+  id: uturn_dx0_10_12_q2
+  mode: manual_proposal
+  definition:
+    parameters:
+      # P sample collisions: dx0 = 10.00--11.53 m.  P remains 80% of Q.
+      dx0: {distribution: mixture_uniform_focus, base_weight: 0.80, focus: {min: 10.0, max: 12.0}}
+      ego_speed: {distribution: uniform, min: 30.0, max: 40.0}
+      npc_speed: {distribution: uniform, min: 10.0, max: 25.0}

@@ -1,0 +1,41 @@
+schema_version: 1
+experiment_id: prism_rare_event_suggest_v1
+target: prism
+
+target_measure:                 # P: 検証対象。変更しない。
+  id: simple_reliability_rare_p_v1
+  definition:
+    model: simple_reliability_dtmc
+    constants:
+      p_normal_degrade: 0.02
+      p_normal_failure: 0.001
+      p_degraded_normal: 0.30
+      p_degraded_failure: 0.02
+
+proposal:                       # 初期Q。候補の基準点であり、Pではない。
+  id: rare_failure_search_base_q
+  mode: manual_proposal
+  definition:
+    transition_probabilities:
+      normal:   {normal: 0.96, degraded: 0.03, failure: 0.01}
+      degraded: {normal: 0.28, degraded: 0.66, failure: 0.06}
+      failure:  {failure: 1.00}
+
+proposal_search:                # 人間が許可したQ探索範囲
+  enabled: true
+  policy: suggest               # 評価・提案だけで、候補を適用しない
+  adjustable_transitions:
+    - from: normal
+      to: failure
+      compensate_to: normal
+      values: [0.005, 0.01, 0.02]
+    - from: degraded
+      to: failure
+      compensate_to: degraded
+      values: [0.04, 0.06, 0.10]
+  constraints:
+    preserve_row_sum: true
+    preserve_support: true
+  evaluation:
+    metric: c_failure
+    pilot_samples: 20           # 保存経路・重み計算を確認する最初の小規模pilot

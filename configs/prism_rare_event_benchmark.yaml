@@ -1,0 +1,45 @@
+schema_version: 1
+experiment_id: prism_rare_event_benchmark_v1
+target: prism
+
+target_measure:
+  id: simple_reliability_rare_p_v1
+  definition:
+    model: simple_reliability_dtmc
+    constants:
+      p_normal_degrade: 0.02
+      p_normal_failure: 0.001
+      p_degraded_normal: 0.30
+      p_degraded_failure: 0.02
+
+proposal:
+  id: rare_failure_search_base_q
+  mode: manual_proposal
+  definition:
+    transition_probabilities:
+      normal:   {normal: 0.96, degraded: 0.03, failure: 0.01}
+      degraded: {normal: 0.28, degraded: 0.66, failure: 0.06}
+      failure:  {failure: 1.00}
+
+proposal_search:
+  enabled: true
+  policy: suggest
+  adjustable_transitions:
+    - from: normal
+      to: failure
+      compensate_to: normal
+      values: [0.005, 0.01, 0.02]
+    - from: degraded
+      to: failure
+      compensate_to: degraded
+      values: [0.04, 0.06, 0.10]
+  constraints:
+    preserve_row_sum: true
+    preserve_support: true
+  evaluation:
+    metric: c_failure
+    pilot_samples: 100
+    candidate_ids:
+      - rare_failure_search_base_q__candidate_001
+      - rare_failure_search_base_q__candidate_005
+      - rare_failure_search_base_q__candidate_009

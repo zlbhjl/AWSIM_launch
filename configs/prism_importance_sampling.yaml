@@ -1,0 +1,41 @@
+schema_version: 1
+experiment_id: prism_reliability_failure_bias_v1
+target: prism
+
+target_measure:
+  id: simple_reliability_original_p_v1
+  definition:
+    model: simple_reliability_dtmc
+    constants:
+      p_normal_degrade: 0.10
+      p_normal_failure: 0.01
+      p_degraded_normal: 0.30
+      p_degraded_failure: 0.10
+
+proposal:
+  id: moderate_failure_bias_q_v1
+  mode: manual_proposal
+  definition:
+    transition_probabilities:
+      normal:
+        normal: 0.84
+        degraded: 0.12
+        failure: 0.04
+      degraded:
+        normal: 0.25
+        degraded: 0.55
+        failure: 0.20
+      failure:
+        failure: 1.00
+  constraints:
+    preserve_support: true
+    max_weight: 100.0
+
+adaptive_update:
+  enabled: false
+  policy: disabled
+
+# 逐次判定の境界は、この一般Pの既定値として固定しない。
+# 検証要求（何%以下を安全とみなすか）を人間が定めた対象別planにだけ
+# sequential_decision を記載する。Pの事前値が保留域に入る場合は、
+# 標本数を増やす前に境界を見直す。

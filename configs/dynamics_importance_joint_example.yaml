@@ -1,0 +1,38 @@
+schema_version: 1
+experiment_id: dynamics_uturn_joint_input_example_v1
+target: dynamics
+
+# P is omitted deliberately.  Dynamics therefore uses its current independent
+# uniform U-turn input distribution as the target measure.
+target_measure:
+  id: uturn_default_input_p_v1
+  definition:
+    model_id: uturn
+    case_kind: uturn
+    execution:
+      solver_kind: ode
+      jama_profile: ai_aeb
+      controller_kind: jama_ai_aeb
+      alignment_mode: uturn_trigger_aligned
+
+# Q is a joint density over the three inputs.  The broad box preserves the
+# current P domain; the smaller box makes correlated dangerous conditions more
+# frequent.  Cells are a mixture, so overlapping boxes are intentional.
+proposal:
+  id: uturn_joint_q_example_v1
+  mode: manual_proposal
+  definition:
+    input_density:
+      distribution: joint_histogram
+      variables: [dx0, ego_speed, npc_speed]
+      cells:
+        - bounds:
+            dx0: {min: 10.0, max: 25.0}
+            ego_speed: {min: 30.0, max: 40.0}
+            npc_speed: {min: 10.0, max: 25.0}
+          weight: 0.80
+        - bounds:
+            dx0: {min: 10.0, max: 14.0}
+            ego_speed: {min: 30.0, max: 34.0}
+            npc_speed: {min: 10.0, max: 14.0}
+          weight: 0.20

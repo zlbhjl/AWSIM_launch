@@ -30,6 +30,13 @@ RESERVED_INPUT_KEYS = {
     "scenario_type",
     "local_loop_num",
     "ext_mode",
+    # Execution bookkeeping belongs to the orchestration/repository boundary,
+    # not to run_scenario.py's scenario arguments.
+    "execution_kind",
+    "record_kind",
+    "sample_index",
+    "sampling_seed",
+    "sampling_plan_path",
 }
 
 

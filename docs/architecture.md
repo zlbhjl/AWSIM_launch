@@ -16,6 +16,9 @@ AWSIM_launch/
 ├── run_bbsl_local_ft4d.py         # BBSL raw result を AWSIM_launch 側で FT4D 再計算する入口。
 ├── run_external_verifier.py       # 外部検証器の legacy 互換入口。
 ├── apps/cli/                      # 各 run_*.py の本体 (引数解析と組み立て)。
+│   ├── prism_importance_main.py    # PRISM固定P・固定Qの重点標本比較CLI。
+│   ├── dynamics_importance_main.py # ODE入力の固定P・固定Q重点標本比較CLI。
+│   └── awsim_importance_main.py    # AWSIM入力の固定P・固定Q重点標本CLI。
 ├── contracts/                     # target 間で共通のデータ型 (TestCase, RawRunResult, EvaluationRecord, StatisticalReport など)。
 ├── orchestration/                 # target に依存しない制御ロジック
 │   ├── orchestrator.py            # 司令塔本体。戦略に従ってケースを発行し、停止条件を判定する。
@@ -24,7 +27,7 @@ AWSIM_launch/
 │   ├── replay.py                  # 既存 CSV のケースを再実行する replay モード。
 │   ├── random_parameter_sampling.py / fixed_parameter_sampling.py # 入力サンプリング。
 │   └── worker_loop.py             # ワーカー側のループ (取得 → 実行 → 解釈 → 保存 → 完了報告)。
-├── evaluation/                    # 統計計算 (binomial_ci, dkw, sprt, ebstop, alpha_spending, gp_boundary) と FT4D サービス。
+├── evaluation/                    # 統計計算 (binomial_ci, dkw, sprt, ebstop, importance_sampling, alpha_spending, gp_boundary) と FT4D サービス。
 ├── runtime/
 │   ├── cluster/                   # Ray 接続、TaskQueue / SharedStore actor、各号機の container 起動、worker watchdog、結果 sink。
 │   ├── container/                 # container 内のプロセス管理
@@ -35,7 +38,7 @@ AWSIM_launch/
 ├── targets/                       # 検証対象ごとの実装
 │   ├── registry.py                # --target から backend / result_interpreter を組み立てる。
 │   ├── awsim/                     # AWSIM: case_kinds/, scenario_builders/, scenario_runner.py, backend.py, result_interpreter.py, theory_specs/
-│   ├── prism/                     # PRISM: モデル実行、-simpath 解析、Maude 判定との統合
+│   ├── prism/                     # PRISM: モデル実行、-simpath解析、Maude判定、固定Q重点サンプリング
 │   ├── dynamics/                  # ODE/SDE: models/, runners/, calibrations/
 │   └── bbsl/                      # BBSL raw result の解釈と FT4D 入力化
 ├── verifiers/                     # Maude 実行境界と判定 (verifiers/maude/)、BBSL legacy 互換 adapter。

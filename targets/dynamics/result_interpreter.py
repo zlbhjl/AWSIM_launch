@@ -14,6 +14,7 @@ import numpy as np
 
 from contracts.evaluation import EvaluationRecord, ensure_evaluation_meta
 from contracts.execution import RawRunResult, RunStatus
+from contracts.sampling import copy_sampling_metadata
 from scenario_specs.uturn import JAMA_PROFILES
 from theoretical_calculator import TheoreticalSafetyCalculator
 
@@ -106,7 +107,7 @@ class DynamicsResultInterpreter:
             output=metrics,
             evidence=evidence,
             meta=ensure_evaluation_meta(
-                {
+                copy_sampling_metadata(raw_run_result.meta, {
                     "model_id": "uturn",
                     "solver_kind": execution.get("solver_kind", "ode"),
                     "collision_distance_m": collision_distance_m,
@@ -120,7 +121,7 @@ class DynamicsResultInterpreter:
                     "events": dict(events),
                     "raw_run_status": raw_run_result.status.value,
                     "raw_run_meta": dict(raw_run_result.meta),
-                },
+                }),
                 source_module=self.context.source_module,
                 schema_version=self.context.schema_version,
                 created_at=datetime.now().astimezone().isoformat(timespec="seconds"),
@@ -141,11 +142,11 @@ class DynamicsResultInterpreter:
             status=status,
             evidence=dict(raw_run_result.evidence),
             meta=ensure_evaluation_meta(
-                {
+                copy_sampling_metadata(raw_run_result.meta, {
                     "error_message": message,
                     "raw_run_status": raw_run_result.status.value,
                     "raw_run_meta": dict(raw_run_result.meta),
-                },
+                }),
                 source_module=self.context.source_module,
                 schema_version=self.context.schema_version,
             ),

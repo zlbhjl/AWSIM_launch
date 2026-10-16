@@ -1,0 +1,41 @@
+schema_version: 1
+experiment_id: dynamics_uturn_sde_noise_paths_v1
+target: dynamics
+
+target_measure:
+  id: uturn_sde_gaussian_p_v1
+  definition:
+    model_id: uturn
+    case_kind: uturn
+    execution:
+      solver_kind: sde
+      sde_seed: 17
+      sde_dt_sec: 0.01
+      sde_noise:
+        npc_acceleration_std: 0.20
+        ego_brake_acceleration_std: 0.15
+        npc_heading_std_rad_per_sqrt_sec: 0.03
+      # P is declared here.  G above is shared with Q; this schedule gives
+      # the Gaussian innovation mean in SDE drift units.
+      noise_path_p:
+        distribution: gaussian_drift
+        drift_schedule:
+          - time: [0.0, 10.0]
+            channel_drifts:
+              npc_acceleration: 0.0
+
+proposal:
+  id: uturn_sde_direct_gaussian_q_v1
+  mode: manual_proposal
+  definition:
+    # Input Q is omitted, so the existing/default input P is used.
+    # This is a direct Q: its IS diagnostics are available, while bounded
+    # Hoeffding comparison is intentionally unavailable.
+    noise_path_q:
+      distribution: gaussian_drift
+      drift_schedule:
+        - time: [0.0, 2.0]
+          mode: turn
+          channel_drifts:
+            npc_acceleration: -0.40
+            npc_heading: 0.15

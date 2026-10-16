@@ -12,6 +12,7 @@ from contracts.evaluation import (
     ensure_evaluation_meta,
 )
 from contracts.execution import RawRunResult, RunStatus, TestCase
+from contracts.sampling import copy_sampling_metadata
 from runtime.cluster.ray_client import is_ray_control_plane_error
 
 
@@ -96,6 +97,15 @@ class WorkerLoop:
 
         try:
             raw_run_result = self._run_backend(resolved_test_case)
+            sampling_source = (
+                raw_run_result.meta
+                if "sampling" in raw_run_result.meta
+                else resolved_test_case.meta
+            )
+            raw_run_result.meta = copy_sampling_metadata(
+                sampling_source,
+                raw_run_result.meta,
+            )
             self._raise_if_heartbeat_failed()
         except Exception as exc:
             self._stop_heartbeat(heartbeat_stop)

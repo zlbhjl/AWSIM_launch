@@ -114,6 +114,9 @@ class UTurnSimulationResult:
     npc_start_time_sec: float | None
     uturn_start_time_sec: float | None
     uturn_end_time_sec: float | None
+    noise_log_p: float = 0.0
+    noise_log_q: float = 0.0
+    noise_sample_count: int = 0
 
     @property
     def ego_positions_m(self) -> np.ndarray:
@@ -299,6 +302,9 @@ class UTurnSystem:
             npc_start_time_sec=_resolve_npc_start_time(self.config),
             uturn_start_time_sec=trajectory.mode_entry_times.get("turn"),
             uturn_end_time_sec=trajectory.mode_entry_times.get("exit"),
+            noise_log_p=trajectory.noise_log_p,
+            noise_log_q=trajectory.noise_log_q,
+            noise_sample_count=trajectory.noise_sample_count,
         )
 
     # -- guards -----------------------------------------------------------

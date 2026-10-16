@@ -26,6 +26,9 @@
   別の Autoware バージョンで再実行する `replay` モードがあります。
 - **判定と指標**: Maude による形式的な判定 (衝突・TTC) と、trace から計算する連続値の指標
   (`min_ttc`、`min_distance` など)、JAMA の物理モデルによる理論値を同時に記録します。
+- **重点サンプリング (固定P・固定Q)**: 評価したい分布 P を固定したまま、人間が設定した提案分布 Q で標本を生成し、
+  P/Q の重みを記録します (PRISM の遷移確率、ODE/SDE の入力とノイズ経路、AWSIM の速度入力)。
+  通常の P 標本と同じ標本数で、推定値・ESS・区間幅・最大重みを比較できます。
 - **FT4D**: 故障木に基づく信頼度評価 (`verification_core/ft4d`)。
 
 ## アーキテクチャ
@@ -156,6 +159,20 @@ python3 run_orchestrator_cluster_v2.py \
 - 安全性の判断に使う確率の区間には、`--binomial-method clopper-pearson` を使ってください。Wilson は近似のため、真の確率が 0 や 1 に近いと実際のカバレッジが名目の水準を下回ることがあります。
 - `dkw` は既定で、KDE で推定した重みにより探索モードの標本も再利用します。これは経験的な補正で、DKW 不等式の保証はそのままでは成り立ちません。保証が必要な場合は `--dkw-pure-smc` を指定し、新しい一様標本だけで評価してください。
 
+### 重点サンプリング
+
+稀な事象の確率推定には、統計モードとは別の CLI (`apps.cli.prism_importance_main`、`apps.cli.dynamics_importance_main`、
+`apps.cli.awsim_importance_main`) で、固定した Q による重み付き標本と通常の P 標本を比較できます。
+Q の自動更新や逐次停止は扱いません。使い方は [docs/importance_sampling.md](docs/importance_sampling.md) を参照してください。
+
+```bash
+# ODE: 人手で設定した Q4 と通常の P を、それぞれ 1000 標本で比較する
+python3 -m apps.cli.dynamics_importance_main \
+  --sampling-plan configs/dynamics_importance_q4.yaml \
+  --output-root artifacts/dynamics_importance_q4 \
+  --max-samples 1000 --sampling-seed 20261011
+```
+
 ## 出力
 
 | ファイル | 内容 |
@@ -194,6 +211,8 @@ ROS・AWSIM・GPU は不要です。AW-CheckerPy や AW-Runtime-Monitor が必�
 | [docs/targets/prism.md](docs/targets/prism.md) | PRISM / Maude 対象 |
 | [docs/targets/bbsl_ft4d.md](docs/targets/bbsl_ft4d.md) | BBSL / FT4D 連携 |
 | [docs/statistical_method_selection.md](docs/statistical_method_selection.md) | 統計手法の選び方 |
+| [docs/importance_sampling.md](docs/importance_sampling.md) | 重点サンプリング (固定P・固定Q) の使い方 |
+| [docs/importance_sampling_design.md](docs/importance_sampling_design.md)、[docs/awsim_importance_sampling_design.md](docs/awsim_importance_sampling_design.md) | 重点サンプリングの設計 |
 | [docs/experiments/autoware_version_replay.md](docs/experiments/autoware_version_replay.md) | Autoware 1.7.1 / 1.8.0 / 1.9.0 の比較実験の記録 |
 | [docs/network_storm_control_guide.md](docs/network_storm_control_guide.md) | DDS と storm-control の対策 |
 | [docs/legacy.md](docs/legacy.md) | 旧フレームのコマンド (通常は使わない) |

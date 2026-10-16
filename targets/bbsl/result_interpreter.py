@@ -7,6 +7,7 @@ from typing import Any, Mapping
 
 from contracts.evaluation import EvaluationRecord, ensure_evaluation_meta
 from contracts.execution import RunStatus
+from contracts.sampling import copy_sampling_metadata
 from targets.bbsl.dataset_adapter import BBSLExperimentAdapter
 
 
@@ -58,14 +59,14 @@ class ResultInterpreter:
                 case_kind=raw_run_result.case_kind,
                 status=final_status,
                 meta=ensure_evaluation_meta(
-                    {
+                    copy_sampling_metadata(raw_run_result.meta, {
                         "execution_status": raw_run_result.status.value,
                         "analysis_status": RunStatus.ANALYSIS_ERROR.value,
                         "verifier_name": self.context.verifier_name,
                         "error_message": "missing_raw_result_json",
                         "raw_run_status": raw_run_result.status.value,
                         "raw_run_meta": dict(raw_run_result.meta),
-                    },
+                    }),
                     source_module=self.context.source_module,
                     schema_version=self.context.schema_version,
                     created_at=datetime.now().astimezone().isoformat(timespec="seconds"),
@@ -78,6 +79,7 @@ class ResultInterpreter:
         record.case_kind = raw_run_result.case_kind
         record.meta.setdefault("raw_run_status", raw_run_result.status.value)
         record.meta.setdefault("raw_run_meta", dict(raw_run_result.meta))
+        record.meta = copy_sampling_metadata(raw_run_result.meta, record.meta)
         record.meta.setdefault("execution_status", raw_run_result.status.value)
         record.meta.setdefault("analysis_status", record.status.value)
         if raw_run_result.status is not RunStatus.SUCCESS:
