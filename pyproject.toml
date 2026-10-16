@@ -14,7 +14,7 @@ authors = [{ name = "zlbhjl" }]
 # 下限はホスト (Python 3.10)・worker container・CI で動作を確認した版に合わせている。
 dependencies = [
     "numpy>=1.24",
-    "pandas>=1.3",
+    "pandas>=1.3,<3",  # tools/analysis が pandas 3 で削除された to_numeric(errors="ignore") を使う
     "scipy>=1.8",
     "scikit-learn>=1.7",
 ]

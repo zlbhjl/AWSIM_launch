@@ -10,6 +10,14 @@ from runtime.cluster.cluster_manager import (
 )
 
 
+# ホストの AW-Runtime-Monitor の実ファイルから checksum を作るテスト。未導入の環境では skip する。
+RUNTIME_MONITOR_ROOT = Path("/home/passd/AW-Runtime-Monitor")
+requires_runtime_monitor = pytest.mark.skipif(
+    not (RUNTIME_MONITOR_ROOT / "main.py").exists(),
+    reason=f"AW-Runtime-Monitor not found at {RUNTIME_MONITOR_ROOT}",
+)
+
+
 class CompletedRun:
     def __init__(self, returncode: int = 0, stdout: str = "", stderr: str = "") -> None:
         self.returncode = returncode
@@ -129,6 +137,7 @@ def test_cluster_manager_starts_head_and_launches_v2_workers() -> None:
     ) in remote_command
 
 
+@requires_runtime_monitor
 def test_cluster_manager_syncs_default_launch_and_requested_runtime_inputs() -> None:
     run_calls = []
     popen_calls = []
@@ -212,6 +221,7 @@ def test_cluster_manager_syncs_default_launch_and_requested_runtime_inputs() -> 
     assert "AWSIM_CLIENT_OP_STATE_STOPPED" in remote_worker_command
 
 
+@requires_runtime_monitor
 def test_cluster_manager_rejects_runtime_monitor_checksum_mismatch() -> None:
     def fake_run(cmd, **kwargs):
         if isinstance(cmd, list) and cmd and cmd[0] == "ssh" and "sha256sum" in cmd[-1]:

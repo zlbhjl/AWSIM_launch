@@ -1,8 +1,18 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from contracts.evaluation import EvaluationRecord
 from contracts.execution import RunStatus
+from verifiers.maude.backend import DEFAULT_TOOL_DIR
+
+
+# 実物の AW-CheckerPy (Maude) を呼ぶテスト。未導入の環境 (CI など) では skip する。
+requires_maude_checker = pytest.mark.skipif(
+    not (DEFAULT_TOOL_DIR / "aw_checkerpy.py").exists(),
+    reason=f"AW-CheckerPy not found at {DEFAULT_TOOL_DIR}",
+)
 from apps.cli.result_interpreter_main import (
     build_interpreter,
     run_result_interpreter,
@@ -57,6 +67,7 @@ def test_run_result_interpreter_prints_json_when_no_output_path(capsys) -> None:
     assert payload["output"]["condition_result_count"] == 4
 
 
+@requires_maude_checker
 def test_run_result_interpreter_writes_output_json_for_awsim(tmp_path: Path, capsys) -> None:
     output_path = tmp_path / "interpreted.json"
 

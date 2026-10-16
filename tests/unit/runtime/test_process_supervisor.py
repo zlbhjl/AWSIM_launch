@@ -1,4 +1,5 @@
 import signal
+import socket
 import sys
 import threading
 import time
@@ -12,10 +13,18 @@ def _start_server(socket_path: Path):
     server = ProcessSupervisorServer(socket_path)
     thread = threading.Thread(target=server.serve, daemon=True)
     thread.start()
+    # serve() は bind() でソケットファイルを作ってから listen() するため、
+    # ファイルの存在ではなく実際に接続できるまで待つ。
     deadline = time.monotonic() + 2.0
-    while not socket_path.exists() and time.monotonic() < deadline:
-        time.sleep(0.01)
-    assert socket_path.exists()
+    while True:
+        try:
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as probe:
+                probe.connect(str(socket_path))
+            break
+        except (FileNotFoundError, ConnectionRefusedError):
+            if time.monotonic() >= deadline:
+                raise
+            time.sleep(0.01)
     return server, thread
 
 

@@ -1,10 +1,19 @@
 from pathlib import Path
 
+import pytest
+
 from contracts.execution import RawRunResult, RunStatus
 from contracts.statistics import StatisticalRequest
 from evaluation.binomial_ci import BinomialCIService
 from targets.awsim.result_interpreter import ResultInterpreter, interpret_fixture
-from verifiers.maude.backend import MaudeRunResult
+from verifiers.maude.backend import DEFAULT_TOOL_DIR, MaudeRunResult
+
+
+# 実物の AW-CheckerPy (Maude) を呼ぶテスト。未導入の環境 (CI など) では skip する。
+requires_maude_checker = pytest.mark.skipif(
+    not (DEFAULT_TOOL_DIR / "aw_checkerpy.py").exists(),
+    reason=f"AW-CheckerPy not found at {DEFAULT_TOOL_DIR}",
+)
 
 
 FIXTURES = Path(__file__).resolve().parents[2] / "fixtures" / "awsim"
@@ -30,6 +39,7 @@ def test_result_interpreter_returns_analysis_error_for_missing_vehicle_sizes() -
     assert record.meta["error_message"] == "missing_vehicle_sizes"
 
 
+@requires_maude_checker
 def test_result_interpreter_returns_success_for_normal_fixture() -> None:
     record = interpret_fixture(FIXTURES / "normal_trace_maude.json")
 
@@ -46,6 +56,7 @@ def test_result_interpreter_returns_success_for_normal_fixture() -> None:
     ]
 
 
+@requires_maude_checker
 def test_result_interpreter_collects_optional_artifacts_next_to_trace(
     tmp_path: Path,
 ) -> None:
@@ -86,6 +97,7 @@ def test_result_interpreter_returns_analysis_error_when_maude_output_is_incomple
     assert "c_collision" in record.output
 
 
+@requires_maude_checker
 def test_result_interpreter_accepts_raw_run_result() -> None:
     interpreter = ResultInterpreter()
     raw_run_result = RawRunResult(
@@ -107,6 +119,7 @@ def test_result_interpreter_accepts_raw_run_result() -> None:
     assert record.meta["analysis_status"] == "success"
 
 
+@requires_maude_checker
 def test_result_interpreter_uses_checker_result_for_partial_timeout_trace() -> None:
     interpreter = ResultInterpreter()
     raw_run_result = RawRunResult(
@@ -129,6 +142,7 @@ def test_result_interpreter_uses_checker_result_for_partial_timeout_trace() -> N
     assert record.meta["raw_timeout_reason"] == "scenario_goal_timeout"
 
 
+@requires_maude_checker
 def test_result_interpreter_keeps_late_artifact_as_raw_metadata() -> None:
     interpreter = ResultInterpreter()
     raw_run_result = RawRunResult(
@@ -146,6 +160,7 @@ def test_result_interpreter_keeps_late_artifact_as_raw_metadata() -> None:
     assert record.meta["raw_timeout_reason"] == "late_artifact"
 
 
+@requires_maude_checker
 def test_binomial_service_accepts_only_successfully_interpreted_timeout_traces() -> None:
     interpreter = ResultInterpreter()
     normal_trace = str(FIXTURES / "normal_trace_maude.json")
@@ -201,6 +216,7 @@ def test_binomial_service_accepts_only_successfully_interpreted_timeout_traces()
     assert report.estimate == 0.0
 
 
+@requires_maude_checker
 def test_result_interpreter_records_kinematics_metrics_like_legacy_awchecker() -> None:
     from targets.awsim.kinematics_bridge import extract_kinematics_metrics
 
@@ -216,6 +232,7 @@ def test_result_interpreter_records_kinematics_metrics_like_legacy_awchecker() -
     assert record.output["c_collision"] == 0
 
 
+@requires_maude_checker
 def test_result_interpreter_keeps_maude_result_when_kinematics_extraction_fails() -> None:
     def failing_extractor(_: Path) -> dict[str, object]:
         raise RuntimeError("broken trace")
@@ -261,6 +278,7 @@ def test_result_interpreter_invalidates_kinematics_on_maude_error() -> None:
     assert {record.output[key] for key in ("min_ttc", "min_distance", "min_ttb", "z_margin")} == {-1}
 
 
+@requires_maude_checker
 def test_result_interpreter_flags_empty_required_trace_sections(tmp_path: Path) -> None:
     import json
 
