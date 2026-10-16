@@ -17,6 +17,17 @@ from estimator import SafetyEstimator
 import point_extractors
 
 
+def _to_numeric_if_possible(series: pd.Series) -> pd.Series:
+    """Convert a column to numbers, or keep it unchanged if it is not numeric.
+
+    Same behavior as ``pd.to_numeric(series, errors="ignore")``, which pandas 3 removed.
+    """
+    try:
+        return pd.to_numeric(series)
+    except (ValueError, TypeError):
+        return series
+
+
 def analyze_and_print_dkw(title, df, estimator, target_metric, q, delta, epsilon):
     """指定されたデータフレームに対してDKW評価を行い、結果を整形して表示する"""
     print(f"\n--- {title} (データ件数: {len(df)}) ---")
@@ -130,7 +141,7 @@ def run_analysis(
 
     df = pd.read_csv(dataset_file, engine="python", on_bad_lines="skip")
     for col in df.columns:
-        df[col] = pd.to_numeric(df[col], errors="ignore")
+        df[col] = _to_numeric_if_possible(df[col])
 
     initial_count = len(df)
     filtered_df = point_extractors.filter_by_region_and_bounds(df, region=region)

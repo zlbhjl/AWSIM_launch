@@ -16,6 +16,17 @@ if str(REPO_ROOT) not in sys.path:
 import point_extractors
 
 
+def _to_numeric_if_possible(series: pd.Series) -> pd.Series:
+    """Convert a column to numbers, or keep it unchanged if it is not numeric.
+
+    Same behavior as ``pd.to_numeric(series, errors="ignore")``, which pandas 3 removed.
+    """
+    try:
+        return pd.to_numeric(series)
+    except (ValueError, TypeError):
+        return series
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="データセットから特定の領域(Bounds)や条件のデータのみを抽出して出力します。"
@@ -65,7 +76,7 @@ def run_extraction(
 
     df = pd.read_csv(dataset_file, engine="python", on_bad_lines="skip")
     for col in df.columns:
-        df[col] = pd.to_numeric(df[col], errors="ignore")
+        df[col] = _to_numeric_if_possible(df[col])
 
     initial_count = len(df)
     bounds_dict = None

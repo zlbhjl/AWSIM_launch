@@ -111,3 +111,14 @@ def test_long_command_does_not_block_other_supervisor_requests(tmp_path: Path) -
     slow_thread.join(timeout=2.0)
     client.shutdown()
     server_thread.join(timeout=2.0)
+
+
+def test_process_supervisor_socket_is_private_to_the_owner(tmp_path: Path) -> None:
+    socket_path = tmp_path / "process-supervisor.sock"
+    _server, thread = _start_server(socket_path)
+    client = SupervisorClient(socket_path)
+
+    assert socket_path.stat().st_mode & 0o777 == 0o600
+
+    client.shutdown()
+    thread.join(timeout=2.0)

@@ -226,9 +226,15 @@ class ProcessSupervisorServer:
         worker: subprocess.Popen[str] | None = None
         server_socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         try:
-            server_socket.bind(str(self.socket_path))
-            os.chmod(self.socket_path, 0o600)
+            # Create the socket file as 0600 so it never accepts other users, and
+            # listen immediately so clients that wait for the file are not refused.
+            previous_umask = os.umask(0o177)
+            try:
+                server_socket.bind(str(self.socket_path))
+            finally:
+                os.umask(previous_umask)
             server_socket.listen(8)
+            os.chmod(self.socket_path, 0o600)
             server_socket.settimeout(0.5)
             startup_children = [
                 self.registry.spawn(
