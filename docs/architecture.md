@@ -1,5 +1,7 @@
 # アーキテクチャ
 
+Architecture of the framework. **[English version below ↓](#english)**
+
 ## ファイル・ディレクトリ構成
 
 現在の正本は v2 フレーム (`run_*_v2.py` → `apps/cli/` → `orchestration/` / `runtime/` / `targets/`) です。
@@ -97,3 +99,114 @@ AWSIM_launch/
   `timeout` / `execution_error` / `analysis_error` の行は標本に入りません。
 - **worker の異常**: Ray 接続断は `ray_control_plane_lost`、GPU 異常は `gpu_unavailable` として worker を止め、
   司令塔側の watchdog が設定に応じて container を再作成します (「`container_profile` を切り替えるときの扱い」を参照)。
+
+---
+
+<a id="english"></a>
+
+# English: Architecture
+
+## Files and directories
+
+The current framework is v2 (`run_*_v2.py` → `apps/cli/` → `orchestration/` / `runtime/` / `targets/`).
+The legacy scripts at the repository root (`master_orchestrator.py`, `run_manager.py`, and others) are kept for compatibility;
+new features are added only to v2.
+
+```text
+AWSIM_launch/
+├── run_orchestrator_cluster_v2.py # [Orchestrator, cluster] Runs on the head node. Main entry point: starts the Ray head and worker containers and decides when to stop.
+├── run_orchestrator_v2.py         # [Orchestrator, local] Runs in a single process without a cluster (for example, statistics on dynamics).
+├── run_worker_v2.py               # [Worker] Runs in each container and takes cases from the orchestrator's queue over Ray Client.
+├── run_dynamics_awsim_compare_v2.py # Runs the same input on both the ODE and AWSIM and compares them.
+├── run_ft4d_smoke.py / run_prism_ft4d_smoke.py # FT4D smoke tests (AWSIM / PRISM).
+├── run_bbsl_local_ft4d.py         # Recomputes FT4D from BBSL raw results in AWSIM_launch.
+├── run_external_verifier.py       # Legacy-compatible entry point for external verifiers.
+├── apps/cli/                      # The bodies of the run_*.py scripts (argument parsing and assembly).
+│   ├── prism_importance_main.py    # CLI comparing PRISM importance samples with fixed P and fixed Q.
+│   ├── dynamics_importance_main.py # CLI comparing ODE-input importance samples with fixed P and fixed Q.
+│   └── awsim_importance_main.py    # CLI for AWSIM-input importance samples with fixed P and fixed Q.
+├── contracts/                     # Data types shared by targets (TestCase, RawRunResult, EvaluationRecord, StatisticalReport, ...).
+├── orchestration/                 # Target-independent control logic
+│   ├── orchestrator.py            # The orchestrator. Issues cases according to the strategy and checks stopping conditions.
+│   ├── strategy.py                # Exploration strategies (explore / focus / boundary_gap, ..., GP boundary model).
+│   ├── binomial_mode.py / dkw_mode.py / sprt_mode.py / ebstop_mode.py # Stopping decisions per statistical mode.
+│   ├── replay.py                  # Replay mode that re-runs the cases of an existing CSV.
+│   ├── random_parameter_sampling.py / fixed_parameter_sampling.py # Input sampling.
+│   └── worker_loop.py             # The worker loop (take → run → interpret → store → report completion).
+├── evaluation/                    # Statistics (binomial_ci, dkw, sprt, ebstop, importance_sampling, alpha_spending, gp_boundary) and the FT4D service.
+├── runtime/
+│   ├── cluster/                   # Ray connection, TaskQueue / SharedStore actors, starting containers on each node, worker watchdog, result sink.
+│   ├── container/                 # Process management inside containers
+│   │   ├── profiles/              # container_profile definitions (autoware171 / 180* / 190* / prism_maude, ...).
+│   │   ├── supervised_process/    # The process supervisor that runs as PID 1.
+│   │   └── launcher.py, supervisor.py, xvfb.py, gpu_health.py, ...
+│   └── repository/                # Dataset CSV, parameter buffer, SharedStore, history and resume data.
+├── targets/                       # Implementation per target
+│   ├── registry.py                # Builds the backend / result_interpreter from --target.
+│   ├── awsim/                     # AWSIM: case_kinds/, scenario_builders/, scenario_runner.py, backend.py, result_interpreter.py, theory_specs/
+│   ├── prism/                     # PRISM: model execution, -simpath parsing, Maude judgment, fixed-Q importance sampling
+│   ├── dynamics/                  # ODE/SDE: models/, runners/, calibrations/
+│   └── bbsl/                      # Interpreting BBSL raw results and converting them to FT4D input
+├── verifiers/                     # Maude execution boundary and judgments (verifiers/maude/), legacy BBSL adapter.
+├── verification_core/ft4d/        # The shared FT4D core kept in AWSIM_launch.
+├── scenario_specs/                # Input ranges for dynamics (uturn.py).
+├── configs/                       # Legacy entry points for scenario settings; they re-export targets/awsim/case_kinds/.
+├── redis_cluster/cluster_config.py # Node IPs, users, container names, ROS_DOMAIN_ID (also read by the v2 cluster_manager).
+├── docker/                        # Dockerfiles for the Autoware / PRISM images, cyclonedds settings, a README per image.
+├── tools/
+│   ├── analysis/                  # CLIs for aggregation, calibration, and validation (boundary_gap, version comparison, dynamics calibration and checks, FT4D AND-rule validation, ...).
+│   ├── maintenance/               # Operations helpers (clean_trash, filter_success_csv, reconcile_late_traces).
+│   └── plot/                      # Plotting CLIs. The visualize_*.py scripts at the root are wrappers around them.
+├── tests/                         # Unit and smoke tests.
+└── (legacy framework, kept for compatibility)
+    ├── master_orchestrator.py, run_manager.py, local_worker.py, run_scenario.py
+    ├── strategist.py, estimator.py, awchecker.py, param_logger.py, theoretical_calculator.py, point_extractors.py
+    ├── redis_cluster/{cluster_manager,process_controller,task_queue,shared_store}.py
+    ├── fix_dataset_labels.py, dataset_repo.py, archive_results.py, stop_containers.py, compare_ttc_modes.py
+    └── visualize_*.py, extract_region_data.py, analyze_*.py # thin wrappers around tools/
+```
+
+## Distributed execution and data flow
+
+The framework runs as a distributed system: an orchestrator on the head node and worker containers on each node, connected by Ray.
+The following is the v2 flow (`run_orchestrator_cluster_v2.py`).
+
+### Overview
+
+1.  **Infrastructure setup**: the orchestrator (`apps/cli/orchestrator_cluster_main.py`) starts the Ray head and creates
+    `TaskQueueActor` (`runtime/cluster/ray_queue.py`) and `SharedStoreActor` (`runtime/repository/shared_store.py`) as detached actors.
+    Then `runtime/cluster/cluster_manager.py` connects to each node in `redis_cluster/cluster_config.py` over SSH, syncs the code,
+    runs a GPU preflight check, and starts worker containers according to the `container_profile`.
+2.  **Task generation**: `orchestration/orchestrator.py` decides the next case from the strategy for the mode (exploration strategies in
+    `orchestration/strategy.py`, `binomial_mode.py` / `dkw_mode.py` / `sprt_mode.py` / `ebstop_mode.py`, `replay.py`, ...) and puts it
+    on the queue.
+3.  **Task execution**: in each container the process supervisor runs as PID 1, and its child process `run_worker_v2.py` takes cases
+    from the queue over Ray Client (`ray://<master-ip>:10001`). `orchestration/worker_loop.py` calls the backend of the target chosen by
+    `targets/registry.py` (for AWSIM, `targets/awsim/backend.py`), which starts AWSIM, Autoware, the Runtime Monitor, and the scenario
+    through the supervisor.
+4.  **Result analysis**: the target's `result_interpreter.py` runs the trace JSON through the Maude checker and kinematics extraction
+    and produces an `EvaluationRecord` in the common format (`contracts/evaluation.py`).
+5.  **Joining data**: the worker's `RaySharedStoreResultSink` (`runtime/cluster/result_sink.py`) sends the input parameters before the run
+    and the result after it to `SharedStoreActor`. `SharedStore` joins them by `loop_num` and appends them to `--dataset-csv` (one row
+    per sample) and `--output` (JSONL of `EvaluationRecord`).
+6.  **Completion and the next decision**: when a worker reports completion to `TaskQueueActor`, the orchestrator re-reads the updated
+    dataset, checks the statistical stopping condition, and generates the next case. When the stopping condition is met, it sends a stop
+    signal. If cases remain on the queue untaken for a certain time after that, they are treated as abandoned and cancelled, and the
+    orchestrator exits.
+
+### Error and timeout handling
+
+The system recovers from freezes and communication errors typical of distributed systems and keeps them from affecting statistics
+and exploration.
+- **Timeouts**: if the trace JSON has not arrived after the scenario timeout plus a 10-second grace period, the run is recorded as
+  `status=timeout` together with its input parameters through `SharedStore.flush_timeout` (see "AWSIM trace timeout and late JSON" in
+  [cluster_operations.md](cluster_operations.md)).
+- **Analysis errors**: runs with a broken JSON, missing formulas, or vehicles that did not move are recorded as `status=analysis_error`
+  with judgment values of `-1`.
+- **Garbage collection**: parameters whose results never arrive (for example, because a container crashed) are discarded from
+  `ParameterBuffer` after a fixed time (600 seconds).
+- **Isolation from statistics and exploration**: statistical modes and exploration strategies only use rows with `status=success` and
+  valid judgment values, so `timeout` / `execution_error` / `analysis_error` rows are not counted as samples.
+- **Worker failures**: a lost Ray connection stops the worker as `ray_control_plane_lost` and a GPU failure as `gpu_unavailable`; the
+  orchestrator's watchdog recreates the container according to the settings (see "Switching `container_profile`" in
+  [cluster_operations.md](cluster_operations.md)).

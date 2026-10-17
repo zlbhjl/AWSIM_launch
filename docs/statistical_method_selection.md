@@ -1,5 +1,7 @@
 # 統計手法選択の決定木
 
+Decision trees for choosing a statistical method. **[English version below ↓](#english)**
+
 このドキュメントは、PyDSMC(Gros et al., QEST 2025)の Fig.4「Automated statistical method
 selection」を参考に、AWSIM_launch でどの統計手法(`--mode`/`--binomial-method`)を選ぶべきかを
 人間が手動で判断する際の参考図です。
@@ -127,6 +129,133 @@ Clopper–Pearson区間は近似を使わず直接計算するため、名目の
 
 `docs/diagrams/awsim_tree.dot` / `docs/diagrams/prism_tree.dot` に Graphviz の DOT
 ソースを置いています。再生成する場合は以下を実行してください。
+
+```bash
+dot -Tpng -Gdpi=150 docs/diagrams/awsim_tree.dot -o docs/diagrams/awsim_tree.png
+dot -Tpng -Gdpi=150 docs/diagrams/prism_tree.dot -o docs/diagrams/prism_tree.png
+```
+
+---
+
+<a id="english"></a>
+
+# English: Decision trees for choosing a statistical method
+
+This document is a reference diagram for deciding by hand which statistical method (`--mode` / `--binomial-method`) to use in
+AWSIM_launch. It is modeled on Fig. 4, "Automated statistical method selection", of PyDSMC (Gros et al., QEST 2025).
+
+Unlike the PyDSMC figure, **this is not automatic selection logic**. In AWSIM_launch, users still specify `--mode` /
+`--binomial-method` explicitly; this diagram is a reference to help with that decision.
+
+## Why there are separate trees for AWSIM and PRISM
+
+AWSIM and PRISM differ not just in their default metrics but **in their execution architecture**.
+
+- **AWSIM**: one general engine, `orchestration/strategy.py::ActiveLearningStrategist`, handles both the modes that explore dangerous
+  regions (`explore` / `margin` / `jama_edge` / `ttc_edge` / `worst_ttc` / `boundary_gap`) and the modes that estimate or verify a
+  metric (`binomial_ci` / `dkw` / `dkw_fixed` / `sprt` / `ebstop`).
+- **PRISM**: has only a thin execution path, `orchestration/fixed_parameter_sampling.py::FixedParameterSamplingStrategy`. It samples one
+  point fixed by `--param key=value` independently and repeatedly, and **has no exploration modes** (unsupported modes such as
+  `jama_edge` are documented in `docs/prism_integration_plan.md`, and GP boundary estimation was decided not to be implemented on
+  2026-09-17).
+
+So the PRISM tree is not just the AWSIM tree with different leaves; it is **structurally shallower, with no exploration branch at
+all**.
+
+## For AWSIM
+
+![AWSIM statistical method selection tree](diagrams/awsim_tree.png)
+
+## For PRISM
+
+![PRISM statistical method selection tree](diagrams/prism_tree.png)
+
+**Update 2026-09-18**: DKW (`--mode dkw` / `dkw_fixed --target prism`) now runs live as
+`orchestration/prism_dkw_sampling.py::PrismDkwSamplingStrategy`. It drives the existing `DKWModeRunner` (the same stage-based
+alpha-spending engine as AWSIM's `--mode dkw` / `dkw_fixed`) with a `get_random_point` that always returns the same fixed parameter
+point, so neither the DKW formulas nor the stage control had to be rewritten. Starting cold (from zero samples), unlike normal AWSIM
+use, needed special handling. Initially, a single sample produced an interval width of exactly 0 and was wrongly judged as converged;
+on 2026-09-19 `evaluation/dkw.py` was fixed to treat n < 2 as "keep collecting" (see the DKW section of
+`docs/prism_integration_plan.md`). While fixing this, a more serious existing bug in shared code that also affects AWSIM was found and
+fixed: `DKWModeRunner.handle_sequential` did not check `max_samples` at all.
+
+Previously, `--target prism --mode dkw` did not raise an error; it silently ran one case without any statistical evaluation and exited.
+There are now explicit guards in both `apps/cli/orchestrator_main.py::validate_args` and
+`orchestration/orchestrator.py::_build_strategy`, so combining `--target prism --param ...` with any mode other than `explore` /
+`binomial_ci` / `sprt` / `ebstop` / `dkw` / `dkw_fixed` is rejected immediately with a `ValueError`.
+
+## The methods explained (for readers new to statistics)
+
+The leaves of the trees are labeled with the academic names of the methods rather than CLI command names. Here is a short
+explanation of what each method does.
+
+There are two broad goals.
+
+- **Interval estimation**: compute an interval such that we can say "the true value is in this range". Narrower intervals are more
+  precise but need more samples.
+- **Hypothesis testing**: decide between two options, "the true value is above a threshold" or "below it".
+
+**Wilson score interval / Clopper–Pearson interval** (interval estimation for binary metrics): confidence intervals for a metric that
+is 0 or 1 (for example, collided / did not collide). The Wilson score interval is a lightweight method based on a normal
+approximation; with few samples or a true probability close to 0 or 1, its actual coverage can fall below the nominal confidence level.
+The Clopper–Pearson interval is computed exactly without approximation, so it is guaranteed never to fall below the nominal level
+(at the cost of a somewhat wider interval). Clopper–Pearson is recommended for final safety decisions.
+
+**Sequential probability ratio test** (hypothesis testing): decides between "the true probability is at least p0" and "at most p1"
+sequentially, adding one sample at a time. It updates the likelihood ratio and commits to a decision when a threshold is crossed. By
+construction, the error rate of the decision does not exceed the specified value however many times samples are added and checked.
+
+**Dvoretzky–Kiefer–Wolfowitz inequality** (interval estimation for continuous or count metrics, absolute error): an inequality that
+bounds the difference between the empirical and the true distribution function from the sample size alone, without assuming the
+shape of the distribution. It is used to compute a confidence interval for any quantile. The DKW inequality's guarantee holds when the
+samples are drawn uniformly and independently from the target distribution and are evaluated **only once**.
+
+- The fixed-sample version (`--mode dkw_fixed`) collects a predetermined number n of samples and evaluates once. With uniform samples
+  only (`--dkw-pure-smc`, or a new run that does not carry over exploration data), **the DKW guarantee holds as is**. Choose n in
+  advance with n ≥ ln(2/δ)/(2ε²) (for example, n ≥ 4,611 for ε = 0.02 and δ = 0.05; with `--dkw-simultaneous`, divide δ by the number
+  of metrics).
+- The sequential version (`--mode dkw`) adds samples and stops once the interval width falls to the target. The error budget is split
+  per stage (δ/2^k for stage k), but the interval is evaluated every time a new sample is issued, so **repeated checks within the same
+  stage are not covered by the budget**. The sequential interval is therefore **an approximation**. Without `--dkw-pure-smc`, it also
+  reuses exploration data with weights estimated by KDE, which adds another approximation.
+- If `--mode dkw_fixed` is run with past exploration data (`--resume-from`) mixed in and without `--dkw-pure-smc`, biased samples are
+  used without weights, and **the guarantee does not hold**.
+
+Each evaluation records which of these applies in `diagnostics.guarantee`
+(`dkw` / `approximate_sequential` / `approximate_sequential_kde` / `none_mixed_samples`).
+If it is not `dkw`, a notice is printed once at run time.
+
+**Empirical Bernstein Stopping** (interval estimation for continuous or count metrics, relative error): like DKW, it targets continuous
+or count metrics, but the target is a relative error rather than an absolute one. It stops based on the observed variance, so metrics
+with a small true variance converge with fewer samples. Because the error budget is allocated to each sample size in advance, the overall
+error rate stays within the guaranteed value even when checked every time.
+
+**Alpha-spending correction** (`--binomial-anytime-valid`): the Wilson / Clopper–Pearson formulas assume the interval is computed only
+once, but `binomial_ci` recomputes the interval every time a sample is added and stops when the target width is reached. Looking at the
+results repeatedly and stopping at a convenient moment can make the actual error rate worse than the apparent confidence level (**the
+repeated peeking problem**). `--binomial-anytime-valid` applies the same idea as EBStop (allocating the error budget in advance) to the
+Wilson / Clopper–Pearson intervals and guarantees that the overall error rate stays within the guaranteed value however often it is
+checked. In exchange, the number of samples needed to reach the same target width grows by about 5–8 times in practice, so it is off by
+default (opt-in).
+
+`sprt` and `ebstop` have protection against repeated peeking built into their design, so they need no opt-in like `binomial_ci`.
+`--mode dkw` only splits the budget per stage and does not protect repeated checks within a stage (see the DKW explanation above). Use
+`--mode dkw_fixed` when a guarantee is required.
+
+## Meaning of each decision axis (quick reference)
+
+| Axis | Options | Corresponding concept |
+|---|---|---|
+| What you want to know | Interval estimation / hypothesis test (threshold decision) | The former = `binomial_ci` / `dkw` / `ebstop`, the latter = `sprt` |
+| Type of metric | Binary (0/1) / continuous or count | `StatisticalTargetProfile.binary_metric` / `.dkw_metric` |
+| Soundness (binary) | Sound / standard (CLT approximation, unsound) | `clopper-pearson` / `wilson` (see the explanation above) |
+| Error specification (continuous) | Absolute / relative error | `dkw` family / `ebstop` |
+| Setting (DKW) | Sequential (stops early, approximate) / fixed count (guaranteed with uniform samples) | `--mode dkw` / `--mode dkw_fixed` (shared by AWSIM and PRISM) |
+| Protection against repeated peeking (binary) | Not needed (default) / needed | none / `--binomial-anytime-valid` |
+
+## DOT sources
+
+The Graphviz DOT sources are `docs/diagrams/awsim_tree.dot` / `docs/diagrams/prism_tree.dot`. To regenerate the images, run:
 
 ```bash
 dot -Tpng -Gdpi=150 docs/diagrams/awsim_tree.dot -o docs/diagrams/awsim_tree.png

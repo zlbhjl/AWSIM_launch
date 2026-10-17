@@ -1,5 +1,9 @@
 # AWSIM Adaptive Safety Testing Framework
 
+A generic statistical verification framework that runs the system under test directly and evaluates the results statistically
+(AWSIM + Autoware, ODE/SDE models, PRISM, and image recognition with BBSL).
+**[English version below ↓](#english)** ｜ 日本語版はこの下にあります。
+
 検証対象を確率モデルへ抽象化せずに直接実行し、その結果を統計的に評価する、汎用の統計的検証フレームワークです。
 **シミュレータ (対象の実行)・判定器・統計評価を分離**し、対象ごとに変わる部分 (`targets/`、`verifiers/`) だけを
 差し替えて、シミュレーション管理・コンテナでの並列実行・統計評価 (二項信頼区間・DKW・SPRT・EBStop) を共通に使います。
@@ -219,7 +223,7 @@ ROS・AWSIM・GPU は不要です。AW-CheckerPy や AW-Runtime-Monitor が必�
 
 - container 内のユーザー名とパス (`/home/passd`) が、container profile とコードに固定されています。
 - 校正済みの ODE パラメータは Autoware 1.7.1 用だけです。
-- 文書は現在日本語だけです。
+- 使い方の主な文書は、日本語の下に英語版があります。設計書と実験の記録は日本語だけです (文書一覧の「日本語のみ」)。
 
 ## 文書
 
@@ -234,11 +238,11 @@ ROS・AWSIM・GPU は不要です。AW-CheckerPy や AW-Runtime-Monitor が必�
 | [docs/targets/bbsl_ft4d.md](docs/targets/bbsl_ft4d.md) | BBSL / FT4D 連携 |
 | [docs/statistical_method_selection.md](docs/statistical_method_selection.md) | 統計手法の選び方 |
 | [docs/importance_sampling.md](docs/importance_sampling.md) | 重点サンプリング (固定P・固定Q) の使い方 |
-| [docs/importance_sampling_design.md](docs/importance_sampling_design.md)、[docs/awsim_importance_sampling_design.md](docs/awsim_importance_sampling_design.md) | 重点サンプリングの設計 |
-| [docs/experiments/autoware_version_replay.md](docs/experiments/autoware_version_replay.md) | Autoware 1.7.1 / 1.8.0 / 1.9.0 の比較実験の記録 |
+| [docs/importance_sampling_design.md](docs/importance_sampling_design.md)、[docs/awsim_importance_sampling_design.md](docs/awsim_importance_sampling_design.md) | 重点サンプリングの設計 (日本語のみ) |
+| [docs/experiments/autoware_version_replay.md](docs/experiments/autoware_version_replay.md) | Autoware 1.7.1 / 1.8.0 / 1.9.0 の比較実験の記録 (日本語のみ) |
 | [docs/network_storm_control_guide.md](docs/network_storm_control_guide.md) | DDS と storm-control の対策 |
-| [docs/legacy.md](docs/legacy.md) | 旧フレームのコマンド (通常は使わない) |
-| [docs/refactor_design.md](docs/refactor_design.md)、[docs/implementation_rules.md](docs/implementation_rules.md) | 設計方針と実装ルール |
+| [docs/legacy.md](docs/legacy.md) | 旧フレームのコマンド (通常は使わない、日本語のみ) |
+| [docs/refactor_design.md](docs/refactor_design.md)、[docs/implementation_rules.md](docs/implementation_rules.md) | 設計方針と実装ルール (日本語のみ) |
 
 ## 引用
 
@@ -273,3 +277,297 @@ FT4D による評価を使う場合は、次の論文も引用してください
 ## ライセンス
 
 [Apache License 2.0](LICENSE)。外部ツールについては [NOTICE](NOTICE) を参照してください。
+
+---
+
+<a id="english"></a>
+
+# English
+
+AWSIM Adaptive Safety Testing Framework is a generic statistical verification framework. Instead of abstracting the system under
+test into a probabilistic model, it **runs the system directly and evaluates the results statistically**. The simulator (execution of
+the target), the judge, and the statistical evaluation are separated: only the target-specific parts (`targets/`, `verifiers/`) are
+replaced, while simulation management, parallel execution in containers, and statistical evaluation (binomial confidence intervals,
+DKW, SPRT, EBStop) are shared.
+
+- The standard configuration runs classical statistical model checking with Markov chains (PRISM) and an LTL judge (Maude).
+- By replacing the target-specific parts, the same framework evaluates an automated-driving AI with Autoware + AWSIM and an
+  image-recognition AI with YOLO + BBSL.
+- Differences in the execution environment (OS, libraries, Autoware versions) are isolated in per-target containers.
+
+| Target (`--target`) | Description | Requirements |
+|---|---|---|
+| `awsim` | Driving scenarios on AWSIM + Autoware (U-turn, cut-in, swerve, cut-out, deceleration) | NVIDIA GPU, Docker |
+| `dynamics` | Continuous dynamics (ODE/SDE) with the same inputs as the AWSIM U-turn scenario | Python only |
+| `prism` | Paths of a PRISM probabilistic model (DTMC) judged by Maude | Docker (CPU only) |
+| `bbsl` | Evaluates image-recognition test results ([BBSL-test](https://github.com/IOKENTOI/BBSL-test)) with FT4D | BBSL-test |
+
+## Features
+
+- **Statistical stopping rules**: binomial confidence intervals (Wilson / Clopper-Pearson, with an anytime-valid option), quantile
+  intervals with the DKW inequality, SPRT, and Empirical Bernstein Stopping. Experiments stop once the required precision is reached.
+- **Adaptive exploration**: exploration modes that learn the collision boundary with Gaussian process regression and focus on
+  uncertain regions and the boundary (`explore`, `boundary_gap`, `jama_edge`, `ttc_edge`, `worst_ttc`, and others).
+- **Distributed execution**: a Ray task queue distributes cases to worker containers on several machines and gathers the results into
+  one dataset. Stopped workers, GPU failures, and late traces are detected and recovered automatically.
+- **Reproducibility**: every sample records its seed, input distribution, and runtime metadata. The `replay` mode re-runs the cases of
+  an existing dataset on another Autoware version.
+- **Judgments and metrics**: formal judgments with Maude (collision, TTC), continuous metrics computed from traces (`min_ttc`,
+  `min_distance`, and others), and theoretical values from the JAMA physical model are recorded together.
+- **Importance sampling (fixed P, fixed Q)**: samples are generated from a human-specified proposal distribution Q while the target
+  distribution P stays fixed, and P/Q weights are recorded (PRISM transition probabilities, ODE/SDE inputs and noise paths, AWSIM speed
+  inputs). Estimates, ESS, interval widths, and maximum weights can be compared with ordinary P samples of the same size.
+- **FT4D**: confidence evaluation based on fault tree analysis over datasets and statistical testing (`verification_core/ft4d`,
+  [Aoki et al., PRDC 2020](https://doi.org/10.1109/PRDC50213.2020.00021)).
+
+## Related tools
+
+Conventional statistical model checkers (UPPAAL, PRISM, Storm, and others) require the target to be written as a probabilistic model
+the tool accepts. Work that handles AI directly (DSMC [Gros et al., FORTE 2020], PyDSMC [Gros et al., QEST+FORMATS 2025], MoGym
+[Gros et al., CAV 2022], COOL-MC [Gross et al., SETTA 2022]) also assumes specific environments and property languages, such as formal
+MDPs or the Gymnasium API. This framework separates the parts that depend on the target, the execution environment, and the
+property language, and replaces them to apply the same statistical evaluation to diverse targets.
+
+## Architecture
+
+```text
+run_orchestrator_cluster_v2.py ─ orchestrator (Ray head)
+  ├─ orchestration/   exploration strategies, statistical modes, stopping decisions (target-independent)
+  ├─ evaluation/      statistics (binomial_ci, dkw, sprt, ebstop, gp_boundary, ft4d_service)
+  └─ runtime/cluster/ starting and monitoring worker containers, TaskQueue / SharedStore actors
+        │ Ray Client (TCP)
+        ▼
+run_worker_v2.py ─ inside each worker container
+  └─ targets/<target>/  backend (execution) → result_interpreter (judgment) → EvaluationRecord
+```
+
+Target-specific code lives in `targets/`, and the shared data types are defined in `contracts/`.
+See [docs/architecture.md](docs/architecture.md) for details.
+
+## Installation
+
+Python 3.10 or later is required. Dependencies are managed in `pyproject.toml`.
+
+```bash
+git clone https://github.com/zlbhjl/AWSIM_launch.git
+cd AWSIM_launch
+python3 -m pip install .                     # numpy, pandas, scipy, scikit-learn
+python3 -m pip install ".[cluster,plot]"     # distributed execution (Ray), plotting (matplotlib)
+```
+
+| extra | Contents |
+|---|---|
+| `cluster` | Distributed execution with Ray |
+| `maude` | Python binding for Maude (PRISM / AWSIM judgments) |
+| `plot` | Plotting (`tools/plot`) |
+| `tools` | Operations helpers (`tools/maintenance`) |
+| `test` | Unit tests |
+
+The `awsim` target also needs the following external tools. None of them are included in this repository.
+
+| Tool | Source | Default location |
+|---|---|---|
+| AWSIM Labs | <https://github.com/duongtd23/AWSIM-Labs> | `~/awsim_labs` |
+| Autoware | <https://github.com/autowarefoundation/autoware> (see [docker/](docker/) for building images) | container image |
+| AW-Runtime-Monitor | <https://github.com/duongtd23/AW-Runtime-Monitor> | `~/AW-Runtime-Monitor` |
+| AW-CheckerPy (Maude) | <https://github.com/duongtd23/AW-CheckerPy> | `~/aw-cheaker/Maude-3.5.1/AW-CheckerPy` |
+| AWSIMScriptPy (scenarios) | <https://github.com/zlbhjl/AWSIMScriptPy> | `~/AWSIMScriptPy` |
+
+Get the `*.maude` files and `aw_checkerpy.py` used by `AW_Kinematics_Extractor/` from AW-CheckerPy, and the `docker/aw_monitor/`
+package used by `docker/autoware_1.9.0_awsim.Dockerfile` from AW-Runtime-Monitor.
+
+## Quick start
+
+### 1. Without a GPU (continuous dynamics)
+
+Computes the same U-turn conditions as AWSIM with an ODE. Each case takes less than a second and needs no extra tools.
+
+```bash
+# Compute a single case
+python3 run_orchestrator_v2.py --target dynamics --case-kind uturn \
+  --param dx0=15 --param ego_speed=36 --param npc_speed=18 \
+  --output artifacts/dynamics/one.jsonl --dataset-csv artifacts/dynamics/one.csv
+
+# Draw inputs uniformly and continue until the 95% confidence interval of the collision probability is 0.1 wide
+python3 run_orchestrator_v2.py --target dynamics --case-kind uturn \
+  --mode binomial_ci --binomial-target-width 0.1 --max-samples 1000 --seed 42 \
+  --output artifacts/dynamics/stat.jsonl --dataset-csv artifacts/dynamics/stat.csv
+```
+
+The statistical report and the stop reason are saved in `artifacts/dynamics/stat.jsonl.summary.json`.
+See [docs/targets/dynamics.md](docs/targets/dynamics.md) for details.
+
+### 2. PRISM / Maude (CPU only)
+
+PRISM model checking computes exact probabilities, so the estimates of the statistical methods can be checked against them.
+
+```bash
+docker build -f docker/prism-maude.Dockerfile -t awsim-launch/prism-maude:0.1.0 docker
+docker run --rm -v "$PWD":/workspace:ro -w /workspace awsim-launch/prism-maude:0.1.0 \
+  python3 -m apps.cli.prism_main --samples 20 --min-samples 10 \
+  --output-root /tmp/prism --report /tmp/prism/report.json
+```
+
+The exact probability from PRISM and the estimates from samples (binomial confidence interval, DKW) are shown side by side.
+
+See [docs/targets/prism.md](docs/targets/prism.md) for cluster runs and examples of each statistical mode.
+
+### 3. AWSIM + Autoware (GPU cluster)
+
+1. Build the Autoware container images (for example, [docker/README_autoware_1.9.0.md](docker/README_autoware_1.9.0.md)).
+2. Write the IP addresses, users, and container names of the nodes in [redis_cluster/cluster_config.py](redis_cluster/cluster_config.py).
+3. Run on the orchestrator machine:
+
+```bash
+python3 run_orchestrator_cluster_v2.py \
+  --case-kind uturn \
+  --mode binomial_ci --binomial-target c_collision \
+  --binomial-method clopper-pearson --binomial-confidence 0.95 --binomial-target-width 0.02 \
+  --container-profile autoware190_ekfdiagfix --scenario-profile autoware171 \
+  --headless \
+  --output ~/simulation_traces/uturn_records.jsonl \
+  --dataset-csv ~/simulation_traces/uturn_dataset.csv
+```
+
+> **Note**: always start worker containers with a bridge-network `container_profile` (`autoware171`, `autoware180*`, `autoware190*`).
+> Running several Autoware instances on the host network sends DDS multicast traffic to the LAN, and switches may shut the ports down
+> with storm control. The legacy `master_orchestrator.py` uses the host network and should not normally be used ([docs/legacy.md](docs/legacy.md)).
+
+See [docs/cluster_operations.md](docs/cluster_operations.md) for automatic recovery options, profiles for each Autoware version,
+timeout handling, and more.
+
+## Statistical modes
+
+Select a mode with `--mode`. See the decision tree in [docs/statistical_method_selection.md](docs/statistical_method_selection.md)
+to choose one.
+
+| Mode | What it evaluates | Stopping condition |
+|---|---|---|
+| `binomial_ci` | Confidence interval of the probability of a 0/1 metric (such as `c_collision`) | Interval width at or below the target |
+| `sprt` | Hypothesis test of whether the probability is at least `p0` or at most `p1` | One hypothesis is accepted |
+| `dkw_fixed` / `dkw` | Quantiles of a continuous metric (such as `min_ttc`) | Once after a fixed number of samples (guaranteed) / sequential (stops early, approximate) |
+| `ebstop` | Mean of a bounded continuous metric (relative error) | Interval based on the observed variance at or below the target |
+| `replay` | Re-running the cases of an existing dataset | All input cases are used |
+| `explore` and others | Exploring the collision boundary (GP) | Strategy-specific conditions (such as `--max-samples`) |
+
+Notes on statistical guarantees:
+
+- By default, `binomial_ci` recomputes the interval at the same confidence level each time a sample is added. To bound the error rate
+  inflated by these repeated checks, use `--binomial-anytime-valid` (it needs more samples).
+- For intervals used in safety decisions, use `--binomial-method clopper-pearson`. Wilson is an approximation, and its actual coverage
+  can fall below the nominal level when the true probability is close to 0 or 1.
+- The DKW inequality's guarantee holds **only when `--mode dkw_fixed` evaluates uniform samples once** (`--dkw-pure-smc`, or a new run
+  that does not carry over exploration data). Choose the sample size in advance with n ≥ ln(2/δ)/(2ε²) (for example, n ≥ 4,611 for
+  ε = 0.02 and δ = 0.05).
+- `--mode dkw` (sequential) checks the interval after every new sample, but the error budget is split per stage only, so it is an
+  approximation. Without `--dkw-pure-smc`, it also reuses exploration data with weights estimated by KDE, which adds another
+  approximation.
+- Each evaluation records the kind of guarantee in `diagnostics.guarantee` (`dkw` / `approximate_sequential` /
+  `approximate_sequential_kde` / `none_mixed_samples`).
+
+### Importance sampling
+
+To estimate the probability of rare events, separate CLIs (`apps.cli.prism_importance_main`, `apps.cli.dynamics_importance_main`,
+`apps.cli.awsim_importance_main`) compare weighted samples from a fixed Q with ordinary P samples. Automatic updates of Q and
+sequential stopping are not supported. See [docs/importance_sampling.md](docs/importance_sampling.md) for usage.
+
+```bash
+# ODE: compare a hand-written Q4 with ordinary P, 1000 samples each
+python3 -m apps.cli.dynamics_importance_main \
+  --sampling-plan configs/dynamics_importance_q4.yaml \
+  --output-root artifacts/dynamics_importance_q4 \
+  --max-samples 1000 --sampling-seed 20261011
+```
+
+## Applications
+
+The same statistical evaluation is applied to three kinds of targets with different characteristics.
+
+| Target | Judge | Example evaluation |
+|---|---|---|
+| Autoware + AWSIM (automated-driving AI) | AW-Checker (LTL) | Collision probability in scenarios such as U-turn (reproducing the experiment of [Tran et al., 2025] on this framework) |
+| YOLO + KITTI + noise generation (image-recognition AI) | BBSL | Probability of missing a hazard under noise (rain, occlusion, blur), and overall risk with FT4D |
+| PRISM (Markov chain) | Maude (LTL) | Estimating the failure probability of a DTMC and comparing it with the exact value from model checking |
+
+## Outputs
+
+| File | Contents |
+|---|---|
+| `--output` (JSONL) | One `EvaluationRecord` per sample (inputs, judgments, metrics, runtime metadata) |
+| `--dataset-csv` | The same data as a table with one row per sample. Also used to resume statistical modes |
+| `<output>.summary.json` | Final report of the statistical mode (estimate, interval, stop reason, seed) |
+| `~/simulation_traces_sim_worker_*` (on each node) | AWSIM trace JSON, videos, `awsim.log`, `autoware.log` |
+
+Only rows with `status` = `success` are used for statistics. Rows with `timeout`, `execution_error`, or `analysis_error` are recorded
+but are not counted as samples.
+
+## Tests
+
+```bash
+python3 -m pip install ".[test]"
+python3 -m pytest
+```
+
+ROS, AWSIM, and a GPU are not needed. Tests that need AW-CheckerPy or AW-Runtime-Monitor are skipped when those tools are absent.
+
+## Known limitations
+
+- The user name and paths inside the containers (`/home/passd`) are fixed in the container profiles and the code.
+- Calibrated ODE parameters exist only for Autoware 1.7.1.
+- The main usage documents have an English version below the Japanese text. Design documents and experiment records are in Japanese
+  only (marked "Japanese only" in the list below).
+
+## Documentation
+
+| Document | Contents |
+|---|---|
+| [docs/architecture.md](docs/architecture.md) | Directory layout, data flow of distributed execution, error handling |
+| [docs/cluster_operations.md](docs/cluster_operations.md) | Operating an AWSIM cluster (container profiles, automatic recovery, timeouts, monitoring, plotting) |
+| [docs/autoware_versions.md](docs/autoware_versions.md) | Known issues with Autoware 1.8.0 / 1.9.0 (false MRM triggered by EKF diagnostics) |
+| [docs/scenario_authoring.md](docs/scenario_authoring.md) | Adding and tuning AWSIM scenarios |
+| [docs/targets/dynamics.md](docs/targets/dynamics.md) | The ODE/SDE target, comparison with AWSIM, calibration |
+| [docs/targets/prism.md](docs/targets/prism.md) | The PRISM / Maude target |
+| [docs/targets/bbsl_ft4d.md](docs/targets/bbsl_ft4d.md) | BBSL / FT4D integration |
+| [docs/statistical_method_selection.md](docs/statistical_method_selection.md) | Choosing a statistical method |
+| [docs/importance_sampling.md](docs/importance_sampling.md) | Using importance sampling (fixed P, fixed Q) |
+| [docs/importance_sampling_design.md](docs/importance_sampling_design.md), [docs/awsim_importance_sampling_design.md](docs/awsim_importance_sampling_design.md) | Importance sampling design (Japanese only) |
+| [docs/experiments/autoware_version_replay.md](docs/experiments/autoware_version_replay.md) | Record of the Autoware 1.7.1 / 1.8.0 / 1.9.0 comparison (Japanese only) |
+| [docs/network_storm_control_guide.md](docs/network_storm_control_guide.md) | DDS and storm-control countermeasures |
+| [docs/legacy.md](docs/legacy.md) | Commands of the legacy framework (not normally used, Japanese only) |
+| [docs/refactor_design.md](docs/refactor_design.md), [docs/implementation_rules.md](docs/implementation_rules.md) | Design principles and implementation rules (Japanese only) |
+
+## Citation
+
+To cite this software, see [CITATION.cff](CITATION.cff) (also available from "Cite this repository" on GitHub).
+If you use the FT4D evaluation, please also cite:
+
+> Toshiaki Aoki, Daisuke Kawakami, Nobuo Chida, Takashi Tomita. Dataset Fault Tree Analysis for Systematic Evaluation of
+> Machine Learning Systems. In *2020 IEEE 25th Pacific Rim International Symposium on Dependable Computing (PRDC)*,
+> pp. 100–109, 2020. doi:[10.1109/PRDC50213.2020.00021](https://doi.org/10.1109/PRDC50213.2020.00021)
+
+## References
+
+- AW-Checker (LTL judgments on AWSIM traces): D. D. Tran, T. Tomita, T. Aoki. Safety Analysis of Autonomous Driving Systems:
+  A Simulation-Based Runtime Verification Approach. *IEEE Transactions on Reliability*, 74(4):4574–4588, 2025.
+  doi:[10.1109/TR.2025.3561455](https://doi.org/10.1109/TR.2025.3561455)
+- BBSL (a formal specification language and specification-based testing for image recognition): K. Tanaka, T. Aoki, T. Tomita,
+  D. Kawakami, N. Chida. Specification-Based Testing of the Image-Recognition Performance of Automated Driving Systems.
+  *IEEE Access*, 13:6321–6349, 2025. doi:[10.1109/ACCESS.2024.3516082](https://doi.org/10.1109/ACCESS.2024.3516082)
+  (First presented as: K. Tanaka et al. Specification Based Testing of Object Detection for Automated Driving Systems via BBSL.
+  *ENASE 2023*, pp. 250–261.)
+- DSMC: T. P. Gros et al. Deep Statistical Model Checking. *FORTE 2020*, LNCS 12136, pp. 96–114. doi:[10.1007/978-3-030-50086-3_6](https://doi.org/10.1007/978-3-030-50086-3_6)
+- PyDSMC: T. P. Gros et al. PyDSMC: Statistical Model Checking for Neural Agents Using the Gymnasium Interface.
+  *QEST+FORMATS 2025*, LNCS 16143, pp. 134–156. doi:[10.1007/978-3-032-05792-1_8](https://doi.org/10.1007/978-3-032-05792-1_8)
+- MoGym: T. P. Gros et al. MoGym: Using Formal Models for Training and Verifying Decision-making Agents. *CAV 2022*,
+  LNCS 13372, pp. 430–443. doi:[10.1007/978-3-031-13188-2_21](https://doi.org/10.1007/978-3-031-13188-2_21)
+- COOL-MC: D. Gross et al. COOL-MC: A Comprehensive Tool for Reinforcement Learning and Model Checking. *SETTA 2022*,
+  LNCS 13649, pp. 41–49. doi:[10.1007/978-3-031-21213-0_3](https://doi.org/10.1007/978-3-031-21213-0_3)
+
+## Acknowledgments
+
+This work was supported by JST CREST, "Creation of Formal Methods and Verification Tools for Next-Generation In-Vehicle Platform
+Systems" (次世代車載基盤システムのための形式手法と検証ツールの創出).
+
+## License
+
+[Apache License 2.0](LICENSE). See [NOTICE](NOTICE) for external tools.

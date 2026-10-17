@@ -1069,4 +1069,4 @@ AWSIM_TIMEOUT_PARAMS_V2=(--param dx0=10.09 --param ego_speed=37.98 --param npc_s
 
 ## 9. 旧文書の位置づけ
 
-以前の長い棚卸し、移行途中メモ、file-by-file inventory、当時の判断経緯は [docs/refactor_design_legacy_20260817.md](refactor_design_legacy_20260817.md) に残す。この文書では、長く残したい設計原則と、2026-08-24 時点で有効な進捗要約だけを扱う。
+以前の長い棚卸し、移行途中メモ、file-by-file inventory、当時の判断経緯は 旧設計書 (`refactor_design_legacy_20260817.md`、公開版には含めていない) に残す。この文書では、長く残したい設計原則と、2026-08-24 時点で有効な進捗要約だけを扱う。

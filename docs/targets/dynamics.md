@@ -1,5 +1,7 @@
 # 連続ダイナミクス (ODE/SDE) 対象
 
+The continuous dynamics (ODE/SDE) target. **[English version below ↓](#english)**
+
 `--target dynamics --case-kind uturn` は、AWSIMのUターンと同じ入力（`dx0`・`ego_speed`・`npc_speed`）を
 連続モデルで計算する対象です。AWSIM・Autoware・GPUは使わず、1件あたり1秒未満で終わります。
 設計は [docs/dynamics_target_design.md](../dynamics_target_design.md) を参照してください。
@@ -229,3 +231,240 @@ python3 run_worker_v2.py \
 
 ノイズがすべて0の場合はODEと同一の結果になります。ノイズの大きさはまだ実データから校正していないため、
 SDEの衝突率は感度分析として扱い、現実の確率とは解釈しないでください。
+
+---
+
+<a id="english"></a>
+
+# English: Continuous dynamics (ODE/SDE) target
+
+`--target dynamics --case-kind uturn` computes the same inputs as the AWSIM U-turn scenario (`dx0`, `ego_speed`, `npc_speed`)
+with a continuous model. It does not use AWSIM, Autoware, or a GPU, and each case finishes in less than a second.
+See [docs/dynamics_target_design.md](../dynamics_target_design.md) for the design (Japanese only).
+
+There are two ways to use it.
+
+- **Standalone mode**: evaluates the ODE/SDE itself statistically, without mixing in AWSIM results.
+  The default braking is the JAMA ai_aeb profile. To use braking calibrated to Autoware, add
+  `--param controller_kind=autoware171_uturn_calibrated`.
+- **AWSIM comparison mode**: gives the same inputs to both the ODE and AWSIM and compares the results.
+  The ODE uses the start state, NPC turn, and braking calibrated from Autoware 1.7.1 traces.
+
+## Generic model and its U-turn instance
+
+Every model is written as a hybrid stochastic differential equation with discrete modes $q$.
+
+```text
+dx = f_q(t, x) dt + G_q(t, x) dW_t        (an ODE when G_q = 0)
+When the guard g(t, x) crosses 0, apply the reset x+ = r(x-) and switch mode q -> q'
+```
+
+- `targets/dynamics/models/base.py`: the `HybridSystem` interface that models implement
+  (state names, initial mode and state, drift $f_q$, diffusion $G_q$, guards and resets, projections)
+- `targets/dynamics/runners/ode.py`: `solve_ivp` per mode. Guards are located as terminal events.
+- `targets/dynamics/runners/sde.py`: fixed-step Euler–Maruyama. Without noise it delegates to the ODE runner.
+
+A new model (such as a lane change) only needs to implement `HybridSystem` to reuse the runners, statistical modes, and storage.
+The U-turn is one implementation, `UTurnSystem` ([models/uturn.py](../../targets/dynamics/models/uturn.py)).
+Its modes are `lane` → `turn` → `exit`; the equations are in [section 6.2 of the design document](../dynamics_target_design.md) (Japanese only).
+
+## What the U-turn model contains
+
+Time 0 is aligned with the moment the NPC starts its U-turn in AWSIM (when `dx0` is reached).
+
+- Relative position, speed, and heading at the start: linear calibration from `dx0`, the ego speed, and the NPC speed
+- NPC turn: the pose origin follows an arc of radius about 3.35 m over about 176.6°; the geometric center is 1.12 m ahead of it
+- Ego braking: delay 0.616 s, rise time 0.095 s, deceleration 3.013 m/s² (curve fit to speed series)
+- Collision check: overlap of oriented bounding boxes (OBB) using the vehicle dimensions
+- TTC: the first time the OBBs overlap in a constant-velocity prediction up to 5 s ahead in 0.1 s steps
+
+The calibration values are in `targets/dynamics/calibrations/`. The `execution` metadata of each result stores the resolved
+initial state, radius, turn angle, braking profile, and the calibration source.
+
+## Two decision modes
+
+Two decisions are always produced from the same trajectory.
+
+| Mode | Output column | Decision | Purpose |
+|---|---|---|---|
+| Judgment | `c_collision` | Collision when the vehicle boxes overlap | A substitute for the AWSIM judgment |
+| Screening | `c_screening_candidate` | The gap between vehicles `min_clearance` is below 1.1 m | Selecting candidates to re-check on AWSIM |
+
+On Autoware 1.7.1, a single evaluation of 100 cases never looked at before (50 collisions, 50 non-collisions) gave:
+
+| Mode | Collisions detected | Misses | Correct non-collision rate | Accuracy |
+|---|---|---|---|---|
+| Judgment | 49/50 | 1 | 92% | 95% |
+| Screening | 50/50 | 0 | 72% | 86% |
+
+The mean error of the continuous TTC was 0.039 s. Zero misses out of 50 does not mean a miss rate of 0 (the 95% upper confidence
+bound is about 6%). The validation used only the `ego lane=514, offset=38` placement. The 1.1 m margin was chosen for the braking
+calibrated to Autoware, so when it is used with JAMA braking, `screening_provenance.calibrated_for_current_controller=false` is recorded.
+See [docs/dynamics_awsim_decision_modes_20261005.md](../dynamics_awsim_decision_modes_20261005.md) and
+[docs/dynamics_awsim_final_validation_v2_20261005.md](../dynamics_awsim_final_validation_v2_20261005.md) for details (Japanese only).
+
+## Examples
+
+To bias the inputs with a human-specified fixed Q and compare with P/Q weights on fixed samples, see
+[Using importance sampling](../importance_sampling.md). It uses a different CLI and output format from the statistical modes here.
+
+Compute a single case with fixed parameters:
+
+```bash
+python3 run_orchestrator_v2.py \
+  --target dynamics --case-kind uturn \
+  --param dx0=15 --param ego_speed=36 --param npc_speed=18 \
+  --output artifacts/dynamics/records.jsonl \
+  --dataset-csv artifacts/dynamics/dataset.csv \
+  --dynamics-output-root artifacts/dynamics/traces
+```
+
+Draw inputs uniformly and evaluate the collision probability with a binomial confidence interval (using the screening metric):
+
+```bash
+python3 run_orchestrator_v2.py \
+  --target dynamics --case-kind uturn \
+  --mode binomial_ci --max-samples 1000 --seed 42 \
+  --dynamics-decision-mode screening \
+  --output artifacts/dynamics/stat.jsonl \
+  --dataset-csv artifacts/dynamics/stat.csv
+```
+
+- `--dynamics-decision-mode` selects the binary metric for `binomial_ci` / `sprt` (default `judgment` = `c_collision`).
+  `dkw` / `dkw_fixed` / `ebstop` always use `min_ttc`.
+- Without a distribution, every input not fixed by `--param` is drawn independently and uniformly from the ranges in
+  `scenario_specs/uturn.py`. Use `--dynamics-input-distribution '{"dx0":{"distribution":"uniform","min":10,"max":25}}'` to specify one.
+- Each row keeps its seed, distribution, and the drawn values, and `<output>.summary.json` stores the statistical report, the stop
+  reason, and `dynamics_decision_mode`.
+
+Run one case on both the ODE and AWSIM and compare them (requires an environment where AWSIM runs):
+
+```bash
+python3 run_dynamics_awsim_compare_v2.py \
+  --dx0 15 --ego-speed 36 --npc-speed 18 \
+  --decision-mode screening \
+  --output artifacts/dynamics_compare/compare.jsonl
+```
+
+Comparison records contain `dynamics_decision`, `decision_agree`, and `decision_missed_awsim_collision`.
+When the AWSIM side fails, the record is saved as `revalidation_unavailable` rather than as a disagreement.
+
+Check against saved AWSIM traces in bulk:
+
+```bash
+TD=/home/passd/simulation_traces_sim_worker_21_20260911_125415
+python3 tools/analysis/validate_dynamics_against_awsim.py \
+  --trace-dir $TD --records-jsonl $TD/uturn_records.jsonl \
+  --calibration-report artifacts/autoware171_uturn_screening_holdout_split_20261005.json \
+  --sources-key final_validation_sources \
+  --output-dir artifacts/my_validation
+```
+
+This tool recomputes the AWSIM-side TTC with the same code as the ODE (`awsim_min_ttc`).
+The CVM value from `AW_Kinematics_Extractor` is kept for reference in the `awsim_min_ttc_extractor` column.
+That extractor rotates the world-frame `twist` by the yaw a second time, so it is not used as the reference for comparison.
+
+## Recalibration
+
+The two calibration tools (`tools/analysis/`) fit the ODE to the actual behavior of AWSIM.
+They are not run for every experiment; run them when the behavior on the AWSIM side changes.
+
+- `calibrate_autoware_uturn_braking.py`: delay, rise time, and deceleration of the ego braking. Fits a braking curve to the speed
+  series for 2.5 s after the trigger by least squares and takes the median over the calibration traces.
+- `calibrate_uturn_start_geometry.py`: relative position, speed, and heading at the start of the U-turn, and the NPC turn radius and
+  angle. Fits them as linear functions of the inputs (`dx0`, ego speed, NPC speed) by least squares. It also selects the final
+  evaluation set.
+
+### When to use them
+
+| Situation | Example | Tool to run |
+|---|---|---|
+| The ego braking changed | A new Autoware version, changed control parameters | Braking calibration (then the start-state calibration) |
+| NPC behavior or placement changed | Changed scenario lane/offset, waypoint generation, AWSIM update | Start-state and NPC-turn calibration |
+| Validation found a discrepancy | More false detections, a systematic TTC offset | Either one, depending on the cause |
+| More data to stabilize the estimates | New AWSIM traces have accumulated | Both |
+
+**Do not** recalibrate repeatedly while looking at the evaluation set to improve the final numbers. That makes the evaluation
+meaningless. After recalibrating, evaluate again on an unused set.
+
+### Steps (in order)
+
+You need an AWSIM trace directory (`uturn_eval_sim*.json` and `uturn_records.jsonl`).
+
+**Step 1: calibrate braking** (this also fixes the calibration/check split)
+
+```bash
+TD=/home/passd/simulation_traces_sim_worker_21_20260911_125415
+python3 tools/analysis/calibrate_autoware_uturn_braking.py $TD \
+  --output artifacts/autoware171_uturn_braking_calibration_v2.json \
+  --max-files 200 --calibration-fraction 0.7 --seed 20261005
+```
+
+The estimates (delay, rise time, deceleration) and the errors on the check traces are printed. The same seed gives the same split.
+
+**Step 2: calibrate the start state and NPC turn, and select the final evaluation set**
+
+```bash
+python3 tools/analysis/calibrate_uturn_start_geometry.py \
+  --trace-dir $TD --records-jsonl $TD/uturn_records.jsonl \
+  --split-report artifacts/autoware171_uturn_braking_calibration_v2.json \
+  --exclude-report artifacts/autoware171_uturn_start_geometry_calibration.json \
+  --exclude-report artifacts/autoware171_uturn_start_geometry_calibration_v2.json \
+  --seed 20261008 \
+  --output artifacts/<new-split>.json
+```
+
+- `--split-report`: uses the same calibration/check split as step 1.
+- `--exclude-report`: excludes evaluation sets whose results have already been seen. Can be given more than once.
+- `--seed`: the random seed that selects the 100 final evaluation cases (50 collisions, 50 non-collisions). Use a new value each time.
+
+**Step 3: apply the results to the ODE** (currently manual)
+
+The tools only write the estimates to files. Copy them by hand into the bundled files the ODE reads.
+
+- Braking: `profile` and related fields into `targets/dynamics/calibrations/autoware171_uturn_braking.json`
+- Start state: `coefficients` and related fields into `targets/dynamics/calibrations/autoware171_uturn_start_geometry.json`
+
+**Step 4: check on development data**
+
+```bash
+python3 tools/analysis/validate_dynamics_against_awsim.py \
+  --trace-dir $TD --records-jsonl $TD/uturn_records.jsonl \
+  --calibration-report artifacts/<new-split>.json \
+  --sources-key development_evaluation_sources \
+  --output-dir artifacts/<development-check-output>
+```
+
+You may try this as many times as needed. This is the stage to change the model or the calibration method.
+
+**Step 5: re-derive the margin** (currently manual)
+
+On the development data, find "the largest ODE gap among cases that collided on AWSIM + 0.1 m" and update
+`targets/dynamics/calibrations/autoware171_uturn_screening.json`.
+
+**Step 6: run the final evaluation once**
+
+Run the step 4 command with `--sources-key` changed to `final_validation_sources`.
+
+### Current limitations
+
+- Applying the results to the bundled files (step 3) and computing the margin (step 5) are not automated.
+- The bundled file and setting names are for Autoware 1.7.1. Calibrating 1.8.0 or 1.9.0 overwrites the 1.7.1 values.
+  Using several versions side by side requires code changes so that each version has its own calibration files.
+
+## SDE
+
+Passing `solver_kind=sde`, `sde_seed`, `sde_dt_sec`, and `sde_noise` with `--param` adds noise to the braking, the NPC acceleration,
+and the NPC heading.
+
+```bash
+python3 run_worker_v2.py \
+  --target dynamics --case-kind uturn \
+  --param dx0=12 --param ego_speed=36 --param npc_speed=18 \
+  --param solver_kind=sde --param sde_seed=3 \
+  --param 'sde_noise={"ego_brake_acceleration_std":0.25}' \
+  --output artifacts/dynamics/sde.jsonl --dataset-csv artifacts/dynamics/sde.csv
+```
+
+With all noise set to 0, the result is identical to the ODE. The noise magnitudes have not yet been calibrated against real data,
+so treat SDE collision rates as a sensitivity analysis, not as real-world probabilities.
