@@ -1,5 +1,7 @@
 # Autoware のバージョンごとの既知事項
 
+Known issues by Autoware version (false MRM caused by EKF diagnostics in 1.8.0 / 1.9.0). **[English version below ↓](#english)**
+
 ## Autoware 1.8.0 の既知事項
 
 ### カメラ設定
@@ -41,3 +43,48 @@ MRM 自体や Mahalanobis 閾値を無効化して回避してはならない。
 同じ誤 `EMERGENCY_STOP` が再現した。そのため実験には 1.8.0 と同じ修正を当てた
 `autoware190_ekfdiagfix` を使う。無改変の公式 image は `autoware_internal:official-1.9.0` として保持する。
 確認結果と image 構成は [docker/README_autoware_1.9.0.md](../docker/README_autoware_1.9.0.md) を参照。
+
+---
+
+<a id="english"></a>
+
+# English: Known issues by Autoware version
+
+## Known issues with Autoware 1.8.0
+
+### Camera settings
+
+To enable `perception_mode:=camera_lidar_fusion` and `enable_2d_detection:=true` on Autoware 1.8.0, the AWSIM camera topics,
+`camera_info`, sensor model, and object detection launch files must be aligned with 1.8.0.
+Even when the camera is not connected, treat it as a separate issue from the DDS connection between AWSIM and Autoware and from
+localization success. A wrong camera setup affects perception results, but it is not treated as a direct cause of the EKF/MRM issue
+below.
+
+### EKF diagnostics and MRM
+
+> **Important:** the `autoware_internal:1.8.0-ekfdiagfix` image used with AWSIM does not modify the MRM itself. With official
+> Autoware 1.8.0, in combination with the AWSIM input rates, the EKF can publish a `delay` WARN even in normal cycles where the queue is
+> empty, and the MRM then wrongly enters `EMERGENCY_STOP` because of that diagnostic. The fixed image therefore changes only the
+> initial values of the EKF diagnostics.
+
+`autoware_ekf_localizer` in official Autoware 1.8.0 includes an update that re-initializes the diagnostic information every cycle and
+publishes it periodically. With AWSIM, the EKF runs at 50 Hz, while the NDT pose arrives at about 10 Hz and the gyro twist at about
+20 Hz. So even during normal operation, there is no new pose or twist in the queue in some EKF cycles.
+
+1.7.1 treated these normal empty cycles as normal. 1.8.0 may publish them as a `delay` WARN, and when the system diagnostic graph
+decides that autonomous driving is not possible, `mrm_handler` operates `EMERGENCY_STOP`. This is caused by the combination of the
+AWSIM input rates and the diagnostic design of 1.8.0, and should be distinguished from missing DDS settings in AWSIM/Autoware.
+
+Do not work around it by disabling the MRM itself or the Mahalanobis threshold. To fix it for normal operation, use a minimal overlay
+of the EKF diagnostics that does not turn normal empty cycles into WARN. Keep the detection of anomalies from delays of measurements
+that actually arrived, Mahalanobis violations, and `no_update_count`.
+
+Keep the official `1.8.0` image unchanged for version comparisons. When using the fixed version, build a separate image explicitly
+named `1.8.0 + EKF diagnostic overlay` so that it is not confused with the official version in comparisons.
+
+## Known issues with Autoware 1.9.0
+
+`initialize_diagnostic_info()` in 1.9.0 is the same as in 1.8.0, and the same false `EMERGENCY_STOP` was reproduced on the head node
+on 2026-10-02. Experiments therefore use `autoware190_ekfdiagfix`, which applies the same fix as 1.8.0. The unmodified official image is
+kept as `autoware_internal:official-1.9.0`. See [docker/README_autoware_1.9.0.md](../docker/README_autoware_1.9.0.md) for the
+results and the image structure.

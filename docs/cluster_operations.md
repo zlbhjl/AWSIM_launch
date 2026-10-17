@@ -1,5 +1,7 @@
 # AWSIM クラスターの運用
 
+Operating an AWSIM cluster (container profiles, automatic recovery, timeouts, monitoring, plotting). **[English version below ↓](#english)**
+
 複数台の GPU マシンで AWSIM / Autoware の worker container を動かし、v2 の司令塔
 (`run_orchestrator_cluster_v2.py`) から実験する際の運用手順です。開発元の研究室では、
 4台構成 (21〜24号機、司令塔は21号機) で運用しています。号機番号やパスは環境に合わせて読み替えてください。
@@ -446,3 +448,521 @@ docker exec -it autoware171-x11-map bash -i -c 'source /home/passd/autoware/inst
 ```
 
 `bash -c` や `bash -lc` で十分そうに見えても、コンテナ運用では `bash -i -c` を正本にしてください。
+
+---
+
+<a id="english"></a>
+
+# English: Operating an AWSIM cluster
+
+Operating procedures for running AWSIM / Autoware worker containers on several GPU machines and running experiments from the v2
+orchestrator (`run_orchestrator_cluster_v2.py`). The developers' lab runs a four-node cluster (nodes 21–24, with node 21 as the head
+node). Replace the node numbers and paths with those of your environment. Set the node IP addresses, users, and container names in
+[redis_cluster/cluster_config.py](../redis_cluster/cluster_config.py).
+
+## Switching `container_profile`
+
+- The supported `container_profile` values are `legacy`, `autoware171`, `autoware180`, `autoware180_ekfdiagfix`, `autoware190`, and
+  `autoware190_ekfdiagfix`.
+- `legacy` uses the older container settings: `image=autoware_internal:2026`, `network_mode=host`, `privileged=true`.
+- `autoware171` is the current setup for the `1.7.1` line: `image=autoware_internal:2026-1.7.1-x11-verified-20260808`,
+  `network_mode=bridge`, `privileged=false`.
+- `autoware180` is for comparison with the official `1.8.0`, and `autoware180_ekfdiagfix` is the EKF diagnostic overlay version for
+  use with AWSIM. Both mount `autoware180_runtime/maps` and `autoware180_runtime/ml_models`.
+- `autoware190` is for comparison: the official `1.9.0` image with only an AWSIM compatibility layer on top. `autoware190_ekfdiagfix`
+  is for experiments and applies the same EKF diagnostic overlay as 1.8.0. Network / privileged / user / mounts are the same as
+  `autoware180_ekfdiagfix`, and it mounts `autoware190_runtime/maps` and `autoware190_runtime/ml_models`. The default `CYCLONEDDS_URI`
+  of the official 1.9.0 image is `/home/aw/cyclonedds.xml`, which allows multicast, so the profile sets `/home/passd/cyclonedds.xml`
+  explicitly in its environment. See [docker/README_autoware_1.9.0.md](../docker/README_autoware_1.9.0.md) for details.
+- The `/docker-entrypoint.sh` of the `autoware180` / `autoware190` images initializes with root privileges and then starts the actual
+  processes with `gosu passd`. So only these two profiles fix the Docker start user to `root`. With `docker run --user passd`, the user
+  switch in the entrypoint fails with `operation not permitted`. The loopback multicast and sysctl WARNs shown without `privileged` are
+  not fatal and are unrelated to this user-switch error.
+- The Ray Client, checker, and statistics of `autoware180` workers use the `awsim_python_deps/py310` bundle, fixed across all nodes and
+  mounted read-only at `/opt/awsim_python_deps/py310`. Relying only on user-local packages in the image makes `grpc` invisible after
+  `gosu passd` in the entrypoint, and the worker exits with `ray_control_plane_lost`.
+- For `autoware171` / `autoware180*`, mounts such as `cyclonedds.xml`, `AWSIMScriptPy`, `autoware_map`, and `AW-Runtime-Monitor` are
+  managed together in the profile. Fix the profile definition first instead of adding or removing `docker run` options by hand each time.
+- If only `--container-profile` is given on the CLI, `--scenario-profile` defaults to the same name.
+- However, the current scenario implementation is a single configuration in the new framework, so `scenario_profile=legacy` does not
+  revert the scenario contents to the old implementation. What changes is mainly the container settings.
+- So even when you "only want to switch containers", think in terms of the `container_profile` first. In practice, the differences in
+  network / privileged / env / mounts of `docker run` matter more than the differences between scenarios.
+- `container_profile` determines the image, network, privileged mode, mounts, and Docker environment. Whether to show a display or run
+  headless is finally decided by `--headless`.
+- With `--headless`, the Xvfb virtual display is used, and `rviz:=false` is added to the Autoware launch automatically. `DISPLAY=:99`
+  alone does not stop RViz.
+- To check visually with a display, do not add `--headless`; use the manual commands for X11 display or the procedure for containers
+  with a display.
+- When starting cluster workers with a `bridge` profile, no Ray worker node is started inside the container. `run_worker_v2.py`
+  connects to the `TaskQueueActor` / `SharedStoreActor` on the head node as an external Ray driver. Do not register the Docker bridge's
+  internal IP or the host's physical IP as a Ray node inside the container.
+- With `bridge` profiles, detached actors are called through Ray Client. On this path, positional-argument signatures of actor methods
+  can break, so calls with several arguments to `TaskQueueActor` / `SharedStoreActor` use keyword arguments. If you see
+  `too many positional arguments`, check this layer.
+- Cluster workers with a `bridge` profile retry the Ray Client connection 6 times at 15-second intervals by default. During a simulation
+  they update a `running` heartbeat every 60 seconds so that long cases are not misjudged as stale.
+- If the Ray/GCS connection drops midway, the worker stops as `ray_control_plane_lost` and does not keep trying to save the result of
+  that case. The orchestrator also stops and records `run_failed_ray_gcs_lost` in the summary, as far as it can detect it as a Python
+  exception.
+- Only if you want worker containers that `Exited(1)` before registering to be restarted automatically, specify
+  `--auto-restart-missing-workers`. Restarts are limited to 2 per node with a 600-second cooldown, and `docker logs --tail 100` is saved
+  in `maintenance_events` of the summary before restarting.
+- To handle automatically the problem of GPU / NVML becoming invisible from running containers in long experiments, specify
+  `--auto-restart-gpu-workers`. Workers check `nvidia-smi` before taking each case from the queue, and on failure they report
+  `gpu_unavailable` and exit, so they do not consume new cases.
+- The GPU watchdog also checks `nvidia-smi` in each running container every few loops. Killing a running case would lose the
+  unfinished task on the queue, so while `running` the container is only marked for isolation, and it is stopped by the check before it
+  takes the next case. Then the tail of the log is saved in `maintenance_events`, and the worker container is removed with
+  `docker rm -f` and recreated from the same profile. Simulation traces are bind-mounted from `simulation_traces_sim_worker_*` on the
+  host, so they are not deleted when the container is recreated.
+- After recreation, the GPU is checked both on the host and in the new container, and the temporary isolation is lifted only on
+  success. On failure, it waits 600 seconds by default and retries; after 3 consecutive failures or 5 recreations within 24 hours, the
+  node is isolated permanently. Experiments on the other nodes continue.
+- The standard options for enabling automatic GPU recovery are `--auto-restart-gpu-workers --gpu-worker-max-restarts-per-24h 5
+  --gpu-worker-max-consecutive-failures 3 --stale-worker-restart-cooldown-sec 600`. Before raising the limits, make sure there is no
+  persistent problem with the host driver or the NVIDIA Container Toolkit.
+- When switching containers, basically follow this order:
+  - Stop and remove the existing containers
+  - Decide on one `container_profile` to use
+  - Start the workers / orchestrator with that profile
+  - Check that the mounted `cyclonedds.xml`, `VK_ICD_FILENAMES`, `DISPLAY`, and map path are valid for that profile
+- For the `1.7.1` line, including display and the campus network countermeasures (the storm-control measures below), use the
+  `autoware171` profile as the standard. `legacy` is kept for compatibility.
+
+## Storm control and why containers use the bridge network
+
+- Running several Autoware instances with `network_mode=host` sends ROS 2 / Cyclone DDS multicast traffic to the campus LAN, and the
+  switch's storm control may put the ports into error-down. In practice, this setup shut down the lab's ports, and the network
+  administrators had to be asked to restore them.
+- The main cause is believed to be the ROS 2 / Cyclone DDS traffic of the `legacy` profile (`network_mode=host`, `privileged=true`).
+  In host mode, containers use the physical NIC (`enp10s0`) directly, so discovery multicast (`239.255.0.1`) and topic traffic from
+  hundreds of Autoware nodes on several machines flowed into the campus LAN.
+- As countermeasures, the `autoware171` / `autoware180*` / `autoware190*` profiles combine three measures to keep DDS traffic off the
+  physical NIC (`prism_maude` also uses bridge and no privileged mode, but does not mount `cyclonedds.xml` because it does not use ROS):
+  - `network_mode=bridge`, `privileged=false`: containers see only docker0 and `lo`, and multicast on docker0 is not forwarded to the
+    physical NIC.
+  - Mounting `cyclonedds.xml`: `NetworkInterface=lo`, `AllowMulticast=false`, `Peer=127.0.0.1` confine DDS to loopback.
+  - For manual runs, `iptables -I DOCKER-USER 1 -i docker0 -o enp10s0 -j REJECT` blocks traffic from containers to the campus LAN.
+- Communication between nodes is limited to TCP unicast over Ray Client (`ray://<master-ip>:10001`). Therefore, do not let containers
+  join the cluster as Ray nodes.
+- Do not switch cluster workers back to `network_mode=host`, remove `cyclonedds.xml`, or enable DDS multicast. When adding a new
+  profile, always confirm that DDS traffic does not leave through the physical NIC.
+- A loop in switches or hubs causes the same error-down. If a physical loop is the cause, container settings cannot prevent it. Check
+  the cabling of the hubs in the lab as well.
+
+## Standard cluster command for Autoware 1.7.1
+
+Run the following command on the head node. It is the standard for long 1.7.1 experiments, including `bridge`, headless mode,
+`AWSIMScriptPy` sync, recovery of stale/missing workers, and isolation and recreation on GPU failures.
+
+```bash
+cd /home/passd/AWSIM_launch
+
+python3 run_orchestrator_cluster_v2.py \
+  --output /home/passd/simulation_traces/uturn_records.jsonl \
+  --dataset-csv /home/passd/simulation_traces/uturn_dataset.csv \
+  --case-kind uturn \
+  --mode binomial_ci \
+  --binomial-target c_collision \
+  --binomial-method wilson \
+  --binomial-confidence 0.95 \
+  --binomial-target-width 0.02 \
+  --container-profile autoware171 \
+  --scenario-profile autoware171 \
+  --headless \
+  --sync-awsim-script-py \
+  --auto-restart-stale-workers \
+  --auto-restart-missing-workers \
+  --auto-restart-gpu-workers \
+  --worker-queue-connect-retries 6 \
+  --worker-queue-connect-retry-interval-sec 15 \
+  --stale-worker-restart-cooldown-sec 600 \
+  --gpu-worker-max-restarts-per-24h 5 \
+  --gpu-worker-max-consecutive-failures 3 \
+  --gpu-worker-stable-reset-sec 1800 \
+  --gpu-worker-probe-timeout-sec 5
+```
+
+`--auto-restart-gpu-workers` cannot be applied to an orchestrator that is already running. For an experiment started without this
+option, stop the current experiment safely and restart it with the command above. The existing CSV and `simulation_traces_sim_worker_*`
+on each host are not deleted.
+
+`--binomial-method wilson` in the command above is an approximation; when the true probability is close to 0 or 1, or the sample size
+is small, the actual coverage can fall below the nominal confidence level. Use `--binomial-method clopper-pearson` for final safety
+decisions on `c_collision` (see [statistical_method_selection.md](statistical_method_selection.md#english) for choosing a method).
+
+**The "repeated peeking" problem of `binomial_ci` and `--binomial-anytime-valid`**: `--mode binomial_ci` recomputes the interval with
+the same `--binomial-confidence` every time a sample is added, so in theory the act of "looking repeatedly" itself can inflate the
+effective error rate (unlike SPRT and EBStop, which are valid by design, `binomial_ci` has no built-in protection against this). With
+`--binomial-anytime-valid`, instead of a fixed confidence, the confidence level is recomputed each time with a union bound of the form
+`d_t = c/t^1.1`, as in EBStop (`evaluation/alpha_spending.py`, a peeling schedule in the style of Mnih, Szepesvári, Audibert 2008),
+which guarantees mathematically that "the overall error rate does not exceed `1-confidence` however many times it is checked".
+
+However, **the cost is large**: the number of samples needed to reach the same target width grows by about **5–8 times** in practice
+(for example, with p = 0.1, target width = 0.02, and 95% confidence, it normally converges at about 3,600 samples but needs about
+28,000 with `--binomial-anytime-valid`). Tuning the spending exponent or checking less often does not improve this ratio much (it is an
+inherent cost of anytime-valid confidence sequences in general). It is therefore off by default (opt-in) and intended only for
+experiments where the theoretical safety guarantee comes first and the cost of each AWSIM/PRISM simulation can be ignored.
+
+## Python dependency bundle for 1.7.1 bridge workers
+
+The verified `autoware171` image fixes the operational state of Autoware / AWSIM, but the current `AWSIM_launch` worker imports `ray`
+and `scikit-learn` at startup. So for `binomial_ci` and `dkw`, the worker crashes before taking from the queue if `sklearn` is missing.
+
+Do not solve this by mounting the host's whole `~/.local/lib/python3.10/site-packages`. In practice, the host's `numpy==1.26.4` mixes
+with the container's `scipy==1.8.0` and produces the warning `SciPy requires NumPy <1.25.0`. Even if imports work for a while,
+reproducibility suffers.
+
+For `1.7.1` bridge workers, the policy is to place a dedicated Python dependency bundle on each host and mount only that, read-only.
+
+```text
+host:      ${HOME}/awsim_python_deps/py310
+container: /opt/awsim_python_deps/py310
+env:       PYTHONPATH=/opt/awsim_python_deps/py310
+```
+
+Pin at least the following in the bundle.
+
+```text
+ray[client]==2.55.0
+scikit-learn==1.7.2
+numpy==1.24.4
+joblib
+threadpoolctl
+```
+
+Running `pip install` for `ray` / `scikit-learn` every time makes startup slow and depends on the network. Ultimately, a snapshot image
+with this bundle baked in is the goal, but for now the standard is to read this bundle through the mounts/env of the `autoware171`
+profile.
+
+As of 2026-09-02, this bundle is in place on nodes 21/22/23/24.
+
+```text
+each node: ~/awsim_python_deps/py310
+```
+
+On nodes 22/23/24, imports of `ray[client]==2.55.0`, `grpcio`, `sklearn==1.7.2`, `numpy==1.24.4`, the container's own `scipy==1.8.0`,
+and `StandardScaler` have been confirmed with the bundle mounted into `autoware_internal:2026-1.7.1-x11-verified-20260808`. Bridge
+workers connect over Ray Client at `ray://<master-ip>:10001`.
+
+## Python environment for the Maude checker
+
+The Python dependency bundle of the `AWSIM_launch` worker and the `maude` Python module of AW-CheckerPy are separate. `maude` is in the
+following venv, so the verifier prefers this Python over the normal `python3`.
+
+```text
+/home/passd/aw-cheaker/Maude-3.5.1/AW-CheckerPy/.venv/bin/python
+```
+
+If you see `ModuleNotFoundError: No module named 'maude'`, check that
+`AW-CheckerPy/.venv/lib/python3.10/site-packages/maude` exists inside the `aw-cheaker` mount. Adding only
+`PYTHONPATH=/opt/awsim_python_deps/py310` does not make Maude visible.
+
+## Emptying the Trash on cluster nodes
+
+Even when Ray warns `/tmp/ray ... is over 95% full`, it is often the root filesystem of the host that is full, not `/tmp/ray`. Check
+`~/.local/share/Trash` first.
+
+Emptying the Trash does not touch experiment data, Docker images, maps, or models, and always uses the following tool. Run it on the
+head node. From there, it connects over SSH to the nodes with `enabled=True` in `redis_cluster/cluster_config.py` and processes only
+the Trash on each node.
+
+```bash
+cd /home/passd/AWSIM_launch
+
+# Check only. Nothing is deleted.
+python3 tools/maintenance/clean_trash.py
+
+# Empty the Trash on the nodes with enabled=True (for example, 21/22/23/24).
+python3 tools/maintenance/clean_trash.py --apply
+```
+
+By default only the nodes with `enabled=True` in `redis_cluster/cluster_config.py` are used. To look at specific nodes, specify them as
+follows.
+
+```bash
+# Check only 22/23.
+python3 tools/maintenance/clean_trash.py --nodes 22,23
+
+# Empty the Trash on all nodes registered in cluster_config.
+python3 tools/maintenance/clean_trash.py --nodes all --apply
+```
+
+Only `~/.local/share/Trash/files/*` and `~/.local/share/Trash/info/*` of each user are deleted. `simulation_traces*`, Docker images
+and containers, `autoware_map`, `autoware180_runtime`, `AWSIMScriptPy`, and `AWSIM_launch` are never deleted.
+
+If `/tmp/ray ... over 95% full` appears during an experiment, first check without deleting.
+
+```bash
+python3 tools/maintenance/clean_trash.py
+```
+
+Add `--apply` only when the Trash is large and free space on the root filesystem is dangerously low. This tool does not stop Ray or
+the worker containers.
+
+## AWSIM trace timeouts and late JSON
+
+In cluster runs, the global loop numbers assigned by the orchestrator do not match the order in which each worker runs cases. The
+Runtime Monitor is given a local sequence number within the worker (`1, 2, 3, ...`), and the backend waits for
+`{scenario}_test_sim{local}.json`. After it arrives, the JSON, video, and video metadata are moved to `{scenario}_eval_sim{global}.json`.
+Do not pass the global number to the Runtime Monitor directly, even when reusing it.
+
+AWSIM writes the trace JSON at the very end of the scenario shutdown, so even if `uturn_test_sim<loop>.json` is not there exactly at the
+watch deadline, the JSON may arrive a few seconds later. `uturn` waits `300 seconds` in the outer watcher, as the old worker did, and has
+no separate goal timeout inside the scenario. So the AWSIM backend allows a `10-second` artifact grace period after the normal scenario
+timeout. If the JSON is found within the grace period, it is promoted to `eval` and analyzed, and no `TIMEOUT` marker is written.
+
+For runs with a JSON, the final judgment comes from the checker result, not from the exit code of the scenario process. The raw
+process state is saved in `meta.raw_run_status` and the breakdown of the timeout in `meta.raw_timeout_reason`; they do not overwrite the
+verification result.
+
+| Trace / checker state | Final `status` | Used for the collision rate |
+| --- | --- | --- |
+| JSON present, the checker evaluated all formulas, and both EGO and NPC moved | `success` | Used (`c_collision` is `0` / `1`) |
+| JSON present, EGO or NPC did not move | `analysis_error` | Excluded (`c_collision=-1`) |
+| JSON present, missing formulas or Maude failure | `analysis_error` | Excluded |
+| No JSON, still missing after the 10-second grace period | `timeout` | Excluded (`meta.timeout_reason=artifact_timeout`) |
+
+The continuous values `min_ttc`, `min_distance`, `min_ttb`, and `z_margin` are computed from the trace JSON by calling the same
+`AWKinematicsPipeline` as the old `awchecker.py` through `targets/awsim/kinematics_bridge.py` (the NPCs come from `TARGET_NPCS` of the
+case kind, and the method from `--ext_mode`). If extraction fails, the Maude judgment is kept, the values are left empty, and the reason
+is recorded in `meta.kinematics_error`. On a Maude analysis error, all four values are `-1`. In v2 runs before 2026-10-05 (including the
+1.7.1 / 1.8.0 / 1.9.0 comparison experiments), this extraction was not called, and these columns of the dataset CSV are empty.
+`--mode dkw` / `dkw_fixed` / `ebstop` / `worst_ttc` / `ttc_edge` use these columns, so re-extract them from the trace JSON when using
+old data.
+
+If required trace JSON fields (`planning_trajectory`, `control_cmds`, and others) are empty, the judgment continues and the field names
+are recorded in `meta.empty_trace_keys` (`meta_empty_trace_keys` in the dataset CSV). The Runtime Monitor does not raise an error when
+subscribing to a topic that does not exist and writes an empty array instead, so use this column to detect topic renames after an
+Autoware update. For example, Autoware 1.9.0 removed the relay of `/planning/scenario_planning/trajectory`, and `planning_trajectory` is
+empty in 1.9.0 traces before 2026-10-05. The Runtime Monitor now records `/planning/trajectory`, which was confirmed on the real system to
+record the same content on 1.7.1 / 1.8.0.
+
+For example, even if the scenario returns exit code `124`, the run is accepted as `success` if the JSON collected afterwards passes the
+checker and the movement of EGO/NPC and the collision judgment are confirmed. Conversely, a run whose vehicles did not move is not
+counted as "no collision" even if there is a JSON.
+
+Valid samples for `binomial_ci` are only rows with `status=success` and a target value of `0` / `1`. Here `status` is the final
+judgment after the checker analysis, and the state at scenario execution is stored separately in `meta.raw_run_status`
+(`meta_raw_run_status` in the dataset CSV). So even with `meta.raw_run_status=timeout`, a run whose trace JSON was collected and
+successfully analyzed by the checker ends up as `status=success` and is used for statistical verification. A final `status=timeout`
+means that no valid trace or judgment was obtained, and such runs are excluded from statistical verification.
+
+To re-match local traces of the same worker against timeout markers without changing the existing CSV, use the following. Run it on
+the head node.
+
+```bash
+cd /home/passd/AWSIM_launch
+
+# Read-only. Does not change the CSV, traces, containers, or Ray state.
+python3 tools/maintenance/reconcile_late_traces.py \
+  --dataset-csv /home/passd/simulation_traces/uturn_dataset.csv \
+  --case-kind uturn
+
+# Specify this only when you want to keep a JSON report in a separate file.
+python3 tools/maintenance/reconcile_late_traces.py \
+  --dataset-csv /home/passd/simulation_traces/uturn_dataset.csv \
+  --case-kind uturn \
+  --output /home/passd/simulation_traces/uturn_late_trace_reconciliation.json
+```
+
+Changes to this timeout handling are loaded when the worker process starts. They do not apply to workers that are already running, so
+they take effect from the next cluster run.
+
+## Creating a CSV with only successful results
+
+To save only the rows whose `status` column is `success` to a separate CSV with the same columns and row order, without changing the
+original dataset CSV, run the following. If the output is omitted, `<input name>_success.csv` is created next to the input file.
+
+```bash
+cd /home/passd/AWSIM_launch
+
+python3 tools/maintenance/filter_success_csv.py \
+  --dataset-csv /home/passd/simulation_traces/uturn_dataset.csv
+```
+
+Add `--overwrite` only when rebuilding an existing success CSV from the current dataset.
+
+```bash
+python3 tools/maintenance/filter_success_csv.py \
+  --dataset-csv /home/passd/simulation_traces/uturn_dataset.csv \
+  --output /home/passd/simulation_traces/uturn_dataset_success.csv \
+  --overwrite
+```
+
+This tool excludes `timeout`, `execution_error`, and `analysis_error`. However, it keeps successful rows from focus runs and error
+recovery as well. It is not a CSV limited to the uniform random samples used by `binomial_ci`.
+
+## What else cluster sync can update
+
+When the cluster starts, `~/AWSIM_launch` and `~/AW-Runtime-Monitor` are synced to the remote nodes by default. The former holds the
+usual worker / scenario / supervisor code, and the latter is needed to save the trace JSON, so both are aligned every time as the source
+of truth for experiment code.
+
+Only when you want to update the `AWSIMScriptPy` itself for the `1.7.1` line, add the following.
+
+```bash
+python3 run_orchestrator_cluster_v2.py ... \
+  --container-profile autoware171 \
+  --scenario-profile autoware171 \
+  --headless \
+  --sync-awsim-script-py \
+  --auto-restart-gpu-workers
+```
+
+`AW-Runtime-Monitor` is synced as a whole directory by default. Distributing only `main.py` would leave it out of sync with the recorder
+and fail at startup, so partial syncs are not done. `--sync-aw-runtime-monitor` is kept for compatibility with explicit use but is
+normally not needed.
+
+```bash
+python3 run_orchestrator_cluster_v2.py ... \
+  --sync-aw-runtime-monitor
+```
+
+This sync checks the SHA-256 and syntax of `main.py`, `recorder/Recorder.py`, and `recorder/AWSIMClientOpStateTracker.py` before the
+worker starts. In addition, the worker does not start if the lifecycle tracker cannot be imported inside the container.
+
+Only when you want to update the maps for the `1.8.0` line, add the following. For the `1.9.0` line, use `--sync-autoware190-map` for the
+same purpose.
+
+```bash
+python3 run_orchestrator_cluster_v2.py ... \
+  --container-profile autoware180_ekfdiagfix \
+  --scenario-profile autoware171 \
+  --headless \
+  --sync-autoware180-map
+```
+
+When several additional updates are needed, `--sync-awsim-script-py` and `--sync-autoware180-map` can be specified together. Only for
+special checks that stop the default sync, use `--no-sync-awsim-launch` or `--no-sync-aw-runtime-monitor`. Do not specify them in normal
+experiments.
+
+Before the cluster starts, an `nvidia-smi` preflight with each image is also run. Nodes whose GPU cannot be detected do not take tasks;
+the reason is recorded in `cluster_preflight_failures`, and only the other nodes are started. If AWSIM, Autoware, or the Runtime Monitor
+exits within the wait time, the run becomes `execution_error` without waiting for the trace timeout, and the tail of the startup log is
+included in the error information.
+
+## The process supervisor of cluster workers
+
+Cluster containers do not start `run_worker_v2.py` directly as PID 1. PID 1 is `runtime.container.supervised_process.server`, which
+creates the Unix socket `/tmp/awsim-process-supervisor.sock` before importing Ray Client / gRPC, and then starts the worker as a child
+process.
+
+The worker asks the supervisor through the socket to start and stop these processes:
+
+- Xvfb
+- AWSIM
+- Autoware
+- AW-Runtime-Monitor
+- scenario client
+- readiness probe
+- external commands of AW Checker / Maude / BBSL
+
+This avoids `fork()` from the worker itself while gRPC threads are running, which caused `cygrpc` and `librclcpp` to segfault
+intermittently. The commands, wait times, and parameters of AWSIM, Autoware, and the scenario are unchanged. Where
+`AWSIM_PROCESS_SUPERVISOR_SOCKET` is not set, such as manual runs, the previous local subprocess path is used.
+
+When the supervisor exits, it stops the process groups it manages. When the worker exits, the container is not kept alive with
+AWSIM/Autoware left running, and the same container is not reused.
+
+## Technical measures and troubleshooting for distributed automation
+
+The system controls remote machines from the head node and fully automates simulations in the background. Unlike manual runs from a
+terminal, this causes specific problems such as "the car does not move", "the point cloud disappears", and "communication gets stuck".
+The following measures address them.
+
+1. **Loading the full ROS/DDS environment with an interactive shell (`bash -i`) (`cluster_manager.py` / `run_manager.py`)**
+   When a container is started and a command runs in the background, plain `bash -c` stops reading `~/.bashrc` partway because of
+   Ubuntu's defaults. As a result, the tuning for high-volume communication such as CycloneDDS was not applied to Autoware, causing
+   stuck communication and lost point clouds. Using `bash -i -c` to emulate an interactive session establishes exactly the same ROS
+   communication environment as a manual login.
+   - **Important**: keep this principle when debugging by hand with `docker exec` inside a container. Starting directly with
+     `docker exec ... bash -c ...` or `docker exec ... bash -lc ...` does not give the same environment as `run_manager.py` /
+     `cluster_manager.py`, and introduces differences that are hard to isolate, such as "the car does not move", "the route is not
+     set", or "the point cloud and DDS communication are unstable", even when following the README. Use `bash -i -c` for manual runs
+     too, and if needed, explicitly `source /home/passd/autoware/install/setup.bash` inside it.
+2. **Separating ROS communication between nodes (`cluster_manager.py`)**
+   When several computers run simulations at the same time, each node is assigned its own `ROS_DOMAIN_ID` at container startup so
+   that ROS 2 traffic does not mix on the network, giving fully independent communication environments.
+3. **Virtual display (Xvfb) and GPU on headless remote machines (`cluster_manager.py`)**
+   On remote PCs without a physical display, RViz crashes endlessly and AWSIM stops producing LiDAR point clouds because nothing can be
+   drawn. Three measures together solve this.
+   - **Starting Xvfb automatically**: `Xvfb :99` is started inside the container first, and `DISPLAY=:99` points GUI applications to
+     the virtual monitor. `DISPLAY=:99` only specifies where to draw; it does not start Xvfb itself.
+   - **Forcing the NVIDIA GPU to be used**: normally the GPU is not used under Xvfb, but AWSIM's LiDAR computation depends on the GPU
+     (Vulkan). The environment variable `VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/nvidia_icd.json` makes the GPU visible even with the
+     virtual display, so the point cloud is generated correctly.
+   - **Starting AWSIM normally**: AWSIM's `-batchmode` (no display) causes missing sensor data, so it is not used; AWSIM is started
+     normally against Xvfb, which gives a correct simulation.
+4. **Isolating logs and preventing hangs (`run_manager.py`)**
+   So that the huge standard output of AWSIM and Autoware does not fill pipes and freeze the processes, each output is redirected to its
+   own file, `awsim.log` and `autoware.log`. The worker's progress can be monitored in real time with Python's unbuffered output (the
+   `-u` option).
+
+## 3D plots of results
+
+The plotting code now lives in `tools/plot/*`. The `visualize_*.py` scripts at the repository root are kept as legacy wrappers that call
+`tools/plot/*`.
+
+```bash
+# Plot the latest results
+python3 tools/plot/visualize_traces.py ~/simulation_traces
+
+# Plot a specific archived dataset
+python3 tools/plot/visualize_traces.py ~/simulation_traces_shared_20260512_144346
+
+# 3D plot of severity from continuous MIN_TTC values (the extractor's values take precedence over Maude's flags)
+python3 tools/plot/visualize_min_ttc_3d.py ~/simulation_traces
+
+# 3D plot of the risk matrix
+python3 tools/plot/visualize_risk_matrix.py ~/simulation_traces
+
+# Collision / non-collision cells as voxel regions
+python3 tools/plot/visualize_collision_regions.py ~/simulation_traces
+
+# The collision boundary from real data and the boundary learned by the AI as smooth surfaces
+python3 tools/plot/visualize_collision_surfaces.py ~/simulation_traces
+
+# Match the original 1.7.1 cases and the 1.8.0 replay by case number and plot the differences
+python3 -m tools.plot.visualize_version_comparison \
+  ~/simulation_traces_shared_20260911_125415/uturn_dataset_success.csv \
+  ~/simulation_traces_autoware180_replay_20260911/uturn_dataset.csv \
+  --output ~/simulation_traces_autoware180_replay_20260911/autoware171_vs_180_comparison.png
+```
+
+## Real-time monitoring and troubleshooting
+
+Commands to monitor, from another terminal on the head node, the simulations running inside a worker machine (for example, node 23).
+
+### 1. Worker progress log (main worker log)
+
+Shows which loop is running and whether the worker restarted because of an error.
+
+```bash
+# Example: node 23
+ssh worker2@192.0.2.23 "docker exec sim_worker_23 tail -f /home/passd/simulation_traces/worker_log_sim_worker_23.txt"
+```
+
+### 2. Infrastructure logs (detailed error investigation)
+
+Use these to check whether the simulator or Autoware started correctly.
+
+```bash
+ssh worker2@192.0.2.23 "docker exec sim_worker_23 tail -f /home/passd/simulation_traces/awsim.log"
+ssh worker2@192.0.2.23 "docker exec sim_worker_23 tail -f /home/passd/simulation_traces/autoware.log"
+```
+
+### Manual debugging inside a container
+
+If simulations do not work on a particular node, you can enter a container with exactly the same environment as the system by the
+following steps and find where the error occurs.
+
+See [docs/network_storm_control_guide.md](network_storm_control_guide.md#english) for how to start `bridge` containers by hand.
+
+```bash
+docker exec -it autoware171-x11-map bash -i -c 'cd /home/passd/awsim_labs && ./awsim_labs.x86_64 -noise false'
+docker exec -it autoware171-x11-map bash -i -c 'source /home/passd/autoware/install/setup.bash && cd /home/passd/autoware && ros2 launch autoware_launch e2e_simulator.launch.xml vehicle_model:=awsim_labs_vehicle sensor_model:=awsim_labs_sensor_kit map_path:=/home/passd/autoware_map/nishishinjuku_autoware_map launch_vehicle_interface:=true rviz:=false'
+```
+
+Even if `bash -c` or `bash -lc` seems sufficient, use `bash -i -c` as the standard when running in containers.

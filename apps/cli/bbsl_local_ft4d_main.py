@@ -337,13 +337,13 @@ def parse_args(argv: Sequence[str] | None = None):
         "--execution-mode",
         choices=["legacy", "batch-loop"],
         default="batch-loop",
-        help="legacy は従来の run_full_experiment_all.py、batch-loop は clean baseline + noisy batch repeat を使う。",
+        help="legacy は従来の run_full_experiment_all.py、batch-loop は clean baseline + noisy batch repeat を使う。 / legacy uses the existing run_full_experiment_all.py; batch-loop uses a clean baseline plus repeated noisy batches.",
     )
     parser.add_argument(
         "--condition-policy",
         choices=["all", "underconfident"],
         default="all",
-        help="batch-loop 時に毎回全条件を回すか、不足事象に対応する条件だけ追加実行するか。",
+        help="batch-loop 時に毎回全条件を回すか、不足事象に対応する条件だけ追加実行するか。 / In batch-loop, run all conditions every time, or add runs only for the conditions of under-confident events.",
     )
     parser.add_argument(
         "--run-mode",
@@ -351,7 +351,7 @@ def parse_args(argv: Sequence[str] | None = None):
         default="resume",
         help=(
             "batch-loop 時の開始方法。fresh は古い batch JSON と生成済みノイズ画像を消して最初から、"
-            "resume は既存状態を引き継いで続きから実行する。"
+            "resume は既存状態を引き継いで続きから実行する。 / How batch-loop starts. fresh deletes old batch JSON and generated noisy images and starts over; resume continues from the existing state."
         ),
     )
     parser.add_argument("--mini", action="store_true")
@@ -423,12 +423,12 @@ def parse_args(argv: Sequence[str] | None = None):
     parser.add_argument(
         "--no-resume-batches",
         action="store_true",
-        help="既存 noisy_batch_*.json を引き継がず、batch 1 からやり直す。",
+        help="既存 noisy_batch_*.json を引き継がず、batch 1 からやり直す。 / Do not carry over existing noisy_batch_*.json; start again from batch 1.",
     )
     parser.add_argument(
         "--refresh-clean-baseline",
         action="store_true",
-        help="batch-loop 時に既存 clean baseline を無視して再作成する。",
+        help="batch-loop 時に既存 clean baseline を無視して再作成する。 / In batch-loop, ignore the existing clean baseline and recreate it.",
     )
     parser.add_argument(
         "--reuse-existing-output",

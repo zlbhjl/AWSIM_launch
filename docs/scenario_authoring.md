@@ -1,5 +1,7 @@
 # AWSIM シナリオの追加と調整
 
+Adding and tuning AWSIM scenarios. **[English version below ↓](#english)**
+
 ## 新しいシナリオの追加方法
 いまの形では、新しい AWSIM シナリオを足すときの基本修正点は次の 4 か所です。
 
@@ -129,3 +131,175 @@
 - `2026-08-28` の代表ケース `ego_speed=30 km/h` では、21号コンテナで `bash -i -c` と `source /home/passd/autoware/install/setup.bash` 付きの手動実行を行い、`npc1` の spawn、`FollowLane`、`SetTargetSpeed` 送信まで確認済みです。
 - ただし `deceleration` でも、repo 内の `case_kind` / `builder` だけでは不十分です。手動検証時は、コンテナ内の `AWSIMScriptPy/scenarios/deceleration/dynamic_spawn.py` も最新化されていることを確認してください。
 - これは「新フレームのためだけに旧コードを触った」のではなく、新フレームが最終的に旧 `dynamic_spawn.py` を実行するためです。`spawn_trigger_speed_ratio` や `decel_trigger_speed_ratio` を新フレーム側で計算しても、旧 scenario 関数がその引数を受け取らなければ runtime では反映されません。
+
+---
+
+<a id="english"></a>
+
+# English: Adding and tuning AWSIM scenarios
+
+## Adding a new scenario
+
+In the current structure, adding a new AWSIM scenario basically means changing these four places.
+
+1. `targets/awsim/case_kinds/<new_case>.py`
+2. `targets/awsim/scenario_builders/<new_case>_builder.py`
+3. `targets/awsim/scenario_runner.py`
+4. `configs/<new_case>.py`
+
+In short, the responsibilities are split as follows.
+
+- `case_kind = what to explore`
+- `builder = how to assemble it`
+- `runner = which one to call`
+
+### What each of the four places does
+
+- `targets/awsim/case_kinds/<new_case>.py`
+  - Holds the "experiment definition".
+  - Basically `PARAM_RANGES`, `FIXED_PARAMS`, `RESULT_LABELS`, `FORMULAS`, `TIMEOUT_SEC`.
+  - `SCENARIO_PROFILES` and `FOCUS_POINTS` also go here if needed.
+- `targets/awsim/scenario_builders/<new_case>_builder.py`
+  - Assembles lanes, offsets, speeds, and so on.
+  - Resolves the required values from the dynamic parameters and finally connects to the scenario function of the legacy
+    `AWSIMScriptPy`.
+- `targets/awsim/scenario_runner.py`
+  - Only add one `scenario_type == "<new_case>"` branch that calls the new builder.
+- `configs/<new_case>.py`
+  - The legacy-compatible entry point. It only needs to re-export the `case_kind`.
+
+Additional changes are needed only in these cases.
+
+- When a dedicated theory is needed
+  - Add `targets/awsim/theory_specs/<new_case>.py`.
+- When plotting must go beyond the existing three-axis assumption
+  - Adjust `tools/plot/*`.
+
+The downstream `dkw` / `binomial_ci` / `jama_edge` / `result_sink` now look at `case_kind + build_theory_metrics(...)`, so they do not
+need to be changed every time a new scenario is added.
+
+### Policy for `scenario_profile`
+
+- All scenario implementations now live in the new framework.
+- `uturn` / `cutin` / `swerve` / `cutout` / `deceleration` are operated with the current `targets/awsim/case_kinds/*` and
+  `targets/awsim/scenario_builders/*` as the source of truth.
+- The entry point named `legacy` still exists, but it is an alias for compatibility. It does not keep a separate behavior of the legacy
+  framework.
+- So even if `scenario_profile=legacy` is specified, the current code uses the scenario definitions and builders of the new framework.
+- When adding more profiles, first decide whether it "only keeps a compatible name" or "really has different behavior", and update the
+  README and tests at the same time.
+
+## Design rules
+
+- Do not put simulator assembly into a `case_kind`.
+- Do not accumulate scenario-specific logic in the `runner`.
+- If the behavior changes with the speed range, use `SCENARIO_PROFILES`.
+- Even for manual runs, keep using `bash -i -c` and `source /home/passd/autoware/install/setup.bash`.
+- Make sure the scenario bodies on the legacy `AWSIMScriptPy` side are up to date as well.
+- As a rule, changes go into `AWSIM_launch`, but the new framework ultimately calls `make_*_scenario(...)` in the legacy
+  `AWSIMScriptPy/scenarios/...`. If the entry point needs new arguments or the actual behavior must change, fix the legacy scenario body
+  too.
+- In particular, problems such as "the NPC does not move", "it spawns but does not change lanes", or "the ratio computed in the new
+  framework has no effect" can be caused by conditions on the legacy `AWSIMScriptPy` side rather than by the `case_kind` / `builder`. In
+  that case, fixing only the new framework is not enough.
+
+## Notes and tuning algorithm for designing new scenarios
+
+- Do not just put initial positions and accelerations in `FIXED_PARAMS` once and stop there.
+- For a new scenario, check for each range of `ego_speed` / `npc_speed` whether
+  - `ego_init_offset`
+  - `npc_init_offset`
+  - `goal_offset`
+  - `acceleration`
+  are really sufficient.
+- `uturn` / `cutin` / `swerve` use `SCENARIO_PROFILES` in the current new framework to switch start positions, accelerations, and start
+  conditions by speed range.
+- `cutout` / `deceleration` currently run with a single configuration in the new framework. They can be split into profiles if needed,
+  but as of 2026-08-31 they have no separate configurations.
+- So when formally adding a new scenario to the experiment platform, first decide whether profiles really need to be split; if not, it
+  is fine to add it as a single configuration in the new framework.
+- Do not decide `ego_goal_offset` only from "the minimum distance to reach the target speed". Estimate it basically as
+  `acceleration distance + event section + margin`, and make sure it is at least the previous stable value.
+- `npc_init_offset` should not be just a fixed value either. If needed, estimate the required gap with a formula from `ego_speed` /
+  `npc_speed` / `lateral velocity` / `event time`, and make sure it is at least the previous stable value.
+- To prepare for "the NPC does not move", it is safer to make start conditions such as `npc_start_speed_ratio` and
+  `spawn_trigger_speed_ratio` configurable in `SCENARIO_PROFILES`.
+- Use the following tuning algorithm as the basis in practice.
+  - `ego_goal_offset`
+    - `warmup_distance = v^2 / (2a)`
+    - `event_distance = v * event_time`
+    - `goal_offset = init_offset + warmup_distance + event_distance + static_margin`
+    - Finally take `max(calculated_value, legacy_minimum)`
+  - `npc_init_offset`
+    - Estimate the gap required until the trigger from the speeds of `ego` and `npc`, and `lateral velocity` if needed
+    - Add only the difference from the previous anchor case to the offset
+    - Finally take `max(calculated_value, legacy_minimum)`
+  - `npc_start_speed_ratio` / `spawn_trigger_speed_ratio`
+    - Let the NPC start moving even before `ego` exactly reaches the target speed
+    - Use it in the form `av_speed >= ratio * target_speed`
+    - But do not make it too loose; use a value with which `route` and `operation_mode` are stable on the real system
+
+## Notes on porting `cutout`
+
+- `cutout` has `dynamic_spawn.py` logic on the legacy `AWSIMScriptPy` side. Fixing only the `case_kind` / `builder` in the new framework
+  does not work as expected if `AWSIMScriptPy/scenarios/cutout/dynamic_spawn.py` inside the container is outdated. When checking by
+  hand, make sure `AWSIMScriptPy/scenarios/cutout/dynamic_spawn.py` is up to date as well as `targets/awsim/case_kinds/cutout.py`.
+- Deciding the `ego_goal_offset` of `cutout` only from "the minimum distance to reach the target speed" makes it too short. Consider
+  `acceleration distance + event section + margin`, and make sure it is at least the previous stable value. The values in use as of
+  2026-08-28 are `30/35/40 km/h -> 210/240/280 m`.
+- In the dynamic spawn of `cutout`, `npc1` / `npc2` appear when `av_speed >= spawn_trigger_speed_ratio * _speed`. If the lane-change
+  condition of `npc1` is too strict, it ends up "spawned but not moving".
+- In tuning on the real system on 2026-08-28, it became stable with `FollowLane` of `npc1` unconditional and `ChangeLane` relaxed to
+  `actor_speed >= spawn_trigger_speed`. The previous `actor_speed >= _speed` was too strict, and `npc1` sometimes could not accelerate
+  enough to enter the cut-out.
+
+## NPC1 start condition for `uturn` / `cutin`
+
+- In `uturn` and `cutin`, the condition for starting the curve itself has not changed. `uturn` enters `FollowWaypoints` when
+  `longitudinal_distance_to_ego <= dx0`, and `cutin` enters `ChangeLane` when `longitudinal_distance_to_ego <= dx0`.
+- What tends to cause problems is not "the condition for turning" but "the condition for NPC1 to start moving forward".
+- In the current new framework, `npc_start_speed_ratio` is held in `SCENARIO_PROFILES` and passed to the `uturn` / `cutin` side of
+  `AWSIMScriptPy`. It currently uses `av_speed >= npc_start_speed_ratio * _ego_speed`.
+- The values in use as of 2026-08-28 are roughly `30/35/40 km/h -> 0.898 / 0.9083 / 0.916`. That is, NPC1 can start a little early,
+  even before the ego fully reaches the target speed.
+- Specifying the `legacy` profile does not revert this start condition to the old one. In the current code, the compatible entry
+  point also uses the same new method.
+- For new scenarios as well, when "the NPC sometimes does not move", do not look only at `dx0` or the lane-change condition; first check
+  whether the "NPC1 start condition" is too strict for the actual speed.
+
+## How the corrections for `swerve` were made
+
+- `swerve` also introduced `npc_start_speed_ratio` as of 2026-08-28, so `npc1` starts moving when
+  `av_speed >= npc_start_speed_ratio * _ego_speed`.
+- In addition, `npc_init_offset` and `ego_goal_offset` estimate the required distances with formulas and are corrected so that they do
+  not fall below the stable values of the previous anchor cases `30/10`, `30/15`, `40/10`, `40/15`.
+- These corrections are also consolidated in the current new framework implementation. The `legacy` profile name remains, but it does
+  not keep a separate `swerve` behavior.
+- In other words, `swerve` is tuned not by "replacing everything with formulas" but by the policy:
+  - use the previous stable values as the baseline
+  - increase them if needed
+  - but do not shorten them so much that it becomes less stable than before
+
+## Porting and tuning `deceleration`
+
+- `deceleration` is connected to the new framework using `dynamic_spawn.py` on the legacy `AWSIMScriptPy` side as the source of truth,
+  not `base.py`. Autoware becomes cautious about the vehicle ahead early and slows down, so a dynamic spawn is closer to the intent of
+  JAMA than a static spawn.
+- The new framework adds `targets/awsim/case_kinds/deceleration.py`, `targets/awsim/scenario_builders/deceleration_builder.py`,
+  `targets/awsim/theory_specs/deceleration.py`, and `configs/deceleration.py`, and can run it from `scenario_runner.py`.
+- As of 2026-08-28, `deceleration` was first added with the single JAMA-like axis `ego_speed`. That is, unlike the other scenarios with
+  the three axes `dx0 / ego_speed / npc_speed`, this first port fixes `spawn_headway_sec=2.0` and `npc_deceleration=9.8`.
+- `ego_goal_offset` follows the same idea as `cutout`: it is estimated from `acceleration distance + event section + margin` and does not
+  fall below the previous stable values `30/35/40 km/h -> 210/240/280 m`.
+- `spawn_trigger_speed_ratio` and `decel_trigger_speed_ratio` have also been switched to formulas. Their roles are:
+  - `spawn_trigger_speed_ratio`
+    - Spawn the NPC even before the ego fully reaches the target speed
+  - `decel_trigger_speed_ratio`
+    - Let the NPC start decelerating even if it has not stabilized exactly at `_speed`
+- For the representative case `ego_speed=30 km/h` on 2026-08-28, a manual run in the head node's container with `bash -i -c` and
+  `source /home/passd/autoware/install/setup.bash` confirmed the spawn of `npc1`, `FollowLane`, and sending `SetTargetSpeed`.
+- However, for `deceleration` too, the `case_kind` / `builder` in this repository are not enough. When checking by hand, make sure
+  `AWSIMScriptPy/scenarios/deceleration/dynamic_spawn.py` inside the container is up to date.
+- This is not "touching legacy code only for the new framework"; it is because the new framework ultimately runs the legacy
+  `dynamic_spawn.py`. Even if `spawn_trigger_speed_ratio` or `decel_trigger_speed_ratio` is computed in the new framework, it has no
+  effect at runtime unless the legacy scenario function accepts the argument.

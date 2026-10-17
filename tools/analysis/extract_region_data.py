@@ -29,34 +29,34 @@ def _to_numeric_if_possible(series: pd.Series) -> pd.Series:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="データセットから特定の領域(Bounds)や条件のデータのみを抽出して出力します。"
+        description="データセットから特定の領域(Bounds)や条件のデータのみを抽出して出力します。 / Extract and write only the rows of a dataset in a given region (bounds) or matching a condition."
     )
     parser.add_argument(
-        "--type", type=str, default="uturn", help="シナリオタイプ (例: uturn)"
+        "--type", type=str, default="uturn", help="シナリオタイプ (例: uturn) / Scenario type (e.g. uturn)"
     )
     parser.add_argument(
         "--dir",
         type=str,
         default="~/simulation_traces",
-        help="データセットが存在するディレクトリ",
+        help="データセットが存在するディレクトリ / Directory containing the dataset",
     )
     parser.add_argument(
         "--bounds",
         type=str,
         default=None,
-        help="手動で領域を指定するJSON (例: '{\"dx0\": [15.0, 20.0]}')",
+        help="手動で領域を指定するJSON (例: '{\"dx0\": [15.0, 20.0]}') / JSON that specifies the region by hand (e.g. '{\"dx0\": [15.0, 20.0]}')",
     )
     parser.add_argument(
         "--region",
         type=str,
         default="custom",
-        help="抽出条件式 (例: 'emp_safe and jama_safe', 'min_ttc > 1.0 or c_collision == 1')",
+        help="抽出条件式 (例: 'emp_safe and jama_safe', 'min_ttc > 1.0 or c_collision == 1') / Extraction condition (e.g. 'emp_safe and jama_safe', 'min_ttc > 1.0 or c_collision == 1')",
     )
     parser.add_argument(
         "--output",
         type=str,
         default="extracted_dataset.csv",
-        help="出力するCSVのファイル名",
+        help="出力するCSVのファイル名 / File name of the output CSV",
     )
     return parser
 

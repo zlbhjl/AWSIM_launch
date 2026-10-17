@@ -258,7 +258,7 @@ def fix_dataset(csv_path, all_metrics):
         print(f"  -> JSONファイルが見つからずスキップしたデータ: {missing_json_count} 件")
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="過去の誤ったラベルを最新の抽出ロジックで再計算・修復します")
+    parser = argparse.ArgumentParser(description="過去の誤ったラベルを最新の抽出ロジックで再計算・修復します / Recompute and repair past incorrect labels with the latest extraction logic.")
     parser.add_argument("--type", type=str, default="uturn", help="Scenario type (default: uturn)")
     parser.add_argument("--dir", type=str, default="~/simulation_traces", help="Directory containing dataset CSVs")
     parser.add_argument("--mode", type=str, default="cvm", help="Kinematics Extractor Mode (default: cvm)")

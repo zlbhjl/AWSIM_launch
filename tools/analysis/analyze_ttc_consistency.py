@@ -81,40 +81,40 @@ def analyze_and_print_dkw_simultaneous(
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
-            "反復テストデータからTTCの安定性を評価し、分類ごとにDKW評価を実行します。"
+            "反復テストデータからTTCの安定性を評価し、分類ごとにDKW評価を実行します。 / Evaluate TTC stability from repeated test data and run a DKW evaluation for each class."
         )
     )
     parser.add_argument(
-        "--type", type=str, default="uturn", help="シナリオタイプ (例: uturn)"
+        "--type", type=str, default="uturn", help="シナリオタイプ (例: uturn) / Scenario type (e.g. uturn)"
     )
     parser.add_argument(
         "--dir",
         type=str,
         default="~/simulation_traces",
-        help="データセットが存在するディレクトリ",
+        help="データセットが存在するディレクトリ / Directory containing the dataset",
     )
     parser.add_argument(
         "--region",
         type=str,
         default="custom",
-        help="評価対象を絞り込む条件式 (例: 'emp_safe and min_ttc < 1.5')",
+        help="評価対象を絞り込む条件式 (例: 'emp_safe and min_ttc < 1.5') / Condition that narrows the evaluated rows (e.g. 'emp_safe and min_ttc < 1.5')",
     )
     parser.add_argument(
         "--consistency_threshold",
         type=float,
         default=0.2,
-        help="TTCの標準偏差がこの値以下の場合「確実」と分類する閾値",
+        help="TTCの標準偏差がこの値以下の場合「確実」と分類する閾値 / Threshold: classify as 'certain' when the TTC standard deviation is at or below this value",
     )
     parser.add_argument(
         "--min_repeats",
         type=int,
         default=3,
-        help="分析対象とする最低反復回数",
+        help="分析対象とする最低反復回数 / Minimum number of repetitions to include in the analysis",
     )
     parser.add_argument(
         "--dkw_simultaneous",
         action="store_true",
-        help="ボンフェローニ補正を用いた複数指標の同時保証評価を行う",
+        help="ボンフェローニ補正を用いた複数指標の同時保証評価を行う / Evaluate several metrics with a simultaneous guarantee using the Bonferroni correction",
     )
     return parser
 
