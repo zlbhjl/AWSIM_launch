@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "awsim-launch"
-version = "0.1.0"
+version = "0.1.1"
 description = "Adaptive safety testing framework for AWSIM / Autoware with statistical model checking and importance sampling"
 readme = "README.md"
 license = "Apache-2.0"

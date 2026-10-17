@@ -6,8 +6,8 @@ authors:
     given-names: Fengyi
     alias: zlbhjl
     affiliation: "Japan Advanced Institute of Science and Technology (JAIST)"
-version: 0.1.0
-date-released: 2026-10-16
+version: 0.1.1
+date-released: 2026-10-17
 license: Apache-2.0
 repository-code: "https://github.com/zlbhjl/AWSIM_launch"
 keywords:
