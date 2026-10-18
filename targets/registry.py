@@ -1,28 +1,82 @@
+"""Find the target plugins and build their components.
+
+A target is any package ``targets/<name>/`` whose ``plugin.py`` defines
+``PLUGIN`` (see ``contracts.target_plugin``). Adding such a package makes the
+target available to ``--target`` without editing this module.
+"""
+
 from __future__ import annotations
 
 import argparse
-import os
-from dataclasses import dataclass
+import importlib
+from functools import lru_cache
 from pathlib import Path
 
-from runtime.container.profile import build_runtime_profile
-from targets.awsim.backend import AWSIMBackend, AWSIMBackendConfig
-from targets.awsim.result_interpreter import (
-    InterpretationContext as AWSIMInterpretationContext,
-)
-from targets.awsim.result_interpreter import ResultInterpreter as AWSIMResultInterpreter
-from targets.bbsl.backend import BBSLBackend
-from targets.bbsl.result_interpreter import ResultInterpreter as BBSLResultInterpreter
-from targets.dynamics.backend import DynamicsBackend, DynamicsBackendConfig
-from targets.dynamics.result_interpreter import DynamicsResultInterpreter
-from targets.prism.backend import PrismBackend, PrismBackendConfig
-from targets.prism.result_interpreter import PrismResultInterpreter
+import targets
+from contracts.target_plugin import TargetComponents, TargetPlugin
+
+PLUGIN_MODULE = "plugin"
 
 
-@dataclass(frozen=True)
-class TargetComponents:
-    backend: object
-    result_interpreter: object
+@lru_cache(maxsize=1)
+def _discover() -> dict[str, TargetPlugin]:
+    plugins: dict[str, TargetPlugin] = {}
+    # Target packages may be regular or namespace packages, so look for
+    # <name>/plugin.py directly instead of relying on __init__.py.
+    for root in targets.__path__:
+        for plugin_file in sorted(Path(root).glob(f"*/{PLUGIN_MODULE}.py")):
+            name = plugin_file.parent.name
+            if name.startswith(("_", ".")) or name in plugins:
+                continue
+            module_name = f"{targets.__name__}.{name}.{PLUGIN_MODULE}"
+            plugin = getattr(importlib.import_module(module_name), "PLUGIN", None)
+            if not isinstance(plugin, TargetPlugin):
+                raise TypeError(f"{module_name} must define PLUGIN implementing TargetPlugin")
+            if plugin.name != name:
+                raise ValueError(f"{module_name}: PLUGIN.name {plugin.name!r} must match the package name")
+            plugins[name] = plugin
+    return plugins
+
+
+def reload_target_plugins() -> None:
+    """Forget discovered plugins (for tests that add a target package)."""
+    _discover.cache_clear()
+
+
+def list_target_names() -> list[str]:
+    return sorted(_discover())
+
+
+def get_target_plugin(name: str) -> TargetPlugin:
+    try:
+        return _discover()[name]
+    except KeyError:
+        raise ValueError(f"Unsupported target: {name}") from None
+
+
+def default_case_kind(target: str) -> str:
+    """Case kind used when --case-kind is omitted (the plugin's, or the target name)."""
+    return str(getattr(get_target_plugin(target), "default_case_kind", target))
+
+
+def default_config_module(target: str, case_kind: str) -> str:
+    """Config module used when --config-module is omitted for a non-AWSIM target.
+
+    The module is only imported by the AWSIM strategist; other targets record it as
+    a label, so a target without its own default uses its importable plugin module.
+    """
+    plugin = get_target_plugin(target)
+    resolver = getattr(plugin, "default_config_module", None)
+    if callable(resolver):
+        return str(resolver(case_kind))
+    return f"{targets.__name__}.{target}.{PLUGIN_MODULE}"
+
+
+def apply_target_defaults(args: argparse.Namespace) -> argparse.Namespace:
+    """Fill --case-kind from the target when it was omitted. Safe to call repeatedly."""
+    if getattr(args, "case_kind", None) is None:
+        args.case_kind = default_case_kind(args.target)
+    return args
 
 
 def build_target_components(
@@ -33,79 +87,20 @@ def build_target_components(
 ) -> TargetComponents:
     if backend is not None and result_interpreter is not None:
         return TargetComponents(backend=backend, result_interpreter=result_interpreter)
+    components = get_target_plugin(args.target).build_components(args)
+    return TargetComponents(
+        backend=backend or components.backend,
+        result_interpreter=result_interpreter or components.result_interpreter,
+    )
 
-    if args.target == "awsim":
-        ros_domain_id = os.environ.get("ROS_DOMAIN_ID", "0")
-        machine_role = "master" if ros_domain_id == "21" else "local"
-        host_mode = os.environ.get("EXEC_MODE") == "host"
-        backend_impl = backend or AWSIMBackend(
-            config=AWSIMBackendConfig(
-                runtime_profile=build_runtime_profile(
-                    case_kind=args.case_kind,
-                    headless=getattr(args, "headless", False),
-                    host_mode=host_mode,
-                    machine_role=machine_role,
-                    container_profile=getattr(args, "container_profile", None),
-                    scenario_profile=getattr(args, "scenario_profile", None),
-                ),
-                manage_infra=True,
-                # Normal AWSIM workflows retain their existing reuse default.
-                # The importance-sampling CLI opts into a fresh simulation
-                # world per record to prevent a rejected trace from affecting
-                # the next proposal sample.
-                reuse_infra_between_runs=not bool(
-                    getattr(args, "fresh_infra_per_sample", False)
-                ),
-                initial_warmup_sec=40.0,
-                extra_refresh_warmup_sec=15.0,
-                infra_ext_mode=getattr(args, "ext_mode", "cvm"),
-                include_awchecker=False,
-                startup_probe_timeout_sec=30.0,
-                refresh_probe_timeout_sec=45.0,
-                probe_service_timeout_sec=2.0,
-                startup_probe_stability_checks=2,
-                refresh_probe_stability_checks=3,
-                probe_stability_interval_sec=1.0,
-                max_refresh_probe_retries=1,
-            )
-        )
-        interpreter_impl = result_interpreter or AWSIMResultInterpreter(
-            context=AWSIMInterpretationContext(
-                target=args.target,
-                case_kind=args.case_kind,
-                config_module=args.config_module,
-                kinematics_mode=getattr(args, "ext_mode", "cvm"),
-            )
-        )
-        return TargetComponents(
-            backend=backend_impl,
-            result_interpreter=interpreter_impl,
-        )
 
-    if args.target == "bbsl":
-        return TargetComponents(
-            backend=backend or BBSLBackend(),
-            result_interpreter=result_interpreter or BBSLResultInterpreter(),
-        )
-
-    if args.target == "dynamics":
-        output_root = getattr(args, "dynamics_output_root", None) or "artifacts/dynamics"
-        return TargetComponents(
-            backend=backend
-            or DynamicsBackend(DynamicsBackendConfig(output_root=Path(output_root))),
-            result_interpreter=result_interpreter or DynamicsResultInterpreter(),
-        )
-
-    if args.target == "prism":
-        return TargetComponents(
-            backend=backend or PrismBackend(
-                PrismBackendConfig(
-                    output_root=Path(getattr(args, "prism_output_root", "artifacts/prism")),
-                    prism_executable=getattr(args, "prism_executable", "prism"),
-                    timeout_sec=float(getattr(args, "prism_timeout_sec", 30.0)),
-                )
-            ),
-            result_interpreter=result_interpreter or PrismResultInterpreter(),
-        )
-
-    raise ValueError(f"Unsupported target: {args.target}")
+__all__ = [
+    "TargetComponents",
+    "apply_target_defaults",
+    "build_target_components",
+    "default_case_kind",
+    "default_config_module",
+    "get_target_plugin",
+    "list_target_names",
+    "reload_target_plugins",
+]

@@ -1,3 +1,4 @@
+from orchestration.seeding import SDE_NOISE_STREAM, derive_seed
 from orchestration.random_parameter_sampling import (
     RandomParameterSamplingConfig,
     RandomParameterSamplingStrategy,
@@ -48,5 +49,20 @@ def test_sde_sampling_derives_an_independent_path_seed_per_sample() -> None:
     second = strategy.next_test_case()
 
     assert first is not None and second is not None
-    assert first.input["sde_seed"] == 101
-    assert second.input["sde_seed"] == 102
+    assert first.input["sde_seed"] == derive_seed(100, 1, SDE_NOISE_STREAM)
+    assert second.input["sde_seed"] == derive_seed(100, 2, SDE_NOISE_STREAM)
+    assert first.input["sde_seed"] != second.input["sde_seed"]
+
+
+def test_neighbouring_seeds_do_not_share_samples() -> None:
+    def draws(seed: int) -> set[float]:
+        strategy = RandomParameterSamplingStrategy(
+            RandomParameterSamplingConfig(
+                target="dynamics", case_kind="uturn", params={}, max_samples=50, seed=seed,
+                input_distribution={"dx0": {"min": 10, "max": 25}},
+            )
+        )
+        return {strategy.sample_parameters(index)["dx0"] for index in range(1, 51)}
+
+    assert draws(42) == draws(42)
+    assert not draws(42) & draws(43)

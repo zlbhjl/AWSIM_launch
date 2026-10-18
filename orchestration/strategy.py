@@ -7,6 +7,7 @@ from typing import Any, Mapping
 import numpy as np
 import pandas as pd
 
+from orchestration.seeding import INPUT_STREAM, derive_seed
 from contracts.execution import TestCase
 from contracts.statistics import StatisticalRequest
 from evaluation.binomial_ci import BinomialCIService
@@ -612,7 +613,7 @@ class ActiveLearningStrategist:
         )
 
     def get_random_point(self, index: int) -> dict[str, float]:
-        rng = np.random.default_rng(seed=self.random_seed + int(index))
+        rng = np.random.default_rng(seed=derive_seed(self.random_seed, int(index), INPUT_STREAM))
         return {
             name: float(rng.uniform(self.active_bounds[name][0], self.active_bounds[name][1]))
             for name in self.param_names

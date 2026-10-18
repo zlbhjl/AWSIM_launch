@@ -1,0 +1,5839 @@
+{
+ "awsim:binomial_ci": {
+  "final_report": {
+   "num_samples": 100,
+   "reason": "Binomial CI Complete: c_collision CI width 0.13611",
+   "target": "Binomial CI"
+  },
+  "step_count": 100,
+  "steps": [
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 24.454592436,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 37.168783379,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 17.452258691,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "BINOMIAL_CI: Sampling (1)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 23.448875082,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 34.071771219,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 18.550544798,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "BINOMIAL_CI: Sampling (2)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 22.733514643,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 35.524829278,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 14.168148497,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "BINOMIAL_CI: Sampling (3)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 19.725798221,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 32.700778043,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 16.476280549,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "BINOMIAL_CI: Sampling (4)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 24.050605094,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 37.450523956,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 23.372308235,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "BINOMIAL_CI: Sampling (5)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 10.325227745,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 34.77394343,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 17.740265349,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "BINOMIAL_CI: Sampling (6)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 14.931790052,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 39.168890382,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 10.991949152,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "BINOMIAL_CI: Sampling (7)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 14.156243765,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 32.170863259,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 23.948303507,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "BINOMIAL_CI: Sampling (8)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 17.144117126,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 32.700756648,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 23.843725903,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "BINOMIAL_CI: Sampling (9)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 19.965934071,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 30.925854787,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 23.724139454,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "BINOMIAL_CI: Sampling (10)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 11.85821535,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 35.811204497,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 17.182632286,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "BINOMIAL_CI: Sampling (11)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 17.606980977,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 31.678008096,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 22.051055861,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "BINOMIAL_CI: Sampling (12)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 19.553197481,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 35.808493644,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 14.338383736,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "BINOMIAL_CI: Sampling (13)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 23.050011829,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 35.527402707,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 10.88661413,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "BINOMIAL_CI: Sampling (14)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 19.204544399,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 38.255810405,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 14.051923983,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "BINOMIAL_CI: Sampling (15)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 22.884655682,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 38.923165836,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 13.136001089,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "BINOMIAL_CI: Sampling (16)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 10.591682577,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 30.27800156,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 14.19760121,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "BINOMIAL_CI: Sampling (17)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 19.503625555,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 33.759073438,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 13.468801019,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "BINOMIAL_CI: Sampling (18)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 21.173966006,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 32.370852115,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 12.812905166,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "BINOMIAL_CI: Sampling (19)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 22.343135626,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 37.514923067,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 16.654558603,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "BINOMIAL_CI: Sampling (20)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 14.206745395,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 34.458246536,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 11.755962301,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "BINOMIAL_CI: Sampling (21)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 13.573855369,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 37.79982221,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 14.127527465,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "BINOMIAL_CI: Sampling (22)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 11.441405544,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 30.036237119,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 23.727519976,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "BINOMIAL_CI: Sampling (23)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 20.39993215,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 33.643666425,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 16.201902822,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "BINOMIAL_CI: Sampling (24)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 23.673000386,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 39.646532291,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 17.11830563,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "BINOMIAL_CI: Sampling (25)"
+   }
+  ],
+  "stop_reason": null,
+  "stopped": true
+ },
+ "awsim:dkw": {
+  "final_report": {
+   "num_samples": 2,
+   "reason": "SMC Verification Complete",
+   "target": "SMC (DKW)"
+  },
+  "step_count": 2,
+  "steps": [
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 24.454592436,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 37.168783379,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 17.452258691,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "SMC: Sequential-DKW Sampling (Stage 1)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 23.448875082,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 34.071771219,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 18.550544798,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "SMC: Sequential-DKW Sampling (Stage 1)"
+   }
+  ],
+  "stop_reason": null,
+  "stopped": true
+ },
+ "awsim:dkw_fixed": {
+  "final_report": {
+   "num_samples": 60,
+   "reason": "DKW evaluation failed",
+   "target": "DKW Fixed"
+  },
+  "step_count": 60,
+  "steps": [
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 24.454592436,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 37.168783379,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 17.452258691,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "SMC: Fixed Sampling (1/60)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 23.448875082,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 34.071771219,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 18.550544798,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "SMC: Fixed Sampling (2/60)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 22.733514643,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 35.524829278,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 14.168148497,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "SMC: Fixed Sampling (3/60)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 19.725798221,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 32.700778043,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 16.476280549,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "SMC: Fixed Sampling (4/60)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 24.050605094,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 37.450523956,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 23.372308235,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "SMC: Fixed Sampling (5/60)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 10.325227745,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 34.77394343,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 17.740265349,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "SMC: Fixed Sampling (6/60)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 14.931790052,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 39.168890382,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 10.991949152,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "SMC: Fixed Sampling (7/60)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 14.156243765,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 32.170863259,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 23.948303507,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "SMC: Fixed Sampling (8/60)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 17.144117126,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 32.700756648,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 23.843725903,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "SMC: Fixed Sampling (9/60)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 19.965934071,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 30.925854787,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 23.724139454,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "SMC: Fixed Sampling (10/60)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 11.85821535,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 35.811204497,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 17.182632286,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "SMC: Fixed Sampling (11/60)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 17.606980977,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 31.678008096,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 22.051055861,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "SMC: Fixed Sampling (12/60)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 19.553197481,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 35.808493644,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 14.338383736,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "SMC: Fixed Sampling (13/60)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 23.050011829,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 35.527402707,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 10.88661413,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "SMC: Fixed Sampling (14/60)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 19.204544399,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 38.255810405,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 14.051923983,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "SMC: Fixed Sampling (15/60)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 22.884655682,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 38.923165836,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 13.136001089,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "SMC: Fixed Sampling (16/60)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 10.591682577,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 30.27800156,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 14.19760121,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "SMC: Fixed Sampling (17/60)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 19.503625555,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 33.759073438,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 13.468801019,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "SMC: Fixed Sampling (18/60)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 21.173966006,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 32.370852115,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 12.812905166,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "SMC: Fixed Sampling (19/60)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 22.343135626,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 37.514923067,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 16.654558603,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "SMC: Fixed Sampling (20/60)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 14.206745395,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 34.458246536,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 11.755962301,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "SMC: Fixed Sampling (21/60)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 13.573855369,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 37.79982221,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 14.127527465,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "SMC: Fixed Sampling (22/60)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 11.441405544,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 30.036237119,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 23.727519976,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "SMC: Fixed Sampling (23/60)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 20.39993215,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 33.643666425,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 16.201902822,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "SMC: Fixed Sampling (24/60)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 23.673000386,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 39.646532291,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 17.11830563,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "SMC: Fixed Sampling (25/60)"
+   }
+  ],
+  "stop_reason": null,
+  "stopped": true
+ },
+ "awsim:ebstop": {
+  "final_report": {
+   "num_samples": 100,
+   "reason": "EBStop reached max_samples=100 unconverged",
+   "target": "EBStop"
+  },
+  "step_count": 100,
+  "steps": [
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 24.454592436,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 37.168783379,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 17.452258691,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "EBSTOP: Sampling (1)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 23.448875082,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 34.071771219,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 18.550544798,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "EBSTOP: Sampling (1)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 22.733514643,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 35.524829278,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 14.168148497,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "EBSTOP: Sampling (3)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 19.725798221,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 32.700778043,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 16.476280549,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "EBSTOP: Sampling (4)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 24.050605094,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 37.450523956,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 23.372308235,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "EBSTOP: Sampling (5)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 10.325227745,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 34.77394343,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 17.740265349,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "EBSTOP: Sampling (6)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 14.931790052,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 39.168890382,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 10.991949152,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "EBSTOP: Sampling (7)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 14.156243765,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 32.170863259,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 23.948303507,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "EBSTOP: Sampling (8)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 17.144117126,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 32.700756648,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 23.843725903,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "EBSTOP: Sampling (9)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 19.965934071,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 30.925854787,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 23.724139454,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "EBSTOP: Sampling (10)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 11.85821535,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 35.811204497,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 17.182632286,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "EBSTOP: Sampling (11)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 17.606980977,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 31.678008096,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 22.051055861,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "EBSTOP: Sampling (12)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 19.553197481,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 35.808493644,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 14.338383736,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "EBSTOP: Sampling (13)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 23.050011829,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 35.527402707,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 10.88661413,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "EBSTOP: Sampling (14)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 19.204544399,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 38.255810405,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 14.051923983,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "EBSTOP: Sampling (15)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 22.884655682,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 38.923165836,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 13.136001089,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "EBSTOP: Sampling (16)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 10.591682577,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 30.27800156,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 14.19760121,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "EBSTOP: Sampling (17)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 19.503625555,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 33.759073438,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 13.468801019,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "EBSTOP: Sampling (18)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 21.173966006,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 32.370852115,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 12.812905166,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "EBSTOP: Sampling (19)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 22.343135626,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 37.514923067,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 16.654558603,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "EBSTOP: Sampling (20)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 14.206745395,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 34.458246536,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 11.755962301,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "EBSTOP: Sampling (21)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 13.573855369,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 37.79982221,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 14.127527465,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "EBSTOP: Sampling (22)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 11.441405544,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 30.036237119,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 23.727519976,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "EBSTOP: Sampling (23)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 20.39993215,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 33.643666425,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 16.201902822,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "EBSTOP: Sampling (24)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 23.673000386,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 39.646532291,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 17.11830563,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "EBSTOP: Sampling (25)"
+   }
+  ],
+  "stop_reason": null,
+  "stopped": true
+ },
+ "awsim:explore": {
+  "final_report": null,
+  "step_count": 120,
+  "steps": [
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 10.09,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 37.98,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 14.2,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "[FOCUS] Exact Point 1/6 (Repeat 1/10)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 10.09,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 37.98,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 14.2,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "[FOCUS] Exact Point 1/6 (Repeat 2/10)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 10.09,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 37.98,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 14.2,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "[FOCUS] Exact Point 1/6 (Repeat 3/10)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 10.09,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 37.98,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 14.2,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "[FOCUS] Exact Point 1/6 (Repeat 4/10)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 10.09,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 37.98,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 14.2,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "[FOCUS] Exact Point 1/6 (Repeat 5/10)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 10.09,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 37.98,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 14.2,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "[FOCUS] Exact Point 1/6 (Repeat 6/10)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 10.09,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 37.98,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 14.2,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "[FOCUS] Exact Point 1/6 (Repeat 7/10)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 10.09,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 37.98,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 14.2,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "[FOCUS] Exact Point 1/6 (Repeat 8/10)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 10.09,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 37.98,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 14.2,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "[FOCUS] Exact Point 1/6 (Repeat 9/10)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 10.09,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 37.98,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 14.2,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "[FOCUS] Exact Point 1/6 (Repeat 10/10)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 14.81,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 39.8,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 13.49,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "[FOCUS] Exact Point 2/6 (Repeat 1/10)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 14.81,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 39.8,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 13.49,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "[FOCUS] Exact Point 2/6 (Repeat 2/10)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 14.81,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 39.8,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 13.49,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "[FOCUS] Exact Point 2/6 (Repeat 3/10)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 14.81,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 39.8,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 13.49,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "[FOCUS] Exact Point 2/6 (Repeat 4/10)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 14.81,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 39.8,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 13.49,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "[FOCUS] Exact Point 2/6 (Repeat 5/10)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 14.81,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 39.8,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 13.49,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "[FOCUS] Exact Point 2/6 (Repeat 6/10)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 14.81,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 39.8,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 13.49,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "[FOCUS] Exact Point 2/6 (Repeat 7/10)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 14.81,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 39.8,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 13.49,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "[FOCUS] Exact Point 2/6 (Repeat 8/10)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 14.81,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 39.8,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 13.49,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "[FOCUS] Exact Point 2/6 (Repeat 9/10)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 14.81,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 39.8,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 13.49,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "[FOCUS] Exact Point 2/6 (Repeat 10/10)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 10.23,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 35.96,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 17.8,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "[FOCUS] Exact Point 3/6 (Repeat 1/10)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 10.23,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 35.96,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 17.8,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "[FOCUS] Exact Point 3/6 (Repeat 2/10)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 10.23,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 35.96,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 17.8,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "[FOCUS] Exact Point 3/6 (Repeat 3/10)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 10.23,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 35.96,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 17.8,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "[FOCUS] Exact Point 3/6 (Repeat 4/10)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 10.23,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 35.96,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 17.8,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "[FOCUS] Exact Point 3/6 (Repeat 5/10)"
+   }
+  ],
+  "stop_reason": null,
+  "stopped": false
+ },
+ "awsim:sprt": {
+  "final_report": {
+   "num_samples": 10,
+   "reason": "SPRT Complete: c_collision verdict=h1 (n=10)",
+   "target": "SPRT"
+  },
+  "step_count": 10,
+  "steps": [
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 24.454592436,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 37.168783379,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 17.452258691,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "SPRT: Sampling (1)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 23.448875082,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 34.071771219,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 18.550544798,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "SPRT: Sampling (2)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 22.733514643,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 35.524829278,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 14.168148497,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "SPRT: Sampling (3)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 19.725798221,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 32.700778043,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 16.476280549,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "SPRT: Sampling (4)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 24.050605094,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 37.450523956,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 23.372308235,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "SPRT: Sampling (5)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 10.325227745,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 34.77394343,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 17.740265349,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "SPRT: Sampling (6)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 14.931790052,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 39.168890382,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 10.991949152,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "SPRT: Sampling (7)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 14.156243765,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 32.170863259,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 23.948303507,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "SPRT: Sampling (8)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 17.144117126,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 32.700756648,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 23.843725903,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "SPRT: Sampling (9)"
+   },
+   {
+    "input": {
+     "acceleration": 7.0,
+     "dx0": 19.965934071,
+     "ego_goal_lane": "516",
+     "ego_goal_offset": 20,
+     "ego_init_lane": "514",
+     "ego_init_offset": 38,
+     "ego_speed": 30.925854787,
+     "npc_init_lane": "521",
+     "npc_init_offset": 32,
+     "npc_speed": 23.724139454,
+     "scenario_type": "uturn",
+     "uturn_next_lane": "511"
+    },
+    "reason": "SPRT: Sampling (10)"
+   }
+  ],
+  "stop_reason": null,
+  "stopped": true
+ },
+ "bernoulli:binomial_ci": {
+  "final_report": {
+   "diagnostics": {
+    "anytime_valid": false,
+    "confidence": 0.95,
+    "effective_confidence_level": 0.95,
+    "interval_width": 0.193607681,
+    "max_samples": 100,
+    "meets_min_samples": true,
+    "meets_target_width": true,
+    "method": "wilson",
+    "min_samples": 10,
+    "reason_pattern": null,
+    "region": "custom",
+    "status": "success",
+    "success_count": 0,
+    "target_width": 0.2
+   },
+   "estimate": 0.0,
+   "exact_model_check": null,
+   "experiment_id": "random-8b79c9e6398c",
+   "input_distribution": {
+    "u_failure": {
+     "distribution": "uniform",
+     "max": 1.0,
+     "min": 0.0
+    },
+    "u_score": {
+     "distribution": "uniform",
+     "max": 1.0,
+     "min": 0.0
+    },
+    "u_time": {
+     "distribution": "uniform",
+     "max": 1.0,
+     "min": 0.0
+    }
+   },
+   "interval": [
+    0.0,
+    0.193607681
+   ],
+   "method": "binomial_ci",
+   "metric": "c_failure",
+   "next_action": "stop",
+   "sample_count": 16,
+   "sampling_signature": "8b79c9e6398cbb050f543349cf677909a6be6e542c6ace9940e5317d0187dd62",
+   "seed": 7,
+   "stop_reason": "Statistical interval sufficient for c_failure: width=0.193608, samples=16",
+   "sufficient": true
+  },
+  "step_count": 16,
+  "steps": [
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "random-8b79c9e6398c",
+     "record_kind": "sample",
+     "sample_index": 1,
+     "sampled_parameters": {
+      "u_failure": 0.619347743,
+      "u_score": 0.003191573,
+      "u_time": 0.16009912
+     },
+     "sampling_distribution": {
+      "u_failure": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_score": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_time": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      }
+     },
+     "sampling_seed": 7,
+     "sampling_signature": "8b79c9e6398cbb050f543349cf677909a6be6e542c6ace9940e5317d0187dd62",
+     "u_failure": 0.619347743,
+     "u_score": 0.003191573,
+     "u_time": 0.16009912
+    },
+    "reason": "BERNOULLI_IID_SAMPLING: random-8b79c9e6398c sample=1"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "random-8b79c9e6398c",
+     "record_kind": "sample",
+     "sample_index": 2,
+     "sampled_parameters": {
+      "u_failure": 0.8884344,
+      "u_score": 0.958932002,
+      "u_time": 0.560700318
+     },
+     "sampling_distribution": {
+      "u_failure": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_score": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_time": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      }
+     },
+     "sampling_seed": 7,
+     "sampling_signature": "8b79c9e6398cbb050f543349cf677909a6be6e542c6ace9940e5317d0187dd62",
+     "u_failure": 0.8884344,
+     "u_score": 0.958932002,
+     "u_time": 0.560700318
+    },
+    "reason": "BERNOULLI_IID_SAMPLING: random-8b79c9e6398c sample=2"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "random-8b79c9e6398c",
+     "record_kind": "sample",
+     "sample_index": 3,
+     "sampled_parameters": {
+      "u_failure": 0.295074057,
+      "u_score": 0.984601497,
+      "u_time": 0.274797261
+     },
+     "sampling_distribution": {
+      "u_failure": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_score": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_time": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      }
+     },
+     "sampling_seed": 7,
+     "sampling_signature": "8b79c9e6398cbb050f543349cf677909a6be6e542c6ace9940e5317d0187dd62",
+     "u_failure": 0.295074057,
+     "u_score": 0.984601497,
+     "u_time": 0.274797261
+    },
+    "reason": "BERNOULLI_IID_SAMPLING: random-8b79c9e6398c sample=3"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "random-8b79c9e6398c",
+     "record_kind": "sample",
+     "sample_index": 4,
+     "sampled_parameters": {
+      "u_failure": 0.196844466,
+      "u_score": 0.869469305,
+      "u_time": 0.280845066
+     },
+     "sampling_distribution": {
+      "u_failure": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_score": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_time": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      }
+     },
+     "sampling_seed": 7,
+     "sampling_signature": "8b79c9e6398cbb050f543349cf677909a6be6e542c6ace9940e5317d0187dd62",
+     "u_failure": 0.196844466,
+     "u_score": 0.869469305,
+     "u_time": 0.280845066
+    },
+    "reason": "BERNOULLI_IID_SAMPLING: random-8b79c9e6398c sample=4"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "random-8b79c9e6398c",
+     "record_kind": "sample",
+     "sample_index": 5,
+     "sampled_parameters": {
+      "u_failure": 0.757661391,
+      "u_score": 0.613769583,
+      "u_time": 0.489448654
+     },
+     "sampling_distribution": {
+      "u_failure": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_score": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_time": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      }
+     },
+     "sampling_seed": 7,
+     "sampling_signature": "8b79c9e6398cbb050f543349cf677909a6be6e542c6ace9940e5317d0187dd62",
+     "u_failure": 0.757661391,
+     "u_score": 0.613769583,
+     "u_time": 0.489448654
+    },
+    "reason": "BERNOULLI_IID_SAMPLING: random-8b79c9e6398c sample=5"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "random-8b79c9e6398c",
+     "record_kind": "sample",
+     "sample_index": 6,
+     "sampled_parameters": {
+      "u_failure": 0.202010531,
+      "u_score": 0.892667938,
+      "u_time": 0.84783867
+     },
+     "sampling_distribution": {
+      "u_failure": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_score": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_time": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      }
+     },
+     "sampling_seed": 7,
+     "sampling_signature": "8b79c9e6398cbb050f543349cf677909a6be6e542c6ace9940e5317d0187dd62",
+     "u_failure": 0.202010531,
+     "u_score": 0.892667938,
+     "u_time": 0.84783867
+    },
+    "reason": "BERNOULLI_IID_SAMPLING: random-8b79c9e6398c sample=6"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "random-8b79c9e6398c",
+     "record_kind": "sample",
+     "sample_index": 7,
+     "sampled_parameters": {
+      "u_failure": 0.386336286,
+      "u_score": 0.015812411,
+      "u_time": 0.273281294
+     },
+     "sampling_distribution": {
+      "u_failure": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_score": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_time": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      }
+     },
+     "sampling_seed": 7,
+     "sampling_signature": "8b79c9e6398cbb050f543349cf677909a6be6e542c6ace9940e5317d0187dd62",
+     "u_failure": 0.386336286,
+     "u_score": 0.015812411,
+     "u_time": 0.273281294
+    },
+    "reason": "BERNOULLI_IID_SAMPLING: random-8b79c9e6398c sample=7"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "random-8b79c9e6398c",
+     "record_kind": "sample",
+     "sample_index": 8,
+     "sampled_parameters": {
+      "u_failure": 0.59481806,
+      "u_score": 0.508496932,
+      "u_time": 0.892067453
+     },
+     "sampling_distribution": {
+      "u_failure": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_score": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_time": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      }
+     },
+     "sampling_seed": 7,
+     "sampling_signature": "8b79c9e6398cbb050f543349cf677909a6be6e542c6ace9940e5317d0187dd62",
+     "u_failure": 0.59481806,
+     "u_score": 0.508496932,
+     "u_time": 0.892067453
+    },
+    "reason": "BERNOULLI_IID_SAMPLING: random-8b79c9e6398c sample=8"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "random-8b79c9e6398c",
+     "record_kind": "sample",
+     "sample_index": 9,
+     "sampled_parameters": {
+      "u_failure": 0.357575367,
+      "u_score": 0.049127963,
+      "u_time": 0.168834285
+     },
+     "sampling_distribution": {
+      "u_failure": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_score": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_time": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      }
+     },
+     "sampling_seed": 7,
+     "sampling_signature": "8b79c9e6398cbb050f543349cf677909a6be6e542c6ace9940e5317d0187dd62",
+     "u_failure": 0.357575367,
+     "u_score": 0.049127963,
+     "u_time": 0.168834285
+    },
+    "reason": "BERNOULLI_IID_SAMPLING: random-8b79c9e6398c sample=9"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "random-8b79c9e6398c",
+     "record_kind": "sample",
+     "sample_index": 10,
+     "sampled_parameters": {
+      "u_failure": 0.421367545,
+      "u_score": 0.538713818,
+      "u_time": 0.107376337
+     },
+     "sampling_distribution": {
+      "u_failure": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_score": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_time": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      }
+     },
+     "sampling_seed": 7,
+     "sampling_signature": "8b79c9e6398cbb050f543349cf677909a6be6e542c6ace9940e5317d0187dd62",
+     "u_failure": 0.421367545,
+     "u_score": 0.538713818,
+     "u_time": 0.107376337
+    },
+    "reason": "BERNOULLI_IID_SAMPLING: random-8b79c9e6398c sample=10"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "random-8b79c9e6398c",
+     "record_kind": "sample",
+     "sample_index": 11,
+     "sampled_parameters": {
+      "u_failure": 0.112877513,
+      "u_score": 0.660782823,
+      "u_time": 0.295681086
+     },
+     "sampling_distribution": {
+      "u_failure": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_score": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_time": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      }
+     },
+     "sampling_seed": 7,
+     "sampling_signature": "8b79c9e6398cbb050f543349cf677909a6be6e542c6ace9940e5317d0187dd62",
+     "u_failure": 0.112877513,
+     "u_score": 0.660782823,
+     "u_time": 0.295681086
+    },
+    "reason": "BERNOULLI_IID_SAMPLING: random-8b79c9e6398c sample=11"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "random-8b79c9e6398c",
+     "record_kind": "sample",
+     "sample_index": 12,
+     "sampled_parameters": {
+      "u_failure": 0.379930271,
+      "u_score": 0.034809878,
+      "u_time": 0.984782826
+     },
+     "sampling_distribution": {
+      "u_failure": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_score": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_time": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      }
+     },
+     "sampling_seed": 7,
+     "sampling_signature": "8b79c9e6398cbb050f543349cf677909a6be6e542c6ace9940e5317d0187dd62",
+     "u_failure": 0.379930271,
+     "u_score": 0.034809878,
+     "u_time": 0.984782826
+    },
+    "reason": "BERNOULLI_IID_SAMPLING: random-8b79c9e6398c sample=12"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "random-8b79c9e6398c",
+     "record_kind": "sample",
+     "sample_index": 13,
+     "sampled_parameters": {
+      "u_failure": 0.512248557,
+      "u_score": 0.740614981,
+      "u_time": 0.453123292
+     },
+     "sampling_distribution": {
+      "u_failure": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_score": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_time": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      }
+     },
+     "sampling_seed": 7,
+     "sampling_signature": "8b79c9e6398cbb050f543349cf677909a6be6e542c6ace9940e5317d0187dd62",
+     "u_failure": 0.512248557,
+     "u_score": 0.740614981,
+     "u_time": 0.453123292
+    },
+    "reason": "BERNOULLI_IID_SAMPLING: random-8b79c9e6398c sample=13"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "random-8b79c9e6398c",
+     "record_kind": "sample",
+     "sample_index": 14,
+     "sampled_parameters": {
+      "u_failure": 0.801812023,
+      "u_score": 0.855295867,
+      "u_time": 0.466495423
+     },
+     "sampling_distribution": {
+      "u_failure": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_score": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_time": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      }
+     },
+     "sampling_seed": 7,
+     "sampling_signature": "8b79c9e6398cbb050f543349cf677909a6be6e542c6ace9940e5317d0187dd62",
+     "u_failure": 0.801812023,
+     "u_score": 0.855295867,
+     "u_time": 0.466495423
+    },
+    "reason": "BERNOULLI_IID_SAMPLING: random-8b79c9e6398c sample=14"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "random-8b79c9e6398c",
+     "record_kind": "sample",
+     "sample_index": 15,
+     "sampled_parameters": {
+      "u_failure": 0.978777236,
+      "u_score": 0.840703582,
+      "u_time": 0.188372737
+     },
+     "sampling_distribution": {
+      "u_failure": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_score": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_time": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      }
+     },
+     "sampling_seed": 7,
+     "sampling_signature": "8b79c9e6398cbb050f543349cf677909a6be6e542c6ace9940e5317d0187dd62",
+     "u_failure": 0.978777236,
+     "u_score": 0.840703582,
+     "u_time": 0.188372737
+    },
+    "reason": "BERNOULLI_IID_SAMPLING: random-8b79c9e6398c sample=15"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "random-8b79c9e6398c",
+     "record_kind": "sample",
+     "sample_index": 16,
+     "sampled_parameters": {
+      "u_failure": 0.483324442,
+      "u_score": 0.250519682,
+      "u_time": 0.443023932
+     },
+     "sampling_distribution": {
+      "u_failure": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_score": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_time": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      }
+     },
+     "sampling_seed": 7,
+     "sampling_signature": "8b79c9e6398cbb050f543349cf677909a6be6e542c6ace9940e5317d0187dd62",
+     "u_failure": 0.483324442,
+     "u_score": 0.250519682,
+     "u_time": 0.443023932
+    },
+    "reason": "BERNOULLI_IID_SAMPLING: random-8b79c9e6398c sample=16"
+   }
+  ],
+  "stop_reason": "Statistical interval sufficient for c_failure: width=0.193608, samples=16",
+  "stopped": true
+ },
+ "bernoulli:dkw": {
+  "final_report": {
+   "diagnostics": {
+    "confidence": 0.95,
+    "delta": 0.05,
+    "effective_sample_size": 4.0,
+    "interval_width": 0.155207066,
+    "minimum_value": 0.0,
+    "q": 0.05,
+    "raw_sample_count": 4,
+    "region": "custom",
+    "stage_target_samples": null,
+    "status": "success",
+    "target_width": 0.5,
+    "use_kde_weighting": false
+   },
+   "estimate": 0.174471394,
+   "exact_model_check": null,
+   "experiment_id": "random-8b79c9e6398c",
+   "input_distribution": {
+    "u_failure": {
+     "distribution": "uniform",
+     "max": 1.0,
+     "min": 0.0
+    },
+    "u_score": {
+     "distribution": "uniform",
+     "max": 1.0,
+     "min": 0.0
+    },
+    "u_time": {
+     "distribution": "uniform",
+     "max": 1.0,
+     "min": 0.0
+    }
+   },
+   "interval": [
+    0.174471394,
+    0.329678459
+   ],
+   "method": "dkw",
+   "metric": "time_to_failure",
+   "next_action": "stop",
+   "sample_count": 4,
+   "sampling_signature": "8b79c9e6398cbb050f543349cf677909a6be6e542c6ace9940e5317d0187dd62",
+   "seed": 7,
+   "stop_reason": "Statistical interval sufficient for time_to_failure: width=0.155207, samples=4",
+   "sufficient": true
+  },
+  "step_count": 4,
+  "steps": [
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "random-8b79c9e6398c",
+     "record_kind": "sample",
+     "sample_index": 1,
+     "sampled_parameters": {
+      "u_failure": 0.619347743,
+      "u_score": 0.003191573,
+      "u_time": 0.16009912
+     },
+     "sampling_distribution": {
+      "u_failure": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_score": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_time": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      }
+     },
+     "sampling_seed": 7,
+     "sampling_signature": "8b79c9e6398cbb050f543349cf677909a6be6e542c6ace9940e5317d0187dd62",
+     "u_failure": 0.619347743,
+     "u_score": 0.003191573,
+     "u_time": 0.16009912
+    },
+    "reason": "BERNOULLI_IID_SAMPLING: random-8b79c9e6398c sample=1"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "random-8b79c9e6398c",
+     "record_kind": "sample",
+     "sample_index": 2,
+     "sampled_parameters": {
+      "u_failure": 0.8884344,
+      "u_score": 0.958932002,
+      "u_time": 0.560700318
+     },
+     "sampling_distribution": {
+      "u_failure": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_score": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_time": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      }
+     },
+     "sampling_seed": 7,
+     "sampling_signature": "8b79c9e6398cbb050f543349cf677909a6be6e542c6ace9940e5317d0187dd62",
+     "u_failure": 0.8884344,
+     "u_score": 0.958932002,
+     "u_time": 0.560700318
+    },
+    "reason": "BERNOULLI_IID_SAMPLING: random-8b79c9e6398c sample=2"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "random-8b79c9e6398c",
+     "record_kind": "sample",
+     "sample_index": 3,
+     "sampled_parameters": {
+      "u_failure": 0.295074057,
+      "u_score": 0.984601497,
+      "u_time": 0.274797261
+     },
+     "sampling_distribution": {
+      "u_failure": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_score": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_time": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      }
+     },
+     "sampling_seed": 7,
+     "sampling_signature": "8b79c9e6398cbb050f543349cf677909a6be6e542c6ace9940e5317d0187dd62",
+     "u_failure": 0.295074057,
+     "u_score": 0.984601497,
+     "u_time": 0.274797261
+    },
+    "reason": "BERNOULLI_IID_SAMPLING: random-8b79c9e6398c sample=3"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "random-8b79c9e6398c",
+     "record_kind": "sample",
+     "sample_index": 4,
+     "sampled_parameters": {
+      "u_failure": 0.196844466,
+      "u_score": 0.869469305,
+      "u_time": 0.280845066
+     },
+     "sampling_distribution": {
+      "u_failure": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_score": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_time": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      }
+     },
+     "sampling_seed": 7,
+     "sampling_signature": "8b79c9e6398cbb050f543349cf677909a6be6e542c6ace9940e5317d0187dd62",
+     "u_failure": 0.196844466,
+     "u_score": 0.869469305,
+     "u_time": 0.280845066
+    },
+    "reason": "BERNOULLI_IID_SAMPLING: random-8b79c9e6398c sample=4"
+   }
+  ],
+  "stop_reason": "Statistical interval sufficient for time_to_failure: width=0.155207, samples=4",
+  "stopped": true
+ },
+ "bernoulli:dkw_fixed": {
+  "final_report": {
+   "diagnostics": {
+    "confidence": 0.95,
+    "delta": 0.05,
+    "effective_sample_size": 4.0,
+    "interval_width": 0.155207066,
+    "minimum_value": 0.0,
+    "q": 0.05,
+    "raw_sample_count": 4,
+    "region": "custom",
+    "stage_target_samples": null,
+    "status": "success",
+    "target_width": 0.5,
+    "use_kde_weighting": false
+   },
+   "estimate": 0.174471394,
+   "exact_model_check": null,
+   "experiment_id": "random-8b79c9e6398c",
+   "input_distribution": {
+    "u_failure": {
+     "distribution": "uniform",
+     "max": 1.0,
+     "min": 0.0
+    },
+    "u_score": {
+     "distribution": "uniform",
+     "max": 1.0,
+     "min": 0.0
+    },
+    "u_time": {
+     "distribution": "uniform",
+     "max": 1.0,
+     "min": 0.0
+    }
+   },
+   "interval": [
+    0.174471394,
+    0.329678459
+   ],
+   "method": "dkw",
+   "metric": "time_to_failure",
+   "next_action": "stop",
+   "sample_count": 4,
+   "sampling_signature": "8b79c9e6398cbb050f543349cf677909a6be6e542c6ace9940e5317d0187dd62",
+   "seed": 7,
+   "stop_reason": "Statistical interval sufficient for time_to_failure: width=0.155207, samples=4",
+   "sufficient": true
+  },
+  "step_count": 4,
+  "steps": [
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "random-8b79c9e6398c",
+     "record_kind": "sample",
+     "sample_index": 1,
+     "sampled_parameters": {
+      "u_failure": 0.619347743,
+      "u_score": 0.003191573,
+      "u_time": 0.16009912
+     },
+     "sampling_distribution": {
+      "u_failure": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_score": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_time": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      }
+     },
+     "sampling_seed": 7,
+     "sampling_signature": "8b79c9e6398cbb050f543349cf677909a6be6e542c6ace9940e5317d0187dd62",
+     "u_failure": 0.619347743,
+     "u_score": 0.003191573,
+     "u_time": 0.16009912
+    },
+    "reason": "BERNOULLI_IID_SAMPLING: random-8b79c9e6398c sample=1"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "random-8b79c9e6398c",
+     "record_kind": "sample",
+     "sample_index": 2,
+     "sampled_parameters": {
+      "u_failure": 0.8884344,
+      "u_score": 0.958932002,
+      "u_time": 0.560700318
+     },
+     "sampling_distribution": {
+      "u_failure": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_score": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_time": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      }
+     },
+     "sampling_seed": 7,
+     "sampling_signature": "8b79c9e6398cbb050f543349cf677909a6be6e542c6ace9940e5317d0187dd62",
+     "u_failure": 0.8884344,
+     "u_score": 0.958932002,
+     "u_time": 0.560700318
+    },
+    "reason": "BERNOULLI_IID_SAMPLING: random-8b79c9e6398c sample=2"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "random-8b79c9e6398c",
+     "record_kind": "sample",
+     "sample_index": 3,
+     "sampled_parameters": {
+      "u_failure": 0.295074057,
+      "u_score": 0.984601497,
+      "u_time": 0.274797261
+     },
+     "sampling_distribution": {
+      "u_failure": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_score": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_time": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      }
+     },
+     "sampling_seed": 7,
+     "sampling_signature": "8b79c9e6398cbb050f543349cf677909a6be6e542c6ace9940e5317d0187dd62",
+     "u_failure": 0.295074057,
+     "u_score": 0.984601497,
+     "u_time": 0.274797261
+    },
+    "reason": "BERNOULLI_IID_SAMPLING: random-8b79c9e6398c sample=3"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "random-8b79c9e6398c",
+     "record_kind": "sample",
+     "sample_index": 4,
+     "sampled_parameters": {
+      "u_failure": 0.196844466,
+      "u_score": 0.869469305,
+      "u_time": 0.280845066
+     },
+     "sampling_distribution": {
+      "u_failure": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_score": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_time": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      }
+     },
+     "sampling_seed": 7,
+     "sampling_signature": "8b79c9e6398cbb050f543349cf677909a6be6e542c6ace9940e5317d0187dd62",
+     "u_failure": 0.196844466,
+     "u_score": 0.869469305,
+     "u_time": 0.280845066
+    },
+    "reason": "BERNOULLI_IID_SAMPLING: random-8b79c9e6398c sample=4"
+   }
+  ],
+  "stop_reason": "Statistical interval sufficient for time_to_failure: width=0.155207, samples=4",
+  "stopped": true
+ },
+ "bernoulli:ebstop": {
+  "final_report": {
+   "diagnostics": {
+    "confidence": 0.95,
+    "epsilon": 0.2,
+    "max_samples": 100,
+    "mean": 0.285040125,
+    "reason_pattern": null,
+    "region": "custom",
+    "status": "success",
+    "std": 0.165920063,
+    "value_range": 1.0
+   },
+   "estimate": 0.285040125,
+   "exact_model_check": null,
+   "experiment_id": "random-8b79c9e6398c",
+   "input_distribution": {
+    "u_failure": {
+     "distribution": "uniform",
+     "max": 1.0,
+     "min": 0.0
+    },
+    "u_score": {
+     "distribution": "uniform",
+     "max": 1.0,
+     "min": 0.0
+    },
+    "u_time": {
+     "distribution": "uniform",
+     "max": 1.0,
+     "min": 0.0
+    }
+   },
+   "interval": [
+    0.0,
+    0.71155056
+   ],
+   "method": "ebstop",
+   "metric": "score",
+   "next_action": "stop_max_samples",
+   "sample_count": 100,
+   "sampling_signature": "8b79c9e6398cbb050f543349cf677909a6be6e542c6ace9940e5317d0187dd62",
+   "seed": 7,
+   "stop_reason": "Statistical sampling reached max_samples=100",
+   "sufficient": false
+  },
+  "step_count": 100,
+  "steps": [
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "random-8b79c9e6398c",
+     "record_kind": "sample",
+     "sample_index": 1,
+     "sampled_parameters": {
+      "u_failure": 0.619347743,
+      "u_score": 0.003191573,
+      "u_time": 0.16009912
+     },
+     "sampling_distribution": {
+      "u_failure": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_score": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_time": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      }
+     },
+     "sampling_seed": 7,
+     "sampling_signature": "8b79c9e6398cbb050f543349cf677909a6be6e542c6ace9940e5317d0187dd62",
+     "u_failure": 0.619347743,
+     "u_score": 0.003191573,
+     "u_time": 0.16009912
+    },
+    "reason": "BERNOULLI_IID_SAMPLING: random-8b79c9e6398c sample=1"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "random-8b79c9e6398c",
+     "record_kind": "sample",
+     "sample_index": 2,
+     "sampled_parameters": {
+      "u_failure": 0.8884344,
+      "u_score": 0.958932002,
+      "u_time": 0.560700318
+     },
+     "sampling_distribution": {
+      "u_failure": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_score": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_time": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      }
+     },
+     "sampling_seed": 7,
+     "sampling_signature": "8b79c9e6398cbb050f543349cf677909a6be6e542c6ace9940e5317d0187dd62",
+     "u_failure": 0.8884344,
+     "u_score": 0.958932002,
+     "u_time": 0.560700318
+    },
+    "reason": "BERNOULLI_IID_SAMPLING: random-8b79c9e6398c sample=2"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "random-8b79c9e6398c",
+     "record_kind": "sample",
+     "sample_index": 3,
+     "sampled_parameters": {
+      "u_failure": 0.295074057,
+      "u_score": 0.984601497,
+      "u_time": 0.274797261
+     },
+     "sampling_distribution": {
+      "u_failure": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_score": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_time": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      }
+     },
+     "sampling_seed": 7,
+     "sampling_signature": "8b79c9e6398cbb050f543349cf677909a6be6e542c6ace9940e5317d0187dd62",
+     "u_failure": 0.295074057,
+     "u_score": 0.984601497,
+     "u_time": 0.274797261
+    },
+    "reason": "BERNOULLI_IID_SAMPLING: random-8b79c9e6398c sample=3"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "random-8b79c9e6398c",
+     "record_kind": "sample",
+     "sample_index": 4,
+     "sampled_parameters": {
+      "u_failure": 0.196844466,
+      "u_score": 0.869469305,
+      "u_time": 0.280845066
+     },
+     "sampling_distribution": {
+      "u_failure": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_score": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_time": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      }
+     },
+     "sampling_seed": 7,
+     "sampling_signature": "8b79c9e6398cbb050f543349cf677909a6be6e542c6ace9940e5317d0187dd62",
+     "u_failure": 0.196844466,
+     "u_score": 0.869469305,
+     "u_time": 0.280845066
+    },
+    "reason": "BERNOULLI_IID_SAMPLING: random-8b79c9e6398c sample=4"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "random-8b79c9e6398c",
+     "record_kind": "sample",
+     "sample_index": 5,
+     "sampled_parameters": {
+      "u_failure": 0.757661391,
+      "u_score": 0.613769583,
+      "u_time": 0.489448654
+     },
+     "sampling_distribution": {
+      "u_failure": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_score": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_time": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      }
+     },
+     "sampling_seed": 7,
+     "sampling_signature": "8b79c9e6398cbb050f543349cf677909a6be6e542c6ace9940e5317d0187dd62",
+     "u_failure": 0.757661391,
+     "u_score": 0.613769583,
+     "u_time": 0.489448654
+    },
+    "reason": "BERNOULLI_IID_SAMPLING: random-8b79c9e6398c sample=5"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "random-8b79c9e6398c",
+     "record_kind": "sample",
+     "sample_index": 6,
+     "sampled_parameters": {
+      "u_failure": 0.202010531,
+      "u_score": 0.892667938,
+      "u_time": 0.84783867
+     },
+     "sampling_distribution": {
+      "u_failure": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_score": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_time": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      }
+     },
+     "sampling_seed": 7,
+     "sampling_signature": "8b79c9e6398cbb050f543349cf677909a6be6e542c6ace9940e5317d0187dd62",
+     "u_failure": 0.202010531,
+     "u_score": 0.892667938,
+     "u_time": 0.84783867
+    },
+    "reason": "BERNOULLI_IID_SAMPLING: random-8b79c9e6398c sample=6"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "random-8b79c9e6398c",
+     "record_kind": "sample",
+     "sample_index": 7,
+     "sampled_parameters": {
+      "u_failure": 0.386336286,
+      "u_score": 0.015812411,
+      "u_time": 0.273281294
+     },
+     "sampling_distribution": {
+      "u_failure": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_score": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_time": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      }
+     },
+     "sampling_seed": 7,
+     "sampling_signature": "8b79c9e6398cbb050f543349cf677909a6be6e542c6ace9940e5317d0187dd62",
+     "u_failure": 0.386336286,
+     "u_score": 0.015812411,
+     "u_time": 0.273281294
+    },
+    "reason": "BERNOULLI_IID_SAMPLING: random-8b79c9e6398c sample=7"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "random-8b79c9e6398c",
+     "record_kind": "sample",
+     "sample_index": 8,
+     "sampled_parameters": {
+      "u_failure": 0.59481806,
+      "u_score": 0.508496932,
+      "u_time": 0.892067453
+     },
+     "sampling_distribution": {
+      "u_failure": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_score": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_time": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      }
+     },
+     "sampling_seed": 7,
+     "sampling_signature": "8b79c9e6398cbb050f543349cf677909a6be6e542c6ace9940e5317d0187dd62",
+     "u_failure": 0.59481806,
+     "u_score": 0.508496932,
+     "u_time": 0.892067453
+    },
+    "reason": "BERNOULLI_IID_SAMPLING: random-8b79c9e6398c sample=8"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "random-8b79c9e6398c",
+     "record_kind": "sample",
+     "sample_index": 9,
+     "sampled_parameters": {
+      "u_failure": 0.357575367,
+      "u_score": 0.049127963,
+      "u_time": 0.168834285
+     },
+     "sampling_distribution": {
+      "u_failure": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_score": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_time": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      }
+     },
+     "sampling_seed": 7,
+     "sampling_signature": "8b79c9e6398cbb050f543349cf677909a6be6e542c6ace9940e5317d0187dd62",
+     "u_failure": 0.357575367,
+     "u_score": 0.049127963,
+     "u_time": 0.168834285
+    },
+    "reason": "BERNOULLI_IID_SAMPLING: random-8b79c9e6398c sample=9"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "random-8b79c9e6398c",
+     "record_kind": "sample",
+     "sample_index": 10,
+     "sampled_parameters": {
+      "u_failure": 0.421367545,
+      "u_score": 0.538713818,
+      "u_time": 0.107376337
+     },
+     "sampling_distribution": {
+      "u_failure": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_score": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_time": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      }
+     },
+     "sampling_seed": 7,
+     "sampling_signature": "8b79c9e6398cbb050f543349cf677909a6be6e542c6ace9940e5317d0187dd62",
+     "u_failure": 0.421367545,
+     "u_score": 0.538713818,
+     "u_time": 0.107376337
+    },
+    "reason": "BERNOULLI_IID_SAMPLING: random-8b79c9e6398c sample=10"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "random-8b79c9e6398c",
+     "record_kind": "sample",
+     "sample_index": 11,
+     "sampled_parameters": {
+      "u_failure": 0.112877513,
+      "u_score": 0.660782823,
+      "u_time": 0.295681086
+     },
+     "sampling_distribution": {
+      "u_failure": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_score": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_time": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      }
+     },
+     "sampling_seed": 7,
+     "sampling_signature": "8b79c9e6398cbb050f543349cf677909a6be6e542c6ace9940e5317d0187dd62",
+     "u_failure": 0.112877513,
+     "u_score": 0.660782823,
+     "u_time": 0.295681086
+    },
+    "reason": "BERNOULLI_IID_SAMPLING: random-8b79c9e6398c sample=11"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "random-8b79c9e6398c",
+     "record_kind": "sample",
+     "sample_index": 12,
+     "sampled_parameters": {
+      "u_failure": 0.379930271,
+      "u_score": 0.034809878,
+      "u_time": 0.984782826
+     },
+     "sampling_distribution": {
+      "u_failure": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_score": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_time": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      }
+     },
+     "sampling_seed": 7,
+     "sampling_signature": "8b79c9e6398cbb050f543349cf677909a6be6e542c6ace9940e5317d0187dd62",
+     "u_failure": 0.379930271,
+     "u_score": 0.034809878,
+     "u_time": 0.984782826
+    },
+    "reason": "BERNOULLI_IID_SAMPLING: random-8b79c9e6398c sample=12"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "random-8b79c9e6398c",
+     "record_kind": "sample",
+     "sample_index": 13,
+     "sampled_parameters": {
+      "u_failure": 0.512248557,
+      "u_score": 0.740614981,
+      "u_time": 0.453123292
+     },
+     "sampling_distribution": {
+      "u_failure": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_score": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_time": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      }
+     },
+     "sampling_seed": 7,
+     "sampling_signature": "8b79c9e6398cbb050f543349cf677909a6be6e542c6ace9940e5317d0187dd62",
+     "u_failure": 0.512248557,
+     "u_score": 0.740614981,
+     "u_time": 0.453123292
+    },
+    "reason": "BERNOULLI_IID_SAMPLING: random-8b79c9e6398c sample=13"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "random-8b79c9e6398c",
+     "record_kind": "sample",
+     "sample_index": 14,
+     "sampled_parameters": {
+      "u_failure": 0.801812023,
+      "u_score": 0.855295867,
+      "u_time": 0.466495423
+     },
+     "sampling_distribution": {
+      "u_failure": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_score": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_time": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      }
+     },
+     "sampling_seed": 7,
+     "sampling_signature": "8b79c9e6398cbb050f543349cf677909a6be6e542c6ace9940e5317d0187dd62",
+     "u_failure": 0.801812023,
+     "u_score": 0.855295867,
+     "u_time": 0.466495423
+    },
+    "reason": "BERNOULLI_IID_SAMPLING: random-8b79c9e6398c sample=14"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "random-8b79c9e6398c",
+     "record_kind": "sample",
+     "sample_index": 15,
+     "sampled_parameters": {
+      "u_failure": 0.978777236,
+      "u_score": 0.840703582,
+      "u_time": 0.188372737
+     },
+     "sampling_distribution": {
+      "u_failure": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_score": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_time": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      }
+     },
+     "sampling_seed": 7,
+     "sampling_signature": "8b79c9e6398cbb050f543349cf677909a6be6e542c6ace9940e5317d0187dd62",
+     "u_failure": 0.978777236,
+     "u_score": 0.840703582,
+     "u_time": 0.188372737
+    },
+    "reason": "BERNOULLI_IID_SAMPLING: random-8b79c9e6398c sample=15"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "random-8b79c9e6398c",
+     "record_kind": "sample",
+     "sample_index": 16,
+     "sampled_parameters": {
+      "u_failure": 0.483324442,
+      "u_score": 0.250519682,
+      "u_time": 0.443023932
+     },
+     "sampling_distribution": {
+      "u_failure": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_score": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_time": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      }
+     },
+     "sampling_seed": 7,
+     "sampling_signature": "8b79c9e6398cbb050f543349cf677909a6be6e542c6ace9940e5317d0187dd62",
+     "u_failure": 0.483324442,
+     "u_score": 0.250519682,
+     "u_time": 0.443023932
+    },
+    "reason": "BERNOULLI_IID_SAMPLING: random-8b79c9e6398c sample=16"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "random-8b79c9e6398c",
+     "record_kind": "sample",
+     "sample_index": 17,
+     "sampled_parameters": {
+      "u_failure": 0.014831312,
+      "u_score": 0.873209896,
+      "u_time": 0.50366451
+     },
+     "sampling_distribution": {
+      "u_failure": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_score": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_time": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      }
+     },
+     "sampling_seed": 7,
+     "sampling_signature": "8b79c9e6398cbb050f543349cf677909a6be6e542c6ace9940e5317d0187dd62",
+     "u_failure": 0.014831312,
+     "u_score": 0.873209896,
+     "u_time": 0.50366451
+    },
+    "reason": "BERNOULLI_IID_SAMPLING: random-8b79c9e6398c sample=17"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "random-8b79c9e6398c",
+     "record_kind": "sample",
+     "sample_index": 18,
+     "sampled_parameters": {
+      "u_failure": 0.051799615,
+      "u_score": 0.680654148,
+      "u_time": 0.287368167
+     },
+     "sampling_distribution": {
+      "u_failure": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_score": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_time": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      }
+     },
+     "sampling_seed": 7,
+     "sampling_signature": "8b79c9e6398cbb050f543349cf677909a6be6e542c6ace9940e5317d0187dd62",
+     "u_failure": 0.051799615,
+     "u_score": 0.680654148,
+     "u_time": 0.287368167
+    },
+    "reason": "BERNOULLI_IID_SAMPLING: random-8b79c9e6398c sample=18"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "random-8b79c9e6398c",
+     "record_kind": "sample",
+     "sample_index": 19,
+     "sampled_parameters": {
+      "u_failure": 0.283884165,
+      "u_score": 0.361990214,
+      "u_time": 0.40546518
+     },
+     "sampling_distribution": {
+      "u_failure": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_score": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_time": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      }
+     },
+     "sampling_seed": 7,
+     "sampling_signature": "8b79c9e6398cbb050f543349cf677909a6be6e542c6ace9940e5317d0187dd62",
+     "u_failure": 0.283884165,
+     "u_score": 0.361990214,
+     "u_time": 0.40546518
+    },
+    "reason": "BERNOULLI_IID_SAMPLING: random-8b79c9e6398c sample=19"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "random-8b79c9e6398c",
+     "record_kind": "sample",
+     "sample_index": 20,
+     "sampled_parameters": {
+      "u_failure": 0.713728532,
+      "u_score": 0.86161177,
+      "u_time": 0.86338521
+     },
+     "sampling_distribution": {
+      "u_failure": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_score": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_time": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      }
+     },
+     "sampling_seed": 7,
+     "sampling_signature": "8b79c9e6398cbb050f543349cf677909a6be6e542c6ace9940e5317d0187dd62",
+     "u_failure": 0.713728532,
+     "u_score": 0.86161177,
+     "u_time": 0.86338521
+    },
+    "reason": "BERNOULLI_IID_SAMPLING: random-8b79c9e6398c sample=20"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "random-8b79c9e6398c",
+     "record_kind": "sample",
+     "sample_index": 21,
+     "sampled_parameters": {
+      "u_failure": 0.802389314,
+      "u_score": 0.688784805,
+      "u_time": 0.938518999
+     },
+     "sampling_distribution": {
+      "u_failure": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_score": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_time": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      }
+     },
+     "sampling_seed": 7,
+     "sampling_signature": "8b79c9e6398cbb050f543349cf677909a6be6e542c6ace9940e5317d0187dd62",
+     "u_failure": 0.802389314,
+     "u_score": 0.688784805,
+     "u_time": 0.938518999
+    },
+    "reason": "BERNOULLI_IID_SAMPLING: random-8b79c9e6398c sample=21"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "random-8b79c9e6398c",
+     "record_kind": "sample",
+     "sample_index": 22,
+     "sampled_parameters": {
+      "u_failure": 0.239442199,
+      "u_score": 0.269828325,
+      "u_time": 0.398104112
+     },
+     "sampling_distribution": {
+      "u_failure": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_score": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_time": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      }
+     },
+     "sampling_seed": 7,
+     "sampling_signature": "8b79c9e6398cbb050f543349cf677909a6be6e542c6ace9940e5317d0187dd62",
+     "u_failure": 0.239442199,
+     "u_score": 0.269828325,
+     "u_time": 0.398104112
+    },
+    "reason": "BERNOULLI_IID_SAMPLING: random-8b79c9e6398c sample=22"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "random-8b79c9e6398c",
+     "record_kind": "sample",
+     "sample_index": 23,
+     "sampled_parameters": {
+      "u_failure": 0.9630007,
+      "u_score": 0.773601027,
+      "u_time": 0.347055935
+     },
+     "sampling_distribution": {
+      "u_failure": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_score": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_time": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      }
+     },
+     "sampling_seed": 7,
+     "sampling_signature": "8b79c9e6398cbb050f543349cf677909a6be6e542c6ace9940e5317d0187dd62",
+     "u_failure": 0.9630007,
+     "u_score": 0.773601027,
+     "u_time": 0.347055935
+    },
+    "reason": "BERNOULLI_IID_SAMPLING: random-8b79c9e6398c sample=23"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "random-8b79c9e6398c",
+     "record_kind": "sample",
+     "sample_index": 24,
+     "sampled_parameters": {
+      "u_failure": 0.716730566,
+      "u_score": 0.801180778,
+      "u_time": 0.910506945
+     },
+     "sampling_distribution": {
+      "u_failure": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_score": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_time": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      }
+     },
+     "sampling_seed": 7,
+     "sampling_signature": "8b79c9e6398cbb050f543349cf677909a6be6e542c6ace9940e5317d0187dd62",
+     "u_failure": 0.716730566,
+     "u_score": 0.801180778,
+     "u_time": 0.910506945
+    },
+    "reason": "BERNOULLI_IID_SAMPLING: random-8b79c9e6398c sample=24"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "random-8b79c9e6398c",
+     "record_kind": "sample",
+     "sample_index": 25,
+     "sampled_parameters": {
+      "u_failure": 0.043485405,
+      "u_score": 0.559078233,
+      "u_time": 0.372120813
+     },
+     "sampling_distribution": {
+      "u_failure": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_score": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_time": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      }
+     },
+     "sampling_seed": 7,
+     "sampling_signature": "8b79c9e6398cbb050f543349cf677909a6be6e542c6ace9940e5317d0187dd62",
+     "u_failure": 0.043485405,
+     "u_score": 0.559078233,
+     "u_time": 0.372120813
+    },
+    "reason": "BERNOULLI_IID_SAMPLING: random-8b79c9e6398c sample=25"
+   }
+  ],
+  "stop_reason": "Statistical sampling reached max_samples=100",
+  "stopped": true
+ },
+ "bernoulli:sprt": {
+  "final_report": {
+   "diagnostics": {
+    "alpha": 0.05,
+    "beta": 0.05,
+    "confidence": 0.95,
+    "log_likelihood_ratio": 3.290025405,
+    "lower_log_threshold": -2.944438979,
+    "max_samples": 100,
+    "meets_min_samples": true,
+    "min_samples": 0,
+    "p0": 0.5,
+    "p1": 0.2,
+    "reason_pattern": null,
+    "region": "custom",
+    "status": "success",
+    "success_count": 0,
+    "upper_log_threshold": 2.944438979,
+    "verdict": "h1"
+   },
+   "estimate": 0.0,
+   "exact_model_check": null,
+   "experiment_id": "random-8b79c9e6398c",
+   "input_distribution": {
+    "u_failure": {
+     "distribution": "uniform",
+     "max": 1.0,
+     "min": 0.0
+    },
+    "u_score": {
+     "distribution": "uniform",
+     "max": 1.0,
+     "min": 0.0
+    },
+    "u_time": {
+     "distribution": "uniform",
+     "max": 1.0,
+     "min": 0.0
+    }
+   },
+   "interval": null,
+   "method": "sprt",
+   "metric": "c_failure",
+   "next_action": "stop",
+   "sample_count": 7,
+   "sampling_signature": "8b79c9e6398cbb050f543349cf677909a6be6e542c6ace9940e5317d0187dd62",
+   "seed": 7,
+   "stop_reason": "Statistical interval sufficient for c_failure: width=unknown, samples=7",
+   "sufficient": true
+  },
+  "step_count": 7,
+  "steps": [
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "random-8b79c9e6398c",
+     "record_kind": "sample",
+     "sample_index": 1,
+     "sampled_parameters": {
+      "u_failure": 0.619347743,
+      "u_score": 0.003191573,
+      "u_time": 0.16009912
+     },
+     "sampling_distribution": {
+      "u_failure": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_score": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_time": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      }
+     },
+     "sampling_seed": 7,
+     "sampling_signature": "8b79c9e6398cbb050f543349cf677909a6be6e542c6ace9940e5317d0187dd62",
+     "u_failure": 0.619347743,
+     "u_score": 0.003191573,
+     "u_time": 0.16009912
+    },
+    "reason": "BERNOULLI_IID_SAMPLING: random-8b79c9e6398c sample=1"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "random-8b79c9e6398c",
+     "record_kind": "sample",
+     "sample_index": 2,
+     "sampled_parameters": {
+      "u_failure": 0.8884344,
+      "u_score": 0.958932002,
+      "u_time": 0.560700318
+     },
+     "sampling_distribution": {
+      "u_failure": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_score": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_time": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      }
+     },
+     "sampling_seed": 7,
+     "sampling_signature": "8b79c9e6398cbb050f543349cf677909a6be6e542c6ace9940e5317d0187dd62",
+     "u_failure": 0.8884344,
+     "u_score": 0.958932002,
+     "u_time": 0.560700318
+    },
+    "reason": "BERNOULLI_IID_SAMPLING: random-8b79c9e6398c sample=2"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "random-8b79c9e6398c",
+     "record_kind": "sample",
+     "sample_index": 3,
+     "sampled_parameters": {
+      "u_failure": 0.295074057,
+      "u_score": 0.984601497,
+      "u_time": 0.274797261
+     },
+     "sampling_distribution": {
+      "u_failure": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_score": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_time": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      }
+     },
+     "sampling_seed": 7,
+     "sampling_signature": "8b79c9e6398cbb050f543349cf677909a6be6e542c6ace9940e5317d0187dd62",
+     "u_failure": 0.295074057,
+     "u_score": 0.984601497,
+     "u_time": 0.274797261
+    },
+    "reason": "BERNOULLI_IID_SAMPLING: random-8b79c9e6398c sample=3"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "random-8b79c9e6398c",
+     "record_kind": "sample",
+     "sample_index": 4,
+     "sampled_parameters": {
+      "u_failure": 0.196844466,
+      "u_score": 0.869469305,
+      "u_time": 0.280845066
+     },
+     "sampling_distribution": {
+      "u_failure": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_score": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_time": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      }
+     },
+     "sampling_seed": 7,
+     "sampling_signature": "8b79c9e6398cbb050f543349cf677909a6be6e542c6ace9940e5317d0187dd62",
+     "u_failure": 0.196844466,
+     "u_score": 0.869469305,
+     "u_time": 0.280845066
+    },
+    "reason": "BERNOULLI_IID_SAMPLING: random-8b79c9e6398c sample=4"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "random-8b79c9e6398c",
+     "record_kind": "sample",
+     "sample_index": 5,
+     "sampled_parameters": {
+      "u_failure": 0.757661391,
+      "u_score": 0.613769583,
+      "u_time": 0.489448654
+     },
+     "sampling_distribution": {
+      "u_failure": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_score": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_time": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      }
+     },
+     "sampling_seed": 7,
+     "sampling_signature": "8b79c9e6398cbb050f543349cf677909a6be6e542c6ace9940e5317d0187dd62",
+     "u_failure": 0.757661391,
+     "u_score": 0.613769583,
+     "u_time": 0.489448654
+    },
+    "reason": "BERNOULLI_IID_SAMPLING: random-8b79c9e6398c sample=5"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "random-8b79c9e6398c",
+     "record_kind": "sample",
+     "sample_index": 6,
+     "sampled_parameters": {
+      "u_failure": 0.202010531,
+      "u_score": 0.892667938,
+      "u_time": 0.84783867
+     },
+     "sampling_distribution": {
+      "u_failure": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_score": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_time": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      }
+     },
+     "sampling_seed": 7,
+     "sampling_signature": "8b79c9e6398cbb050f543349cf677909a6be6e542c6ace9940e5317d0187dd62",
+     "u_failure": 0.202010531,
+     "u_score": 0.892667938,
+     "u_time": 0.84783867
+    },
+    "reason": "BERNOULLI_IID_SAMPLING: random-8b79c9e6398c sample=6"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "random-8b79c9e6398c",
+     "record_kind": "sample",
+     "sample_index": 7,
+     "sampled_parameters": {
+      "u_failure": 0.386336286,
+      "u_score": 0.015812411,
+      "u_time": 0.273281294
+     },
+     "sampling_distribution": {
+      "u_failure": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_score": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      },
+      "u_time": {
+       "distribution": "uniform",
+       "max": 1.0,
+       "min": 0.0
+      }
+     },
+     "sampling_seed": 7,
+     "sampling_signature": "8b79c9e6398cbb050f543349cf677909a6be6e542c6ace9940e5317d0187dd62",
+     "u_failure": 0.386336286,
+     "u_score": 0.015812411,
+     "u_time": 0.273281294
+    },
+    "reason": "BERNOULLI_IID_SAMPLING: random-8b79c9e6398c sample=7"
+   }
+  ],
+  "stop_reason": "Statistical interval sufficient for c_failure: width=unknown, samples=7",
+  "stopped": true
+ },
+ "prism:binomial_ci": {
+  "final_report": {
+   "diagnostics": {
+    "anytime_valid": false,
+    "confidence": 0.95,
+    "effective_confidence_level": 0.95,
+    "interval_width": 0.199819565,
+    "max_samples": 100,
+    "meets_min_samples": true,
+    "meets_target_width": "True",
+    "method": "wilson",
+    "min_samples": 10,
+    "reason_pattern": null,
+    "region": "custom",
+    "status": "success",
+    "success_count": 33,
+    "target_width": 0.2
+   },
+   "estimate": 0.379310345,
+   "exact_model_check": {
+    "absolute_estimation_error": 0.079310345,
+    "bounded_failure_probability": 0.3,
+    "ci_contains_bounded_probability": true,
+    "comparison_metric": "c_failure",
+    "eventual_failure_probability": 0.42
+   },
+   "experiment_id": "fixed-fe4869e01a16",
+   "interval": [
+    0.284504227,
+    0.484323792
+   ],
+   "method": "binomial_ci",
+   "metric": "c_failure",
+   "next_action": "stop",
+   "sample_count": 87,
+   "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+   "sufficient": true
+  },
+  "step_count": 88,
+  "steps": [
+   {
+    "input": {
+     "execution_kind": "model_check",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "exact_model_check",
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 model-check"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 1,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=1"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 2,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=2"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 3,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=3"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 4,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=4"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 5,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=5"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 6,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=6"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 7,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=7"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 8,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=8"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 9,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=9"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 10,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=10"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 11,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=11"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 12,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=12"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 13,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=13"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 14,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=14"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 15,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=15"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 16,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=16"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 17,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=17"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 18,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=18"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 19,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=19"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 20,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=20"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 21,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=21"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 22,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=22"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 23,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=23"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 24,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=24"
+   }
+  ],
+  "stop_reason": "Statistical interval sufficient for c_failure: width=0.199820, samples=87",
+  "stopped": true
+ },
+ "prism:dkw": {
+  "final_report": {
+   "diagnostics": {
+    "confidence": 0.99375,
+    "delta": 0.00625,
+    "effective_sample_size": 100.0,
+    "guarantee": "approximate_sequential",
+    "interval_width": 3.0,
+    "minimum_value": null,
+    "q": 0.05,
+    "raw_sample_count": 100,
+    "region": "custom",
+    "stage_target_samples": 180,
+    "status": "success",
+    "target_width": 0.5,
+    "use_kde_weighting": false
+   },
+   "estimate": 1.0,
+   "exact_model_check": {
+    "absolute_estimation_error": null,
+    "bounded_failure_probability": 0.3,
+    "ci_contains_bounded_probability": null,
+    "comparison_metric": "steps_to_failure_capped",
+    "comparison_skipped_reason": "exact_model_check reports a failure probability; metric 'steps_to_failure_capped' is not directly comparable to it",
+    "eventual_failure_probability": 0.42
+   },
+   "experiment_id": "fixed-fe4869e01a16",
+   "interval": [
+    1.0,
+    4.0
+   ],
+   "method": "dkw",
+   "metric": "steps_to_failure_capped",
+   "next_action": "collect_more_samples",
+   "sample_count": 100,
+   "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+   "sufficient": false
+  },
+  "step_count": 101,
+  "steps": [
+   {
+    "input": {
+     "execution_kind": "model_check",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "exact_model_check",
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 model-check"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 0,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "SMC: Sequential-DKW Sampling (Stage 1)"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 2,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "SMC: Sequential-DKW Sampling (Stage 1)"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 4,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "SMC: Sequential-DKW Sampling (Stage 1)"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 6,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "SMC: Sequential-DKW Sampling (Stage 1)"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 8,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "SMC: Sequential-DKW Sampling (Stage 1)"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 10,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "SMC: Sequential-DKW Sampling (Stage 1)"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 12,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "SMC: Sequential-DKW Sampling (Stage 1)"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 14,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "SMC: Sequential-DKW Sampling (Stage 1)"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 16,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "SMC: Sequential-DKW Sampling (Stage 1)"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 18,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "SMC: Sequential-DKW Sampling (Stage 1)"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 20,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "SMC: Sequential-DKW Sampling (Stage 1)"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 22,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "SMC: Sequential-DKW Sampling (Stage 1)"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 24,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "SMC: Sequential-DKW Sampling (Stage 1)"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 26,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "SMC: Sequential-DKW Sampling (Stage 1)"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 28,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "SMC: Sequential-DKW Sampling (Stage 1)"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 30,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "SMC: Sequential-DKW Sampling (Stage 1)"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 32,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "SMC: Sequential-DKW Sampling (Stage 1)"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 34,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "SMC: Sequential-DKW Sampling (Stage 1)"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 36,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "SMC: Sequential-DKW Sampling (Stage 1)"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 38,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "SMC: Sequential-DKW Sampling (Stage 1)"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 40,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "SMC: Sequential-DKW Sampling (Stage 2)"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 42,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "SMC: Sequential-DKW Sampling (Stage 2)"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 44,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "SMC: Sequential-DKW Sampling (Stage 2)"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 46,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "SMC: Sequential-DKW Sampling (Stage 2)"
+   }
+  ],
+  "stop_reason": "DKW sequential sampling reached max_samples=100 without converging",
+  "stopped": true
+ },
+ "prism:dkw_fixed": {
+  "final_report": {
+   "diagnostics": {
+    "confidence": 0.95,
+    "delta": 0.05,
+    "effective_sample_size": 60.0,
+    "guarantee": "dkw",
+    "interval_width": 3.0,
+    "minimum_value": null,
+    "q": 0.05,
+    "raw_sample_count": 60,
+    "region": "custom",
+    "stage_target_samples": null,
+    "status": "success",
+    "target_width": 0.5,
+    "use_kde_weighting": false
+   },
+   "estimate": 1.0,
+   "exact_model_check": {
+    "absolute_estimation_error": null,
+    "bounded_failure_probability": 0.3,
+    "ci_contains_bounded_probability": null,
+    "comparison_metric": "steps_to_failure_capped",
+    "comparison_skipped_reason": "exact_model_check reports a failure probability; metric 'steps_to_failure_capped' is not directly comparable to it",
+    "eventual_failure_probability": 0.42
+   },
+   "experiment_id": "fixed-fe4869e01a16",
+   "interval": [
+    1.0,
+    4.0
+   ],
+   "method": "dkw",
+   "metric": "steps_to_failure_capped",
+   "next_action": "collect_more_samples",
+   "sample_count": 60,
+   "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+   "sufficient": false
+  },
+  "step_count": 61,
+  "steps": [
+   {
+    "input": {
+     "execution_kind": "model_check",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "exact_model_check",
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 model-check"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 0,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "SMC: Fixed Sampling (1/60)"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 3,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "SMC: Fixed Sampling (2/60)"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 5,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "SMC: Fixed Sampling (3/60)"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 7,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "SMC: Fixed Sampling (4/60)"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 9,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "SMC: Fixed Sampling (5/60)"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 11,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "SMC: Fixed Sampling (6/60)"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 13,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "SMC: Fixed Sampling (7/60)"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 15,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "SMC: Fixed Sampling (8/60)"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 17,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "SMC: Fixed Sampling (9/60)"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 19,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "SMC: Fixed Sampling (10/60)"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 21,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "SMC: Fixed Sampling (11/60)"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 23,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "SMC: Fixed Sampling (12/60)"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 25,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "SMC: Fixed Sampling (13/60)"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 27,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "SMC: Fixed Sampling (14/60)"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 29,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "SMC: Fixed Sampling (15/60)"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 31,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "SMC: Fixed Sampling (16/60)"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 33,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "SMC: Fixed Sampling (17/60)"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 35,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "SMC: Fixed Sampling (18/60)"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 37,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "SMC: Fixed Sampling (19/60)"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 39,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "SMC: Fixed Sampling (20/60)"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 41,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "SMC: Fixed Sampling (21/60)"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 43,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "SMC: Fixed Sampling (22/60)"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 45,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "SMC: Fixed Sampling (23/60)"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 47,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "SMC: Fixed Sampling (24/60)"
+   }
+  ],
+  "stop_reason": "DKW evaluation failed",
+  "stopped": true
+ },
+ "prism:ebstop": {
+  "final_report": {
+   "diagnostics": {
+    "confidence": 0.95,
+    "epsilon": 0.2,
+    "max_samples": 100,
+    "mean": 10.58,
+    "reason_pattern": null,
+    "region": "custom",
+    "status": "success",
+    "std": 6.169570487,
+    "value_range": 20.0
+   },
+   "estimate": 10.58,
+   "exact_model_check": {
+    "absolute_estimation_error": null,
+    "bounded_failure_probability": 0.3,
+    "ci_contains_bounded_probability": null,
+    "comparison_metric": "steps_to_failure_capped",
+    "comparison_skipped_reason": "exact_model_check reports a failure probability; metric 'steps_to_failure_capped' is not directly comparable to it",
+    "eventual_failure_probability": 0.42
+   },
+   "experiment_id": "fixed-fe4869e01a16",
+   "interval": [
+    0.678979083,
+    20.481020917
+   ],
+   "method": "ebstop",
+   "metric": "steps_to_failure_capped",
+   "next_action": "stop_max_samples",
+   "sample_count": 100,
+   "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+   "sufficient": false
+  },
+  "step_count": 101,
+  "steps": [
+   {
+    "input": {
+     "execution_kind": "model_check",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "exact_model_check",
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 model-check"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 1,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=1"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 2,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=2"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 3,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=3"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 4,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=4"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 5,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=5"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 6,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=6"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 7,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=7"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 8,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=8"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 9,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=9"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 10,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=10"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 11,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=11"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 12,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=12"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 13,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=13"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 14,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=14"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 15,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=15"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 16,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=16"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 17,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=17"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 18,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=18"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 19,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=19"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 20,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=20"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 21,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=21"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 22,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=22"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 23,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=23"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 24,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=24"
+   }
+  ],
+  "stop_reason": "Statistical sampling reached max_samples=100",
+  "stopped": true
+ },
+ "prism:sprt": {
+  "final_report": {
+   "diagnostics": {
+    "alpha": 0.05,
+    "beta": 0.05,
+    "confidence": 0.95,
+    "log_likelihood_ratio": -3.052860139,
+    "lower_log_threshold": -2.944438979,
+    "max_samples": 100,
+    "meets_min_samples": true,
+    "min_samples": 0,
+    "p0": 0.5,
+    "p1": 0.2,
+    "reason_pattern": null,
+    "region": "custom",
+    "status": "success",
+    "success_count": 10,
+    "upper_log_threshold": 2.944438979,
+    "verdict": "h0"
+   },
+   "estimate": 0.434782609,
+   "exact_model_check": {
+    "absolute_estimation_error": 0.134782609,
+    "bounded_failure_probability": 0.3,
+    "ci_contains_bounded_probability": false,
+    "comparison_metric": "c_failure",
+    "eventual_failure_probability": 0.42
+   },
+   "experiment_id": "fixed-fe4869e01a16",
+   "interval": null,
+   "method": "sprt",
+   "metric": "c_failure",
+   "next_action": "stop",
+   "sample_count": 23,
+   "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+   "sufficient": true
+  },
+  "step_count": 24,
+  "steps": [
+   {
+    "input": {
+     "execution_kind": "model_check",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "exact_model_check",
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 model-check"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 1,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=1"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 2,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=2"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 3,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=3"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 4,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=4"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 5,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=5"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 6,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=6"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 7,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=7"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 8,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=8"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 9,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=9"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 10,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=10"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 11,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=11"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 12,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=12"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 13,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=13"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 14,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=14"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 15,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=15"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 16,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=16"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 17,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=17"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 18,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=18"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 19,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=19"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 20,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=20"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 21,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=21"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 22,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=22"
+   },
+   {
+    "input": {
+     "execution_kind": "sample_path",
+     "experiment_id": "fixed-fe4869e01a16",
+     "record_kind": "sample",
+     "sample_index": 23,
+     "sampling_signature": "fe4869e01a1687446887ee5c5fc1bf6d255eef4398e2f965001c271551ff9ccc",
+     "steps": 20
+    },
+    "reason": "PRISM_FIXED_SAMPLING: fixed-fe4869e01a16 sample=23"
+   }
+  ],
+  "stop_reason": "Statistical interval sufficient for c_failure: width=unknown, samples=23",
+  "stopped": true
+ }
+}

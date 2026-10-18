@@ -1,0 +1,3767 @@
+{
+  "cli_choices": {
+    "orchestrator_main": [
+      "awsim",
+      "bbsl",
+      "bernoulli",
+      "dynamics",
+      "prism"
+    ],
+    "worker_main": [
+      "awsim",
+      "bbsl",
+      "bernoulli",
+      "dynamics",
+      "prism"
+    ]
+  },
+  "components": {
+    "awsim": {
+      "backend": "targets.awsim.backend.AWSIMBackend",
+      "backend_config": {
+        "extra_refresh_warmup_sec": 15.0,
+        "include_awchecker": false,
+        "infra_ext_mode": "cvm",
+        "infra_home_dir": "/home/passd",
+        "initial_warmup_sec": 40.0,
+        "manage_infra": true,
+        "max_refresh_probe_retries": 1,
+        "output_dir": null,
+        "poll_interval_sec": 2.0,
+        "post_timeout_grace_sec": 10.0,
+        "probe_service_timeout_sec": 2.0,
+        "probe_stability_interval_sec": 1.0,
+        "python_executable": "python3",
+        "readiness_required_services": [
+          "/dynamic_control/script/awsim_script_srv",
+          "/simulation/gt_srv/execution_state",
+          "/api/localization/initialize",
+          "/dynamic_control/map/network"
+        ],
+        "refresh_probe_stability_checks": 3,
+        "refresh_probe_timeout_sec": 45.0,
+        "reuse_infra_between_runs": true,
+        "runtime_profile": {
+          "autoware_command": "ros2 launch autoware_launch e2e_simulator.launch.xml vehicle_model:=awsim_labs_vehicle sensor_model:=awsim_labs_sensor_kit map_path:=/home/passd/autoware_map/nishishinjuku_autoware_map launch_vehicle_interface:=true rviz:=false",
+          "autoware_delay_sec": 90.0,
+          "autoware_dirname": "autoware",
+          "awsim_command": "./awsim_labs.x86_64 -noise false",
+          "awsim_delay_sec": 15.0,
+          "awsim_dirname": "awsim_labs",
+          "case_kind": "uturn",
+          "container_launch_profile": {
+            "add_host_gateway": true,
+            "bash_args": [
+              "-i",
+              "-c"
+            ],
+            "bootstrap_apt_packages": [],
+            "bootstrap_pip_packages": [],
+            "container_name_template": null,
+            "docker_run_args": [],
+            "docker_user": null,
+            "env": [
+              [
+                "HOME",
+                "/home/passd"
+              ],
+              [
+                "DISPLAY",
+                ":99"
+              ],
+              [
+                "NVIDIA_DRIVER_CAPABILITIES",
+                "all"
+              ],
+              [
+                "__NV_PRIME_RENDER_OFFLOAD",
+                "1"
+              ],
+              [
+                "__GLX_VENDOR_LIBRARY_NAME",
+                "nvidia"
+              ],
+              [
+                "VK_ICD_FILENAMES",
+                "/usr/share/vulkan/icd.d/nvidia_icd.json"
+              ],
+              [
+                "PYTHONPATH",
+                "/opt/awsim_python_deps/py310"
+              ]
+            ],
+            "image": "autoware_internal:2026-1.7.1-x11-verified-20260808",
+            "mounts": [
+              "/usr/share/vulkan/icd.d:/usr/share/vulkan/icd.d:ro",
+              "{host_home}/awsim_python_deps/py310:/opt/awsim_python_deps/py310:ro",
+              "{host_home}/awsim_labs:{workspace}/awsim_labs",
+              "{host_home}/AW-Runtime-Monitor:{workspace}/AW-Runtime-Monitor",
+              "{host_home}/AWSIMScriptPy:{workspace}/AWSIMScriptPy",
+              "{host_home}/aw-cheaker:{workspace}/aw-cheaker",
+              "{host_home}/autoware_map:{workspace}/autoware_map",
+              "{host_home}/cyclonedds.xml:{workspace}/cyclonedds.xml:ro"
+            ],
+            "name": "autoware171",
+            "network_mode": "bridge",
+            "privileged": false,
+            "requires_gpu": true,
+            "requires_ros": true,
+            "requires_runtime_monitor": true,
+            "start_ray_worker_node": false,
+            "target": "awsim",
+            "worker_env": [
+              [
+                "DISPLAY",
+                ":99"
+              ],
+              [
+                "VK_ICD_FILENAMES",
+                "/usr/share/vulkan/icd.d/nvidia_icd.json"
+              ]
+            ]
+          },
+          "container_profile": "autoware171",
+          "default_output_dir": "/<home>/simulation_traces",
+          "headless": true,
+          "home_dir": "/home/passd",
+          "host_mode": false,
+          "launch_dir": "/<repo>",
+          "machine_role": "local",
+          "output_env_var": "AW_OUTPUT_DIR",
+          "runtime_monitor_delay_sec": 5.0,
+          "runtime_monitor_dirname": "AW-Runtime-Monitor",
+          "scenario_profile": "autoware171",
+          "source_setup_script": "/home/passd/autoware/install/setup.bash"
+        },
+        "scenario_log_filename": "scenario_runner.log",
+        "scenario_script": "run_scenario.py",
+        "settle_time_sec": 5.0,
+        "startup_probe_stability_checks": 2,
+        "startup_probe_timeout_sec": 30.0,
+        "timeout_sec": null,
+        "xvfb_config": null
+      },
+      "interpreter_context": {
+        "case_kind": "uturn",
+        "config_module": "targets.awsim.case_kinds.uturn",
+        "kinematics_mode": "cvm",
+        "schema_version": 1,
+        "source_module": "targets.awsim.result_interpreter",
+        "target": "awsim",
+        "verifier_name": "maude"
+      },
+      "result_interpreter": "targets.awsim.result_interpreter.ResultInterpreter"
+    },
+    "bbsl": {
+      "backend": "targets.bbsl.backend.BBSLBackend",
+      "backend_config": {
+        "default_target_repo": "/home/passd/BBSL-test",
+        "source_module": "targets.bbsl.backend"
+      },
+      "interpreter_context": {
+        "default_case_kind": "full_all",
+        "schema_version": 1,
+        "source_module": "targets.bbsl.result_interpreter",
+        "target": "bbsl",
+        "verifier_name": "bbsl"
+      },
+      "result_interpreter": "targets.bbsl.result_interpreter.ResultInterpreter"
+    },
+    "bernoulli": {
+      "backend": "targets.bernoulli.backend.BernoulliBackend",
+      "backend_config": null,
+      "interpreter_context": null,
+      "result_interpreter": "targets.bernoulli.result_interpreter.BernoulliResultInterpreter"
+    },
+    "dynamics": {
+      "backend": "targets.dynamics.backend.DynamicsBackend",
+      "backend_config": {
+        "output_root": "artifacts/dynamics",
+        "source_module": "targets.dynamics.backend"
+      },
+      "interpreter_context": {
+        "schema_version": 1,
+        "source_module": "targets.dynamics.result_interpreter",
+        "target": "dynamics"
+      },
+      "result_interpreter": "targets.dynamics.result_interpreter.DynamicsResultInterpreter"
+    },
+    "prism": {
+      "backend": "targets.prism.backend.PrismBackend",
+      "backend_config": {
+        "output_root": "artifacts/prism",
+        "prism_executable": "prism",
+        "source_module": "targets.prism.backend",
+        "timeout_sec": 30.0
+      },
+      "interpreter_context": {
+        "schema_version": 1,
+        "source_module": "targets.prism.result_interpreter",
+        "target": "prism",
+        "verifier_name": "maude_prism_trace"
+      },
+      "result_interpreter": "targets.prism.result_interpreter.PrismResultInterpreter"
+    }
+  },
+  "normalized_cli": {
+    "awsim:binomial_ci": {
+      "binomial_target": "c_collision",
+      "case_kind": "uturn",
+      "config_module": "targets.awsim.case_kinds.uturn",
+      "container_profile": null,
+      "dynamics_input_distribution": null,
+      "ebstop_target": "min_ttc",
+      "max_samples": 10,
+      "params": {},
+      "run_mode": "binomial_ci",
+      "scenario_profile": null,
+      "sprt_target": "c_collision",
+      "target": "awsim"
+    },
+    "awsim:boundary_gap": {
+      "binomial_target": "c_collision",
+      "case_kind": "uturn",
+      "config_module": "targets.awsim.case_kinds.uturn",
+      "container_profile": null,
+      "dynamics_input_distribution": null,
+      "ebstop_target": "min_ttc",
+      "max_samples": 10,
+      "params": {},
+      "run_mode": "boundary_gap",
+      "scenario_profile": null,
+      "sprt_target": "c_collision",
+      "target": "awsim"
+    },
+    "awsim:dkw": {
+      "binomial_target": "c_collision",
+      "case_kind": "uturn",
+      "config_module": "targets.awsim.case_kinds.uturn",
+      "container_profile": null,
+      "dynamics_input_distribution": null,
+      "ebstop_target": "min_ttc",
+      "max_samples": 10,
+      "params": {},
+      "run_mode": "dkw",
+      "scenario_profile": null,
+      "sprt_target": "c_collision",
+      "target": "awsim"
+    },
+    "awsim:dkw_fixed": {
+      "binomial_target": "c_collision",
+      "case_kind": "uturn",
+      "config_module": "targets.awsim.case_kinds.uturn",
+      "container_profile": null,
+      "dynamics_input_distribution": null,
+      "ebstop_target": "min_ttc",
+      "max_samples": 10,
+      "params": {},
+      "run_mode": "dkw_fixed",
+      "scenario_profile": null,
+      "sprt_target": "c_collision",
+      "target": "awsim"
+    },
+    "awsim:ebstop": {
+      "binomial_target": "c_collision",
+      "case_kind": "uturn",
+      "config_module": "targets.awsim.case_kinds.uturn",
+      "container_profile": null,
+      "dynamics_input_distribution": null,
+      "ebstop_target": "min_ttc",
+      "max_samples": 10,
+      "params": {},
+      "run_mode": "ebstop",
+      "scenario_profile": null,
+      "sprt_target": "c_collision",
+      "target": "awsim"
+    },
+    "awsim:explore": {
+      "binomial_target": "c_collision",
+      "case_kind": "uturn",
+      "config_module": "targets.awsim.case_kinds.uturn",
+      "container_profile": null,
+      "dynamics_input_distribution": null,
+      "ebstop_target": "min_ttc",
+      "max_samples": 10,
+      "params": {},
+      "run_mode": "explore",
+      "scenario_profile": null,
+      "sprt_target": "c_collision",
+      "target": "awsim"
+    },
+    "awsim:focus": {
+      "binomial_target": "c_collision",
+      "case_kind": "uturn",
+      "config_module": "targets.awsim.case_kinds.uturn",
+      "container_profile": null,
+      "dynamics_input_distribution": null,
+      "ebstop_target": "min_ttc",
+      "max_samples": 10,
+      "params": {},
+      "run_mode": "focus",
+      "scenario_profile": null,
+      "sprt_target": "c_collision",
+      "target": "awsim"
+    },
+    "awsim:jama_edge": {
+      "binomial_target": "c_collision",
+      "case_kind": "uturn",
+      "config_module": "targets.awsim.case_kinds.uturn",
+      "container_profile": null,
+      "dynamics_input_distribution": null,
+      "ebstop_target": "min_ttc",
+      "max_samples": 10,
+      "params": {},
+      "run_mode": "jama_edge",
+      "scenario_profile": null,
+      "sprt_target": "c_collision",
+      "target": "awsim"
+    },
+    "awsim:margin": {
+      "binomial_target": "c_collision",
+      "case_kind": "uturn",
+      "config_module": "targets.awsim.case_kinds.uturn",
+      "container_profile": null,
+      "dynamics_input_distribution": null,
+      "ebstop_target": "min_ttc",
+      "max_samples": 10,
+      "params": {},
+      "run_mode": "margin",
+      "scenario_profile": null,
+      "sprt_target": "c_collision",
+      "target": "awsim"
+    },
+    "awsim:sprt": {
+      "binomial_target": "c_collision",
+      "case_kind": "uturn",
+      "config_module": "targets.awsim.case_kinds.uturn",
+      "container_profile": null,
+      "dynamics_input_distribution": null,
+      "ebstop_target": "min_ttc",
+      "max_samples": 10,
+      "params": {},
+      "run_mode": "sprt",
+      "scenario_profile": null,
+      "sprt_target": "c_collision",
+      "target": "awsim"
+    },
+    "awsim:ttc_edge": {
+      "binomial_target": "c_collision",
+      "case_kind": "uturn",
+      "config_module": "targets.awsim.case_kinds.uturn",
+      "container_profile": null,
+      "dynamics_input_distribution": null,
+      "ebstop_target": "min_ttc",
+      "max_samples": 10,
+      "params": {},
+      "run_mode": "ttc_edge",
+      "scenario_profile": null,
+      "sprt_target": "c_collision",
+      "target": "awsim"
+    },
+    "awsim:verify_consistency": {
+      "binomial_target": "c_collision",
+      "case_kind": "uturn",
+      "config_module": "targets.awsim.case_kinds.uturn",
+      "container_profile": null,
+      "dynamics_input_distribution": null,
+      "ebstop_target": "min_ttc",
+      "max_samples": 10,
+      "params": {},
+      "run_mode": "verify_consistency",
+      "scenario_profile": null,
+      "sprt_target": "c_collision",
+      "target": "awsim"
+    },
+    "awsim:worst_ttc": {
+      "binomial_target": "c_collision",
+      "case_kind": "uturn",
+      "config_module": "targets.awsim.case_kinds.uturn",
+      "container_profile": null,
+      "dynamics_input_distribution": null,
+      "ebstop_target": "min_ttc",
+      "max_samples": 10,
+      "params": {},
+      "run_mode": "worst_ttc",
+      "scenario_profile": null,
+      "sprt_target": "c_collision",
+      "target": "awsim"
+    },
+    "bernoulli:binomial_ci": {
+      "binomial_target": "c_collision",
+      "case_kind": "uturn",
+      "config_module": "targets.bernoulli.plugin",
+      "container_profile": null,
+      "dynamics_input_distribution": {
+        "u_failure": {
+          "distribution": "uniform",
+          "max": 1.0,
+          "min": 0.0
+        },
+        "u_score": {
+          "distribution": "uniform",
+          "max": 1.0,
+          "min": 0.0
+        },
+        "u_time": {
+          "distribution": "uniform",
+          "max": 1.0,
+          "min": 0.0
+        }
+      },
+      "ebstop_target": "min_ttc",
+      "max_samples": 10,
+      "params": {},
+      "run_mode": "binomial_ci",
+      "scenario_profile": null,
+      "sprt_target": "c_collision",
+      "target": "bernoulli"
+    },
+    "bernoulli:dkw": {
+      "binomial_target": "c_collision",
+      "case_kind": "uturn",
+      "config_module": "targets.bernoulli.plugin",
+      "container_profile": null,
+      "dynamics_input_distribution": {
+        "u_failure": {
+          "distribution": "uniform",
+          "max": 1.0,
+          "min": 0.0
+        },
+        "u_score": {
+          "distribution": "uniform",
+          "max": 1.0,
+          "min": 0.0
+        },
+        "u_time": {
+          "distribution": "uniform",
+          "max": 1.0,
+          "min": 0.0
+        }
+      },
+      "ebstop_target": "min_ttc",
+      "max_samples": 10,
+      "params": {},
+      "run_mode": "dkw",
+      "scenario_profile": null,
+      "sprt_target": "c_collision",
+      "target": "bernoulli"
+    },
+    "bernoulli:dkw_fixed": {
+      "binomial_target": "c_collision",
+      "case_kind": "uturn",
+      "config_module": "targets.bernoulli.plugin",
+      "container_profile": null,
+      "dynamics_input_distribution": {
+        "u_failure": {
+          "distribution": "uniform",
+          "max": 1.0,
+          "min": 0.0
+        },
+        "u_score": {
+          "distribution": "uniform",
+          "max": 1.0,
+          "min": 0.0
+        },
+        "u_time": {
+          "distribution": "uniform",
+          "max": 1.0,
+          "min": 0.0
+        }
+      },
+      "ebstop_target": "min_ttc",
+      "max_samples": 10,
+      "params": {},
+      "run_mode": "dkw_fixed",
+      "scenario_profile": null,
+      "sprt_target": "c_collision",
+      "target": "bernoulli"
+    },
+    "bernoulli:ebstop": {
+      "binomial_target": "c_collision",
+      "case_kind": "uturn",
+      "config_module": "targets.bernoulli.plugin",
+      "container_profile": null,
+      "dynamics_input_distribution": {
+        "u_failure": {
+          "distribution": "uniform",
+          "max": 1.0,
+          "min": 0.0
+        },
+        "u_score": {
+          "distribution": "uniform",
+          "max": 1.0,
+          "min": 0.0
+        },
+        "u_time": {
+          "distribution": "uniform",
+          "max": 1.0,
+          "min": 0.0
+        }
+      },
+      "ebstop_target": "min_ttc",
+      "max_samples": 10,
+      "params": {},
+      "run_mode": "ebstop",
+      "scenario_profile": null,
+      "sprt_target": "c_collision",
+      "target": "bernoulli"
+    },
+    "bernoulli:sprt": {
+      "binomial_target": "c_collision",
+      "case_kind": "uturn",
+      "config_module": "targets.bernoulli.plugin",
+      "container_profile": null,
+      "dynamics_input_distribution": {
+        "u_failure": {
+          "distribution": "uniform",
+          "max": 1.0,
+          "min": 0.0
+        },
+        "u_score": {
+          "distribution": "uniform",
+          "max": 1.0,
+          "min": 0.0
+        },
+        "u_time": {
+          "distribution": "uniform",
+          "max": 1.0,
+          "min": 0.0
+        }
+      },
+      "ebstop_target": "min_ttc",
+      "max_samples": 10,
+      "params": {},
+      "run_mode": "sprt",
+      "scenario_profile": null,
+      "sprt_target": "c_collision",
+      "target": "bernoulli"
+    },
+    "dynamics:binomial_ci": {
+      "binomial_target": "c_collision",
+      "case_kind": "uturn",
+      "config_module": "scenario_specs.uturn",
+      "container_profile": null,
+      "dynamics_input_distribution": {
+        "dx0": {
+          "distribution": "uniform",
+          "max": 25.0,
+          "min": 10.0
+        },
+        "ego_speed": {
+          "distribution": "uniform",
+          "max": 40.0,
+          "min": 30.0
+        },
+        "npc_speed": {
+          "distribution": "uniform",
+          "max": 25.0,
+          "min": 10.0
+        }
+      },
+      "ebstop_target": "min_ttc",
+      "max_samples": 10,
+      "params": {},
+      "run_mode": "binomial_ci",
+      "scenario_profile": null,
+      "sprt_target": "c_collision",
+      "target": "dynamics"
+    },
+    "dynamics:dkw": {
+      "binomial_target": "c_collision",
+      "case_kind": "uturn",
+      "config_module": "scenario_specs.uturn",
+      "container_profile": null,
+      "dynamics_input_distribution": {
+        "dx0": {
+          "distribution": "uniform",
+          "max": 25.0,
+          "min": 10.0
+        },
+        "ego_speed": {
+          "distribution": "uniform",
+          "max": 40.0,
+          "min": 30.0
+        },
+        "npc_speed": {
+          "distribution": "uniform",
+          "max": 25.0,
+          "min": 10.0
+        }
+      },
+      "ebstop_target": "min_ttc",
+      "max_samples": 10,
+      "params": {},
+      "run_mode": "dkw",
+      "scenario_profile": null,
+      "sprt_target": "c_collision",
+      "target": "dynamics"
+    },
+    "dynamics:dkw_fixed": {
+      "binomial_target": "c_collision",
+      "case_kind": "uturn",
+      "config_module": "scenario_specs.uturn",
+      "container_profile": null,
+      "dynamics_input_distribution": {
+        "dx0": {
+          "distribution": "uniform",
+          "max": 25.0,
+          "min": 10.0
+        },
+        "ego_speed": {
+          "distribution": "uniform",
+          "max": 40.0,
+          "min": 30.0
+        },
+        "npc_speed": {
+          "distribution": "uniform",
+          "max": 25.0,
+          "min": 10.0
+        }
+      },
+      "ebstop_target": "min_ttc",
+      "max_samples": 10,
+      "params": {},
+      "run_mode": "dkw_fixed",
+      "scenario_profile": null,
+      "sprt_target": "c_collision",
+      "target": "dynamics"
+    },
+    "dynamics:ebstop": {
+      "binomial_target": "c_collision",
+      "case_kind": "uturn",
+      "config_module": "scenario_specs.uturn",
+      "container_profile": null,
+      "dynamics_input_distribution": {
+        "dx0": {
+          "distribution": "uniform",
+          "max": 25.0,
+          "min": 10.0
+        },
+        "ego_speed": {
+          "distribution": "uniform",
+          "max": 40.0,
+          "min": 30.0
+        },
+        "npc_speed": {
+          "distribution": "uniform",
+          "max": 25.0,
+          "min": 10.0
+        }
+      },
+      "ebstop_target": "min_ttc",
+      "max_samples": 10,
+      "params": {},
+      "run_mode": "ebstop",
+      "scenario_profile": null,
+      "sprt_target": "c_collision",
+      "target": "dynamics"
+    },
+    "dynamics:sprt": {
+      "binomial_target": "c_collision",
+      "case_kind": "uturn",
+      "config_module": "scenario_specs.uturn",
+      "container_profile": null,
+      "dynamics_input_distribution": {
+        "dx0": {
+          "distribution": "uniform",
+          "max": 25.0,
+          "min": 10.0
+        },
+        "ego_speed": {
+          "distribution": "uniform",
+          "max": 40.0,
+          "min": 30.0
+        },
+        "npc_speed": {
+          "distribution": "uniform",
+          "max": 25.0,
+          "min": 10.0
+        }
+      },
+      "ebstop_target": "min_ttc",
+      "max_samples": 10,
+      "params": {},
+      "run_mode": "sprt",
+      "scenario_profile": null,
+      "sprt_target": "c_collision",
+      "target": "dynamics"
+    },
+    "prism:binomial_ci": {
+      "binomial_target": "c_failure",
+      "case_kind": "uturn",
+      "config_module": "targets.awsim.case_kinds.uturn",
+      "container_profile": null,
+      "dynamics_input_distribution": null,
+      "ebstop_target": "min_ttc",
+      "max_samples": 10,
+      "params": {
+        "steps": 20
+      },
+      "run_mode": "binomial_ci",
+      "scenario_profile": null,
+      "sprt_target": "c_collision",
+      "target": "prism"
+    },
+    "prism:dkw": {
+      "binomial_target": "c_collision",
+      "case_kind": "uturn",
+      "config_module": "targets.awsim.case_kinds.uturn",
+      "container_profile": null,
+      "dynamics_input_distribution": null,
+      "ebstop_target": "min_ttc",
+      "max_samples": 10,
+      "params": {
+        "steps": 20
+      },
+      "run_mode": "dkw",
+      "scenario_profile": null,
+      "sprt_target": "c_collision",
+      "target": "prism"
+    },
+    "prism:dkw_fixed": {
+      "binomial_target": "c_collision",
+      "case_kind": "uturn",
+      "config_module": "targets.awsim.case_kinds.uturn",
+      "container_profile": null,
+      "dynamics_input_distribution": null,
+      "ebstop_target": "min_ttc",
+      "max_samples": 10,
+      "params": {
+        "steps": 20
+      },
+      "run_mode": "dkw_fixed",
+      "scenario_profile": null,
+      "sprt_target": "c_collision",
+      "target": "prism"
+    },
+    "prism:ebstop": {
+      "binomial_target": "c_collision",
+      "case_kind": "uturn",
+      "config_module": "targets.awsim.case_kinds.uturn",
+      "container_profile": null,
+      "dynamics_input_distribution": null,
+      "ebstop_target": "min_ttc",
+      "max_samples": 10,
+      "params": {
+        "steps": 20
+      },
+      "run_mode": "ebstop",
+      "scenario_profile": null,
+      "sprt_target": "c_collision",
+      "target": "prism"
+    },
+    "prism:explore": {
+      "binomial_target": "c_collision",
+      "case_kind": "uturn",
+      "config_module": "targets.awsim.case_kinds.uturn",
+      "container_profile": null,
+      "dynamics_input_distribution": null,
+      "ebstop_target": "min_ttc",
+      "max_samples": 10,
+      "params": {
+        "steps": 20
+      },
+      "run_mode": "explore",
+      "scenario_profile": null,
+      "sprt_target": "c_collision",
+      "target": "prism"
+    },
+    "prism:sprt": {
+      "binomial_target": "c_collision",
+      "case_kind": "uturn",
+      "config_module": "targets.awsim.case_kinds.uturn",
+      "container_profile": null,
+      "dynamics_input_distribution": null,
+      "ebstop_target": "min_ttc",
+      "max_samples": 10,
+      "params": {
+        "steps": 20
+      },
+      "run_mode": "sprt",
+      "scenario_profile": null,
+      "sprt_target": "c_collision",
+      "target": "prism"
+    }
+  },
+  "strategies": {
+    "awsim:binomial_ci": {
+      "mode_runners": {
+        "binomial_mode": {
+          "class": "BinomialModeRunner",
+          "config": {
+            "anytime_valid": false,
+            "case_kind": "uturn",
+            "confidence": 0.95,
+            "config_module_name": "targets.awsim.case_kinds.uturn",
+            "max_samples": 10,
+            "method": "wilson",
+            "min_samples": 100,
+            "param_names": [
+              "dx0",
+              "ego_speed",
+              "npc_speed"
+            ],
+            "region": "custom",
+            "target": "c_collision",
+            "target_width": 0.02
+          }
+        },
+        "dkw_mode": {
+          "class": "DKWModeRunner",
+          "config": {
+            "base_samples": 50,
+            "case_kind": "uturn",
+            "config_module_name": "targets.awsim.case_kinds.uturn",
+            "max_samples": 10,
+            "minimum_value": 0.0,
+            "param_names": [
+              "dx0",
+              "ego_speed",
+              "npc_speed"
+            ],
+            "pure_smc": false,
+            "region": "custom",
+            "simultaneous": false,
+            "target_epsilon": 0.15,
+            "target_metric": "z_margin",
+            "target_metrics": [
+              "min_ttc",
+              "min_distance"
+            ],
+            "total_delta": 0.05
+          }
+        },
+        "ebstop_mode": {
+          "class": "EBStopModeRunner",
+          "config": {
+            "case_kind": "uturn",
+            "confidence": 0.95,
+            "config_module_name": "targets.awsim.case_kinds.uturn",
+            "epsilon": 0.1,
+            "max_samples": 2000,
+            "param_names": [
+              "dx0",
+              "ego_speed",
+              "npc_speed"
+            ],
+            "region": "custom",
+            "target": "min_ttc",
+            "value_range": [
+              0.0,
+              10.0
+            ]
+          }
+        },
+        "sprt_mode": {
+          "class": "SPRTModeRunner",
+          "config": {
+            "beta": 0.05,
+            "case_kind": "uturn",
+            "confidence": 0.95,
+            "config_module_name": "targets.awsim.case_kinds.uturn",
+            "max_samples": 10,
+            "min_samples": 0,
+            "p0": 0.1,
+            "p1": 0.01,
+            "param_names": [
+              "dx0",
+              "ego_speed",
+              "npc_speed"
+            ],
+            "region": "custom",
+            "target": "c_collision"
+          }
+        }
+      },
+      "request": null,
+      "strategist": {
+        "MAX_SAMPLES": 10000,
+        "param_names": [
+          "dx0",
+          "ego_speed",
+          "npc_speed"
+        ],
+        "random_seed": 42,
+        "run_mode": "binomial_ci",
+        "scenario_name": "uturn",
+        "strategy_settings": {
+          "binomial_ci_confidence": 0.95,
+          "binomial_ci_method": "wilson",
+          "binomial_ci_min_samples": 100,
+          "binomial_ci_target": "c_collision",
+          "binomial_ci_target_width": 0.02,
+          "dkw_target_metric": "z_margin",
+          "dkw_target_metrics": [
+            "min_ttc",
+            "min_distance"
+          ],
+          "focus_noise": 0.05,
+          "focus_points": [
+            {
+              "dx0": 10.09,
+              "ego_speed": 37.98,
+              "npc_speed": 14.2
+            },
+            {
+              "dx0": 14.81,
+              "ego_speed": 39.8,
+              "npc_speed": 13.49
+            },
+            {
+              "dx0": 10.23,
+              "ego_speed": 35.96,
+              "npc_speed": 17.8
+            },
+            {
+              "dx0": 13.29,
+              "ego_speed": 39.33,
+              "npc_speed": 13.95
+            },
+            {
+              "dx0": 14.16,
+              "ego_speed": 35.43,
+              "npc_speed": 10.02
+            },
+            {
+              "dx0": 11.17,
+              "ego_speed": 31.9,
+              "npc_speed": 11.91
+            }
+          ],
+          "initial_exploration_limit": 100,
+          "margin_max_uncertainty": 0.05,
+          "margin_range": [
+            0.3,
+            0.48
+          ],
+          "max_samples": 10000,
+          "min_samples": 500,
+          "stability_history_length": 50,
+          "stability_hysteresis": [
+            0.4,
+            0.6
+          ],
+          "stability_reference_points": 2000,
+          "stability_required_streak": 3,
+          "stability_shift_threshold": 0.01,
+          "step2_max_exploration": 500,
+          "target_priorities": [
+            "c_collision",
+            "c_ttc_0.3",
+            "c_ttc_0.5",
+            "c_ttc_0.7",
+            "c_ttc_0.9",
+            "c_ttc_1.1",
+            "c_ttc_1.2",
+            "c_ttc_1.3",
+            "c_ttc_1.5"
+          ]
+        }
+      },
+      "strategy": "orchestration.strategy.ActiveLearningStrategist",
+      "target_total": 10
+    },
+    "awsim:boundary_gap": {
+      "mode_runners": {
+        "binomial_mode": {
+          "class": "BinomialModeRunner",
+          "config": {
+            "anytime_valid": false,
+            "case_kind": "uturn",
+            "confidence": 0.95,
+            "config_module_name": "targets.awsim.case_kinds.uturn",
+            "max_samples": 10,
+            "method": "wilson",
+            "min_samples": 100,
+            "param_names": [
+              "dx0",
+              "ego_speed",
+              "npc_speed"
+            ],
+            "region": "custom",
+            "target": "c_collision",
+            "target_width": 0.02
+          }
+        },
+        "dkw_mode": {
+          "class": "DKWModeRunner",
+          "config": {
+            "base_samples": 50,
+            "case_kind": "uturn",
+            "config_module_name": "targets.awsim.case_kinds.uturn",
+            "max_samples": 10,
+            "minimum_value": 0.0,
+            "param_names": [
+              "dx0",
+              "ego_speed",
+              "npc_speed"
+            ],
+            "pure_smc": false,
+            "region": "custom",
+            "simultaneous": false,
+            "target_epsilon": 0.15,
+            "target_metric": "z_margin",
+            "target_metrics": [
+              "min_ttc",
+              "min_distance"
+            ],
+            "total_delta": 0.05
+          }
+        },
+        "ebstop_mode": {
+          "class": "EBStopModeRunner",
+          "config": {
+            "case_kind": "uturn",
+            "confidence": 0.95,
+            "config_module_name": "targets.awsim.case_kinds.uturn",
+            "epsilon": 0.1,
+            "max_samples": 2000,
+            "param_names": [
+              "dx0",
+              "ego_speed",
+              "npc_speed"
+            ],
+            "region": "custom",
+            "target": "min_ttc",
+            "value_range": [
+              0.0,
+              10.0
+            ]
+          }
+        },
+        "sprt_mode": {
+          "class": "SPRTModeRunner",
+          "config": {
+            "beta": 0.05,
+            "case_kind": "uturn",
+            "confidence": 0.95,
+            "config_module_name": "targets.awsim.case_kinds.uturn",
+            "max_samples": 10,
+            "min_samples": 0,
+            "p0": 0.1,
+            "p1": 0.01,
+            "param_names": [
+              "dx0",
+              "ego_speed",
+              "npc_speed"
+            ],
+            "region": "custom",
+            "target": "c_collision"
+          }
+        }
+      },
+      "request": null,
+      "strategist": {
+        "MAX_SAMPLES": 10000,
+        "param_names": [
+          "dx0",
+          "ego_speed",
+          "npc_speed"
+        ],
+        "random_seed": 42,
+        "run_mode": "boundary_gap",
+        "scenario_name": "uturn",
+        "strategy_settings": {
+          "binomial_ci_confidence": 0.95,
+          "binomial_ci_method": "wilson",
+          "binomial_ci_min_samples": 100,
+          "binomial_ci_target": "c_collision",
+          "binomial_ci_target_width": 0.02,
+          "dkw_target_metric": "z_margin",
+          "dkw_target_metrics": [
+            "min_ttc",
+            "min_distance"
+          ],
+          "focus_noise": 0.05,
+          "focus_points": [
+            {
+              "dx0": 10.09,
+              "ego_speed": 37.98,
+              "npc_speed": 14.2
+            },
+            {
+              "dx0": 14.81,
+              "ego_speed": 39.8,
+              "npc_speed": 13.49
+            },
+            {
+              "dx0": 10.23,
+              "ego_speed": 35.96,
+              "npc_speed": 17.8
+            },
+            {
+              "dx0": 13.29,
+              "ego_speed": 39.33,
+              "npc_speed": 13.95
+            },
+            {
+              "dx0": 14.16,
+              "ego_speed": 35.43,
+              "npc_speed": 10.02
+            },
+            {
+              "dx0": 11.17,
+              "ego_speed": 31.9,
+              "npc_speed": 11.91
+            }
+          ],
+          "initial_exploration_limit": 100,
+          "margin_max_uncertainty": 0.05,
+          "margin_range": [
+            0.3,
+            0.48
+          ],
+          "max_samples": 10000,
+          "min_samples": 500,
+          "stability_history_length": 50,
+          "stability_hysteresis": [
+            0.4,
+            0.6
+          ],
+          "stability_reference_points": 2000,
+          "stability_required_streak": 3,
+          "stability_shift_threshold": 0.01,
+          "step2_max_exploration": 500,
+          "target_priorities": [
+            "c_collision",
+            "c_ttc_0.3",
+            "c_ttc_0.5",
+            "c_ttc_0.7",
+            "c_ttc_0.9",
+            "c_ttc_1.1",
+            "c_ttc_1.2",
+            "c_ttc_1.3",
+            "c_ttc_1.5"
+          ]
+        }
+      },
+      "strategy": "orchestration.strategy.ActiveLearningStrategist",
+      "target_total": null
+    },
+    "awsim:dkw": {
+      "mode_runners": {
+        "binomial_mode": {
+          "class": "BinomialModeRunner",
+          "config": {
+            "anytime_valid": false,
+            "case_kind": "uturn",
+            "confidence": 0.95,
+            "config_module_name": "targets.awsim.case_kinds.uturn",
+            "max_samples": 10,
+            "method": "wilson",
+            "min_samples": 100,
+            "param_names": [
+              "dx0",
+              "ego_speed",
+              "npc_speed"
+            ],
+            "region": "custom",
+            "target": "c_collision",
+            "target_width": 0.02
+          }
+        },
+        "dkw_mode": {
+          "class": "DKWModeRunner",
+          "config": {
+            "base_samples": 50,
+            "case_kind": "uturn",
+            "config_module_name": "targets.awsim.case_kinds.uturn",
+            "max_samples": 10,
+            "minimum_value": 0.0,
+            "param_names": [
+              "dx0",
+              "ego_speed",
+              "npc_speed"
+            ],
+            "pure_smc": false,
+            "region": "custom",
+            "simultaneous": false,
+            "target_epsilon": 0.15,
+            "target_metric": "z_margin",
+            "target_metrics": [
+              "min_ttc",
+              "min_distance"
+            ],
+            "total_delta": 0.05
+          }
+        },
+        "ebstop_mode": {
+          "class": "EBStopModeRunner",
+          "config": {
+            "case_kind": "uturn",
+            "confidence": 0.95,
+            "config_module_name": "targets.awsim.case_kinds.uturn",
+            "epsilon": 0.1,
+            "max_samples": 2000,
+            "param_names": [
+              "dx0",
+              "ego_speed",
+              "npc_speed"
+            ],
+            "region": "custom",
+            "target": "min_ttc",
+            "value_range": [
+              0.0,
+              10.0
+            ]
+          }
+        },
+        "sprt_mode": {
+          "class": "SPRTModeRunner",
+          "config": {
+            "beta": 0.05,
+            "case_kind": "uturn",
+            "confidence": 0.95,
+            "config_module_name": "targets.awsim.case_kinds.uturn",
+            "max_samples": 10,
+            "min_samples": 0,
+            "p0": 0.1,
+            "p1": 0.01,
+            "param_names": [
+              "dx0",
+              "ego_speed",
+              "npc_speed"
+            ],
+            "region": "custom",
+            "target": "c_collision"
+          }
+        }
+      },
+      "request": null,
+      "strategist": {
+        "MAX_SAMPLES": 10000,
+        "param_names": [
+          "dx0",
+          "ego_speed",
+          "npc_speed"
+        ],
+        "random_seed": 42,
+        "run_mode": "dkw",
+        "scenario_name": "uturn",
+        "strategy_settings": {
+          "binomial_ci_confidence": 0.95,
+          "binomial_ci_method": "wilson",
+          "binomial_ci_min_samples": 100,
+          "binomial_ci_target": "c_collision",
+          "binomial_ci_target_width": 0.02,
+          "dkw_target_metric": "z_margin",
+          "dkw_target_metrics": [
+            "min_ttc",
+            "min_distance"
+          ],
+          "focus_noise": 0.05,
+          "focus_points": [
+            {
+              "dx0": 10.09,
+              "ego_speed": 37.98,
+              "npc_speed": 14.2
+            },
+            {
+              "dx0": 14.81,
+              "ego_speed": 39.8,
+              "npc_speed": 13.49
+            },
+            {
+              "dx0": 10.23,
+              "ego_speed": 35.96,
+              "npc_speed": 17.8
+            },
+            {
+              "dx0": 13.29,
+              "ego_speed": 39.33,
+              "npc_speed": 13.95
+            },
+            {
+              "dx0": 14.16,
+              "ego_speed": 35.43,
+              "npc_speed": 10.02
+            },
+            {
+              "dx0": 11.17,
+              "ego_speed": 31.9,
+              "npc_speed": 11.91
+            }
+          ],
+          "initial_exploration_limit": 100,
+          "margin_max_uncertainty": 0.05,
+          "margin_range": [
+            0.3,
+            0.48
+          ],
+          "max_samples": 10000,
+          "min_samples": 500,
+          "stability_history_length": 50,
+          "stability_hysteresis": [
+            0.4,
+            0.6
+          ],
+          "stability_reference_points": 2000,
+          "stability_required_streak": 3,
+          "stability_shift_threshold": 0.01,
+          "step2_max_exploration": 500,
+          "target_priorities": [
+            "c_collision",
+            "c_ttc_0.3",
+            "c_ttc_0.5",
+            "c_ttc_0.7",
+            "c_ttc_0.9",
+            "c_ttc_1.1",
+            "c_ttc_1.2",
+            "c_ttc_1.3",
+            "c_ttc_1.5"
+          ]
+        }
+      },
+      "strategy": "orchestration.strategy.ActiveLearningStrategist",
+      "target_total": null
+    },
+    "awsim:dkw_fixed": {
+      "mode_runners": {
+        "binomial_mode": {
+          "class": "BinomialModeRunner",
+          "config": {
+            "anytime_valid": false,
+            "case_kind": "uturn",
+            "confidence": 0.95,
+            "config_module_name": "targets.awsim.case_kinds.uturn",
+            "max_samples": 10,
+            "method": "wilson",
+            "min_samples": 100,
+            "param_names": [
+              "dx0",
+              "ego_speed",
+              "npc_speed"
+            ],
+            "region": "custom",
+            "target": "c_collision",
+            "target_width": 0.02
+          }
+        },
+        "dkw_mode": {
+          "class": "DKWModeRunner",
+          "config": {
+            "base_samples": 50,
+            "case_kind": "uturn",
+            "config_module_name": "targets.awsim.case_kinds.uturn",
+            "max_samples": 10,
+            "minimum_value": 0.0,
+            "param_names": [
+              "dx0",
+              "ego_speed",
+              "npc_speed"
+            ],
+            "pure_smc": false,
+            "region": "custom",
+            "simultaneous": false,
+            "target_epsilon": 0.15,
+            "target_metric": "z_margin",
+            "target_metrics": [
+              "min_ttc",
+              "min_distance"
+            ],
+            "total_delta": 0.05
+          }
+        },
+        "ebstop_mode": {
+          "class": "EBStopModeRunner",
+          "config": {
+            "case_kind": "uturn",
+            "confidence": 0.95,
+            "config_module_name": "targets.awsim.case_kinds.uturn",
+            "epsilon": 0.1,
+            "max_samples": 2000,
+            "param_names": [
+              "dx0",
+              "ego_speed",
+              "npc_speed"
+            ],
+            "region": "custom",
+            "target": "min_ttc",
+            "value_range": [
+              0.0,
+              10.0
+            ]
+          }
+        },
+        "sprt_mode": {
+          "class": "SPRTModeRunner",
+          "config": {
+            "beta": 0.05,
+            "case_kind": "uturn",
+            "confidence": 0.95,
+            "config_module_name": "targets.awsim.case_kinds.uturn",
+            "max_samples": 10,
+            "min_samples": 0,
+            "p0": 0.1,
+            "p1": 0.01,
+            "param_names": [
+              "dx0",
+              "ego_speed",
+              "npc_speed"
+            ],
+            "region": "custom",
+            "target": "c_collision"
+          }
+        }
+      },
+      "request": null,
+      "strategist": {
+        "MAX_SAMPLES": 10000,
+        "param_names": [
+          "dx0",
+          "ego_speed",
+          "npc_speed"
+        ],
+        "random_seed": 42,
+        "run_mode": "dkw_fixed",
+        "scenario_name": "uturn",
+        "strategy_settings": {
+          "binomial_ci_confidence": 0.95,
+          "binomial_ci_method": "wilson",
+          "binomial_ci_min_samples": 100,
+          "binomial_ci_target": "c_collision",
+          "binomial_ci_target_width": 0.02,
+          "dkw_target_metric": "z_margin",
+          "dkw_target_metrics": [
+            "min_ttc",
+            "min_distance"
+          ],
+          "focus_noise": 0.05,
+          "focus_points": [
+            {
+              "dx0": 10.09,
+              "ego_speed": 37.98,
+              "npc_speed": 14.2
+            },
+            {
+              "dx0": 14.81,
+              "ego_speed": 39.8,
+              "npc_speed": 13.49
+            },
+            {
+              "dx0": 10.23,
+              "ego_speed": 35.96,
+              "npc_speed": 17.8
+            },
+            {
+              "dx0": 13.29,
+              "ego_speed": 39.33,
+              "npc_speed": 13.95
+            },
+            {
+              "dx0": 14.16,
+              "ego_speed": 35.43,
+              "npc_speed": 10.02
+            },
+            {
+              "dx0": 11.17,
+              "ego_speed": 31.9,
+              "npc_speed": 11.91
+            }
+          ],
+          "initial_exploration_limit": 100,
+          "margin_max_uncertainty": 0.05,
+          "margin_range": [
+            0.3,
+            0.48
+          ],
+          "max_samples": 10000,
+          "min_samples": 500,
+          "stability_history_length": 50,
+          "stability_hysteresis": [
+            0.4,
+            0.6
+          ],
+          "stability_reference_points": 2000,
+          "stability_required_streak": 3,
+          "stability_shift_threshold": 0.01,
+          "step2_max_exploration": 500,
+          "target_priorities": [
+            "c_collision",
+            "c_ttc_0.3",
+            "c_ttc_0.5",
+            "c_ttc_0.7",
+            "c_ttc_0.9",
+            "c_ttc_1.1",
+            "c_ttc_1.2",
+            "c_ttc_1.3",
+            "c_ttc_1.5"
+          ]
+        }
+      },
+      "strategy": "orchestration.strategy.ActiveLearningStrategist",
+      "target_total": 10
+    },
+    "awsim:ebstop": {
+      "mode_runners": {
+        "binomial_mode": {
+          "class": "BinomialModeRunner",
+          "config": {
+            "anytime_valid": false,
+            "case_kind": "uturn",
+            "confidence": 0.95,
+            "config_module_name": "targets.awsim.case_kinds.uturn",
+            "max_samples": 10,
+            "method": "wilson",
+            "min_samples": 100,
+            "param_names": [
+              "dx0",
+              "ego_speed",
+              "npc_speed"
+            ],
+            "region": "custom",
+            "target": "c_collision",
+            "target_width": 0.02
+          }
+        },
+        "dkw_mode": {
+          "class": "DKWModeRunner",
+          "config": {
+            "base_samples": 50,
+            "case_kind": "uturn",
+            "config_module_name": "targets.awsim.case_kinds.uturn",
+            "max_samples": 10,
+            "minimum_value": 0.0,
+            "param_names": [
+              "dx0",
+              "ego_speed",
+              "npc_speed"
+            ],
+            "pure_smc": false,
+            "region": "custom",
+            "simultaneous": false,
+            "target_epsilon": 0.15,
+            "target_metric": "z_margin",
+            "target_metrics": [
+              "min_ttc",
+              "min_distance"
+            ],
+            "total_delta": 0.05
+          }
+        },
+        "ebstop_mode": {
+          "class": "EBStopModeRunner",
+          "config": {
+            "case_kind": "uturn",
+            "confidence": 0.95,
+            "config_module_name": "targets.awsim.case_kinds.uturn",
+            "epsilon": 0.1,
+            "max_samples": 2000,
+            "param_names": [
+              "dx0",
+              "ego_speed",
+              "npc_speed"
+            ],
+            "region": "custom",
+            "target": "min_ttc",
+            "value_range": [
+              0.0,
+              10.0
+            ]
+          }
+        },
+        "sprt_mode": {
+          "class": "SPRTModeRunner",
+          "config": {
+            "beta": 0.05,
+            "case_kind": "uturn",
+            "confidence": 0.95,
+            "config_module_name": "targets.awsim.case_kinds.uturn",
+            "max_samples": 10,
+            "min_samples": 0,
+            "p0": 0.1,
+            "p1": 0.01,
+            "param_names": [
+              "dx0",
+              "ego_speed",
+              "npc_speed"
+            ],
+            "region": "custom",
+            "target": "c_collision"
+          }
+        }
+      },
+      "request": null,
+      "strategist": {
+        "MAX_SAMPLES": 10000,
+        "param_names": [
+          "dx0",
+          "ego_speed",
+          "npc_speed"
+        ],
+        "random_seed": 42,
+        "run_mode": "ebstop",
+        "scenario_name": "uturn",
+        "strategy_settings": {
+          "binomial_ci_confidence": 0.95,
+          "binomial_ci_method": "wilson",
+          "binomial_ci_min_samples": 100,
+          "binomial_ci_target": "c_collision",
+          "binomial_ci_target_width": 0.02,
+          "dkw_target_metric": "z_margin",
+          "dkw_target_metrics": [
+            "min_ttc",
+            "min_distance"
+          ],
+          "focus_noise": 0.05,
+          "focus_points": [
+            {
+              "dx0": 10.09,
+              "ego_speed": 37.98,
+              "npc_speed": 14.2
+            },
+            {
+              "dx0": 14.81,
+              "ego_speed": 39.8,
+              "npc_speed": 13.49
+            },
+            {
+              "dx0": 10.23,
+              "ego_speed": 35.96,
+              "npc_speed": 17.8
+            },
+            {
+              "dx0": 13.29,
+              "ego_speed": 39.33,
+              "npc_speed": 13.95
+            },
+            {
+              "dx0": 14.16,
+              "ego_speed": 35.43,
+              "npc_speed": 10.02
+            },
+            {
+              "dx0": 11.17,
+              "ego_speed": 31.9,
+              "npc_speed": 11.91
+            }
+          ],
+          "initial_exploration_limit": 100,
+          "margin_max_uncertainty": 0.05,
+          "margin_range": [
+            0.3,
+            0.48
+          ],
+          "max_samples": 10000,
+          "min_samples": 500,
+          "stability_history_length": 50,
+          "stability_hysteresis": [
+            0.4,
+            0.6
+          ],
+          "stability_reference_points": 2000,
+          "stability_required_streak": 3,
+          "stability_shift_threshold": 0.01,
+          "step2_max_exploration": 500,
+          "target_priorities": [
+            "c_collision",
+            "c_ttc_0.3",
+            "c_ttc_0.5",
+            "c_ttc_0.7",
+            "c_ttc_0.9",
+            "c_ttc_1.1",
+            "c_ttc_1.2",
+            "c_ttc_1.3",
+            "c_ttc_1.5"
+          ]
+        }
+      },
+      "strategy": "orchestration.strategy.ActiveLearningStrategist",
+      "target_total": 10
+    },
+    "awsim:explore": {
+      "mode_runners": {
+        "binomial_mode": {
+          "class": "BinomialModeRunner",
+          "config": {
+            "anytime_valid": false,
+            "case_kind": "uturn",
+            "confidence": 0.95,
+            "config_module_name": "targets.awsim.case_kinds.uturn",
+            "max_samples": 10,
+            "method": "wilson",
+            "min_samples": 100,
+            "param_names": [
+              "dx0",
+              "ego_speed",
+              "npc_speed"
+            ],
+            "region": "custom",
+            "target": "c_collision",
+            "target_width": 0.02
+          }
+        },
+        "dkw_mode": {
+          "class": "DKWModeRunner",
+          "config": {
+            "base_samples": 50,
+            "case_kind": "uturn",
+            "config_module_name": "targets.awsim.case_kinds.uturn",
+            "max_samples": 10,
+            "minimum_value": 0.0,
+            "param_names": [
+              "dx0",
+              "ego_speed",
+              "npc_speed"
+            ],
+            "pure_smc": false,
+            "region": "custom",
+            "simultaneous": false,
+            "target_epsilon": 0.15,
+            "target_metric": "z_margin",
+            "target_metrics": [
+              "min_ttc",
+              "min_distance"
+            ],
+            "total_delta": 0.05
+          }
+        },
+        "ebstop_mode": {
+          "class": "EBStopModeRunner",
+          "config": {
+            "case_kind": "uturn",
+            "confidence": 0.95,
+            "config_module_name": "targets.awsim.case_kinds.uturn",
+            "epsilon": 0.1,
+            "max_samples": 2000,
+            "param_names": [
+              "dx0",
+              "ego_speed",
+              "npc_speed"
+            ],
+            "region": "custom",
+            "target": "min_ttc",
+            "value_range": [
+              0.0,
+              10.0
+            ]
+          }
+        },
+        "sprt_mode": {
+          "class": "SPRTModeRunner",
+          "config": {
+            "beta": 0.05,
+            "case_kind": "uturn",
+            "confidence": 0.95,
+            "config_module_name": "targets.awsim.case_kinds.uturn",
+            "max_samples": 10,
+            "min_samples": 0,
+            "p0": 0.1,
+            "p1": 0.01,
+            "param_names": [
+              "dx0",
+              "ego_speed",
+              "npc_speed"
+            ],
+            "region": "custom",
+            "target": "c_collision"
+          }
+        }
+      },
+      "request": null,
+      "strategist": {
+        "MAX_SAMPLES": 10000,
+        "param_names": [
+          "dx0",
+          "ego_speed",
+          "npc_speed"
+        ],
+        "random_seed": 42,
+        "run_mode": "explore",
+        "scenario_name": "uturn",
+        "strategy_settings": {
+          "binomial_ci_confidence": 0.95,
+          "binomial_ci_method": "wilson",
+          "binomial_ci_min_samples": 100,
+          "binomial_ci_target": "c_collision",
+          "binomial_ci_target_width": 0.02,
+          "dkw_target_metric": "z_margin",
+          "dkw_target_metrics": [
+            "min_ttc",
+            "min_distance"
+          ],
+          "focus_noise": 0.05,
+          "focus_points": [
+            {
+              "dx0": 10.09,
+              "ego_speed": 37.98,
+              "npc_speed": 14.2
+            },
+            {
+              "dx0": 14.81,
+              "ego_speed": 39.8,
+              "npc_speed": 13.49
+            },
+            {
+              "dx0": 10.23,
+              "ego_speed": 35.96,
+              "npc_speed": 17.8
+            },
+            {
+              "dx0": 13.29,
+              "ego_speed": 39.33,
+              "npc_speed": 13.95
+            },
+            {
+              "dx0": 14.16,
+              "ego_speed": 35.43,
+              "npc_speed": 10.02
+            },
+            {
+              "dx0": 11.17,
+              "ego_speed": 31.9,
+              "npc_speed": 11.91
+            }
+          ],
+          "initial_exploration_limit": 100,
+          "margin_max_uncertainty": 0.05,
+          "margin_range": [
+            0.3,
+            0.48
+          ],
+          "max_samples": 10000,
+          "min_samples": 500,
+          "stability_history_length": 50,
+          "stability_hysteresis": [
+            0.4,
+            0.6
+          ],
+          "stability_reference_points": 2000,
+          "stability_required_streak": 3,
+          "stability_shift_threshold": 0.01,
+          "step2_max_exploration": 500,
+          "target_priorities": [
+            "c_collision",
+            "c_ttc_0.3",
+            "c_ttc_0.5",
+            "c_ttc_0.7",
+            "c_ttc_0.9",
+            "c_ttc_1.1",
+            "c_ttc_1.2",
+            "c_ttc_1.3",
+            "c_ttc_1.5"
+          ]
+        }
+      },
+      "strategy": "orchestration.strategy.ActiveLearningStrategist",
+      "target_total": 10
+    },
+    "awsim:focus": {
+      "mode_runners": {
+        "binomial_mode": {
+          "class": "BinomialModeRunner",
+          "config": {
+            "anytime_valid": false,
+            "case_kind": "uturn",
+            "confidence": 0.95,
+            "config_module_name": "targets.awsim.case_kinds.uturn",
+            "max_samples": 10,
+            "method": "wilson",
+            "min_samples": 100,
+            "param_names": [
+              "dx0",
+              "ego_speed",
+              "npc_speed"
+            ],
+            "region": "custom",
+            "target": "c_collision",
+            "target_width": 0.02
+          }
+        },
+        "dkw_mode": {
+          "class": "DKWModeRunner",
+          "config": {
+            "base_samples": 50,
+            "case_kind": "uturn",
+            "config_module_name": "targets.awsim.case_kinds.uturn",
+            "max_samples": 10,
+            "minimum_value": 0.0,
+            "param_names": [
+              "dx0",
+              "ego_speed",
+              "npc_speed"
+            ],
+            "pure_smc": false,
+            "region": "custom",
+            "simultaneous": false,
+            "target_epsilon": 0.15,
+            "target_metric": "z_margin",
+            "target_metrics": [
+              "min_ttc",
+              "min_distance"
+            ],
+            "total_delta": 0.05
+          }
+        },
+        "ebstop_mode": {
+          "class": "EBStopModeRunner",
+          "config": {
+            "case_kind": "uturn",
+            "confidence": 0.95,
+            "config_module_name": "targets.awsim.case_kinds.uturn",
+            "epsilon": 0.1,
+            "max_samples": 2000,
+            "param_names": [
+              "dx0",
+              "ego_speed",
+              "npc_speed"
+            ],
+            "region": "custom",
+            "target": "min_ttc",
+            "value_range": [
+              0.0,
+              10.0
+            ]
+          }
+        },
+        "sprt_mode": {
+          "class": "SPRTModeRunner",
+          "config": {
+            "beta": 0.05,
+            "case_kind": "uturn",
+            "confidence": 0.95,
+            "config_module_name": "targets.awsim.case_kinds.uturn",
+            "max_samples": 10,
+            "min_samples": 0,
+            "p0": 0.1,
+            "p1": 0.01,
+            "param_names": [
+              "dx0",
+              "ego_speed",
+              "npc_speed"
+            ],
+            "region": "custom",
+            "target": "c_collision"
+          }
+        }
+      },
+      "request": null,
+      "strategist": {
+        "MAX_SAMPLES": 10000,
+        "param_names": [
+          "dx0",
+          "ego_speed",
+          "npc_speed"
+        ],
+        "random_seed": 42,
+        "run_mode": "focus",
+        "scenario_name": "uturn",
+        "strategy_settings": {
+          "binomial_ci_confidence": 0.95,
+          "binomial_ci_method": "wilson",
+          "binomial_ci_min_samples": 100,
+          "binomial_ci_target": "c_collision",
+          "binomial_ci_target_width": 0.02,
+          "dkw_target_metric": "z_margin",
+          "dkw_target_metrics": [
+            "min_ttc",
+            "min_distance"
+          ],
+          "focus_noise": 0.05,
+          "focus_points": [
+            {
+              "dx0": 10.09,
+              "ego_speed": 37.98,
+              "npc_speed": 14.2
+            },
+            {
+              "dx0": 14.81,
+              "ego_speed": 39.8,
+              "npc_speed": 13.49
+            },
+            {
+              "dx0": 10.23,
+              "ego_speed": 35.96,
+              "npc_speed": 17.8
+            },
+            {
+              "dx0": 13.29,
+              "ego_speed": 39.33,
+              "npc_speed": 13.95
+            },
+            {
+              "dx0": 14.16,
+              "ego_speed": 35.43,
+              "npc_speed": 10.02
+            },
+            {
+              "dx0": 11.17,
+              "ego_speed": 31.9,
+              "npc_speed": 11.91
+            }
+          ],
+          "initial_exploration_limit": 100,
+          "margin_max_uncertainty": 0.05,
+          "margin_range": [
+            0.3,
+            0.48
+          ],
+          "max_samples": 10000,
+          "min_samples": 500,
+          "stability_history_length": 50,
+          "stability_hysteresis": [
+            0.4,
+            0.6
+          ],
+          "stability_reference_points": 2000,
+          "stability_required_streak": 3,
+          "stability_shift_threshold": 0.01,
+          "step2_max_exploration": 500,
+          "target_priorities": [
+            "c_collision",
+            "c_ttc_0.3",
+            "c_ttc_0.5",
+            "c_ttc_0.7",
+            "c_ttc_0.9",
+            "c_ttc_1.1",
+            "c_ttc_1.2",
+            "c_ttc_1.3",
+            "c_ttc_1.5"
+          ]
+        }
+      },
+      "strategy": "orchestration.strategy.ActiveLearningStrategist",
+      "target_total": 10
+    },
+    "awsim:jama_edge": {
+      "mode_runners": {
+        "binomial_mode": {
+          "class": "BinomialModeRunner",
+          "config": {
+            "anytime_valid": false,
+            "case_kind": "uturn",
+            "confidence": 0.95,
+            "config_module_name": "targets.awsim.case_kinds.uturn",
+            "max_samples": 10,
+            "method": "wilson",
+            "min_samples": 100,
+            "param_names": [
+              "dx0",
+              "ego_speed",
+              "npc_speed"
+            ],
+            "region": "custom",
+            "target": "c_collision",
+            "target_width": 0.02
+          }
+        },
+        "dkw_mode": {
+          "class": "DKWModeRunner",
+          "config": {
+            "base_samples": 50,
+            "case_kind": "uturn",
+            "config_module_name": "targets.awsim.case_kinds.uturn",
+            "max_samples": 10,
+            "minimum_value": 0.0,
+            "param_names": [
+              "dx0",
+              "ego_speed",
+              "npc_speed"
+            ],
+            "pure_smc": false,
+            "region": "custom",
+            "simultaneous": false,
+            "target_epsilon": 0.15,
+            "target_metric": "z_margin",
+            "target_metrics": [
+              "min_ttc",
+              "min_distance"
+            ],
+            "total_delta": 0.05
+          }
+        },
+        "ebstop_mode": {
+          "class": "EBStopModeRunner",
+          "config": {
+            "case_kind": "uturn",
+            "confidence": 0.95,
+            "config_module_name": "targets.awsim.case_kinds.uturn",
+            "epsilon": 0.1,
+            "max_samples": 2000,
+            "param_names": [
+              "dx0",
+              "ego_speed",
+              "npc_speed"
+            ],
+            "region": "custom",
+            "target": "min_ttc",
+            "value_range": [
+              0.0,
+              10.0
+            ]
+          }
+        },
+        "sprt_mode": {
+          "class": "SPRTModeRunner",
+          "config": {
+            "beta": 0.05,
+            "case_kind": "uturn",
+            "confidence": 0.95,
+            "config_module_name": "targets.awsim.case_kinds.uturn",
+            "max_samples": 10,
+            "min_samples": 0,
+            "p0": 0.1,
+            "p1": 0.01,
+            "param_names": [
+              "dx0",
+              "ego_speed",
+              "npc_speed"
+            ],
+            "region": "custom",
+            "target": "c_collision"
+          }
+        }
+      },
+      "request": null,
+      "strategist": {
+        "MAX_SAMPLES": 10000,
+        "param_names": [
+          "dx0",
+          "ego_speed",
+          "npc_speed"
+        ],
+        "random_seed": 42,
+        "run_mode": "jama_edge",
+        "scenario_name": "uturn",
+        "strategy_settings": {
+          "binomial_ci_confidence": 0.95,
+          "binomial_ci_method": "wilson",
+          "binomial_ci_min_samples": 100,
+          "binomial_ci_target": "c_collision",
+          "binomial_ci_target_width": 0.02,
+          "dkw_target_metric": "z_margin",
+          "dkw_target_metrics": [
+            "min_ttc",
+            "min_distance"
+          ],
+          "focus_noise": 0.05,
+          "focus_points": [
+            {
+              "dx0": 10.09,
+              "ego_speed": 37.98,
+              "npc_speed": 14.2
+            },
+            {
+              "dx0": 14.81,
+              "ego_speed": 39.8,
+              "npc_speed": 13.49
+            },
+            {
+              "dx0": 10.23,
+              "ego_speed": 35.96,
+              "npc_speed": 17.8
+            },
+            {
+              "dx0": 13.29,
+              "ego_speed": 39.33,
+              "npc_speed": 13.95
+            },
+            {
+              "dx0": 14.16,
+              "ego_speed": 35.43,
+              "npc_speed": 10.02
+            },
+            {
+              "dx0": 11.17,
+              "ego_speed": 31.9,
+              "npc_speed": 11.91
+            }
+          ],
+          "initial_exploration_limit": 100,
+          "margin_max_uncertainty": 0.05,
+          "margin_range": [
+            0.3,
+            0.48
+          ],
+          "max_samples": 10000,
+          "min_samples": 500,
+          "stability_history_length": 50,
+          "stability_hysteresis": [
+            0.4,
+            0.6
+          ],
+          "stability_reference_points": 2000,
+          "stability_required_streak": 3,
+          "stability_shift_threshold": 0.01,
+          "step2_max_exploration": 500,
+          "target_priorities": [
+            "c_collision",
+            "c_ttc_0.3",
+            "c_ttc_0.5",
+            "c_ttc_0.7",
+            "c_ttc_0.9",
+            "c_ttc_1.1",
+            "c_ttc_1.2",
+            "c_ttc_1.3",
+            "c_ttc_1.5"
+          ]
+        }
+      },
+      "strategy": "orchestration.strategy.ActiveLearningStrategist",
+      "target_total": 10
+    },
+    "awsim:margin": {
+      "mode_runners": {
+        "binomial_mode": {
+          "class": "BinomialModeRunner",
+          "config": {
+            "anytime_valid": false,
+            "case_kind": "uturn",
+            "confidence": 0.95,
+            "config_module_name": "targets.awsim.case_kinds.uturn",
+            "max_samples": 10,
+            "method": "wilson",
+            "min_samples": 100,
+            "param_names": [
+              "dx0",
+              "ego_speed",
+              "npc_speed"
+            ],
+            "region": "custom",
+            "target": "c_collision",
+            "target_width": 0.02
+          }
+        },
+        "dkw_mode": {
+          "class": "DKWModeRunner",
+          "config": {
+            "base_samples": 50,
+            "case_kind": "uturn",
+            "config_module_name": "targets.awsim.case_kinds.uturn",
+            "max_samples": 10,
+            "minimum_value": 0.0,
+            "param_names": [
+              "dx0",
+              "ego_speed",
+              "npc_speed"
+            ],
+            "pure_smc": false,
+            "region": "custom",
+            "simultaneous": false,
+            "target_epsilon": 0.15,
+            "target_metric": "z_margin",
+            "target_metrics": [
+              "min_ttc",
+              "min_distance"
+            ],
+            "total_delta": 0.05
+          }
+        },
+        "ebstop_mode": {
+          "class": "EBStopModeRunner",
+          "config": {
+            "case_kind": "uturn",
+            "confidence": 0.95,
+            "config_module_name": "targets.awsim.case_kinds.uturn",
+            "epsilon": 0.1,
+            "max_samples": 2000,
+            "param_names": [
+              "dx0",
+              "ego_speed",
+              "npc_speed"
+            ],
+            "region": "custom",
+            "target": "min_ttc",
+            "value_range": [
+              0.0,
+              10.0
+            ]
+          }
+        },
+        "sprt_mode": {
+          "class": "SPRTModeRunner",
+          "config": {
+            "beta": 0.05,
+            "case_kind": "uturn",
+            "confidence": 0.95,
+            "config_module_name": "targets.awsim.case_kinds.uturn",
+            "max_samples": 10,
+            "min_samples": 0,
+            "p0": 0.1,
+            "p1": 0.01,
+            "param_names": [
+              "dx0",
+              "ego_speed",
+              "npc_speed"
+            ],
+            "region": "custom",
+            "target": "c_collision"
+          }
+        }
+      },
+      "request": null,
+      "strategist": {
+        "MAX_SAMPLES": 10000,
+        "param_names": [
+          "dx0",
+          "ego_speed",
+          "npc_speed"
+        ],
+        "random_seed": 42,
+        "run_mode": "margin",
+        "scenario_name": "uturn",
+        "strategy_settings": {
+          "binomial_ci_confidence": 0.95,
+          "binomial_ci_method": "wilson",
+          "binomial_ci_min_samples": 100,
+          "binomial_ci_target": "c_collision",
+          "binomial_ci_target_width": 0.02,
+          "dkw_target_metric": "z_margin",
+          "dkw_target_metrics": [
+            "min_ttc",
+            "min_distance"
+          ],
+          "focus_noise": 0.05,
+          "focus_points": [
+            {
+              "dx0": 10.09,
+              "ego_speed": 37.98,
+              "npc_speed": 14.2
+            },
+            {
+              "dx0": 14.81,
+              "ego_speed": 39.8,
+              "npc_speed": 13.49
+            },
+            {
+              "dx0": 10.23,
+              "ego_speed": 35.96,
+              "npc_speed": 17.8
+            },
+            {
+              "dx0": 13.29,
+              "ego_speed": 39.33,
+              "npc_speed": 13.95
+            },
+            {
+              "dx0": 14.16,
+              "ego_speed": 35.43,
+              "npc_speed": 10.02
+            },
+            {
+              "dx0": 11.17,
+              "ego_speed": 31.9,
+              "npc_speed": 11.91
+            }
+          ],
+          "initial_exploration_limit": 100,
+          "margin_max_uncertainty": 0.05,
+          "margin_range": [
+            0.3,
+            0.48
+          ],
+          "max_samples": 10000,
+          "min_samples": 500,
+          "stability_history_length": 50,
+          "stability_hysteresis": [
+            0.4,
+            0.6
+          ],
+          "stability_reference_points": 2000,
+          "stability_required_streak": 3,
+          "stability_shift_threshold": 0.01,
+          "step2_max_exploration": 500,
+          "target_priorities": [
+            "c_collision",
+            "c_ttc_0.3",
+            "c_ttc_0.5",
+            "c_ttc_0.7",
+            "c_ttc_0.9",
+            "c_ttc_1.1",
+            "c_ttc_1.2",
+            "c_ttc_1.3",
+            "c_ttc_1.5"
+          ]
+        }
+      },
+      "strategy": "orchestration.strategy.ActiveLearningStrategist",
+      "target_total": 10
+    },
+    "awsim:replay": {
+      "replay": {
+        "cases": [
+          {
+            "input": {
+              "acceleration": 7.0,
+              "dx0": 12.0,
+              "ego_goal_lane": "516",
+              "ego_goal_offset": 20,
+              "ego_init_lane": "514",
+              "ego_init_offset": 38,
+              "ego_speed": 35.0,
+              "npc_init_lane": "521",
+              "npc_init_offset": 32,
+              "npc_speed": 15.0,
+              "scenario_type": "uturn",
+              "uturn_next_lane": "511"
+            },
+            "reason": "REPLAY: BINOMIAL_CI source_loop=1"
+          },
+          {
+            "input": {
+              "acceleration": 7.0,
+              "dx0": 11.0,
+              "ego_goal_lane": "516",
+              "ego_goal_offset": 20,
+              "ego_init_lane": "514",
+              "ego_init_offset": 38,
+              "ego_speed": 38.0,
+              "npc_init_lane": "521",
+              "npc_init_offset": 32,
+              "npc_speed": 20.0,
+              "scenario_type": "uturn",
+              "uturn_next_lane": "511"
+            },
+            "reason": "REPLAY: BINOMIAL_CI source_loop=2"
+          }
+        ],
+        "eligible_count": 2
+      },
+      "request": null,
+      "strategy": "orchestration.replay.ReplayCsvStrategy",
+      "strategy_config": {
+        "case_kind": "uturn",
+        "completed_source_loop_nums": [],
+        "expected_count": null,
+        "input_types": {
+          "acceleration": 7.0,
+          "dx0": 10.0,
+          "ego_goal_lane": "516",
+          "ego_goal_offset": 20,
+          "ego_init_lane": "514",
+          "ego_init_offset": 38,
+          "ego_speed": 30.0,
+          "npc_init_lane": "521",
+          "npc_init_offset": 32,
+          "npc_speed": 10.0,
+          "uturn_next_lane": "511"
+        },
+        "reason_pattern": "BINOMIAL_CI:",
+        "scenario_type": "uturn",
+        "source_csv": "<tmp>/replay_source.csv",
+        "target": "awsim"
+      },
+      "target_total": null
+    },
+    "awsim:sprt": {
+      "mode_runners": {
+        "binomial_mode": {
+          "class": "BinomialModeRunner",
+          "config": {
+            "anytime_valid": false,
+            "case_kind": "uturn",
+            "confidence": 0.95,
+            "config_module_name": "targets.awsim.case_kinds.uturn",
+            "max_samples": 10,
+            "method": "wilson",
+            "min_samples": 100,
+            "param_names": [
+              "dx0",
+              "ego_speed",
+              "npc_speed"
+            ],
+            "region": "custom",
+            "target": "c_collision",
+            "target_width": 0.02
+          }
+        },
+        "dkw_mode": {
+          "class": "DKWModeRunner",
+          "config": {
+            "base_samples": 50,
+            "case_kind": "uturn",
+            "config_module_name": "targets.awsim.case_kinds.uturn",
+            "max_samples": 10,
+            "minimum_value": 0.0,
+            "param_names": [
+              "dx0",
+              "ego_speed",
+              "npc_speed"
+            ],
+            "pure_smc": false,
+            "region": "custom",
+            "simultaneous": false,
+            "target_epsilon": 0.15,
+            "target_metric": "z_margin",
+            "target_metrics": [
+              "min_ttc",
+              "min_distance"
+            ],
+            "total_delta": 0.05
+          }
+        },
+        "ebstop_mode": {
+          "class": "EBStopModeRunner",
+          "config": {
+            "case_kind": "uturn",
+            "confidence": 0.95,
+            "config_module_name": "targets.awsim.case_kinds.uturn",
+            "epsilon": 0.1,
+            "max_samples": 2000,
+            "param_names": [
+              "dx0",
+              "ego_speed",
+              "npc_speed"
+            ],
+            "region": "custom",
+            "target": "min_ttc",
+            "value_range": [
+              0.0,
+              10.0
+            ]
+          }
+        },
+        "sprt_mode": {
+          "class": "SPRTModeRunner",
+          "config": {
+            "beta": 0.05,
+            "case_kind": "uturn",
+            "confidence": 0.95,
+            "config_module_name": "targets.awsim.case_kinds.uturn",
+            "max_samples": 10,
+            "min_samples": 0,
+            "p0": 0.1,
+            "p1": 0.01,
+            "param_names": [
+              "dx0",
+              "ego_speed",
+              "npc_speed"
+            ],
+            "region": "custom",
+            "target": "c_collision"
+          }
+        }
+      },
+      "request": null,
+      "strategist": {
+        "MAX_SAMPLES": 10000,
+        "param_names": [
+          "dx0",
+          "ego_speed",
+          "npc_speed"
+        ],
+        "random_seed": 42,
+        "run_mode": "sprt",
+        "scenario_name": "uturn",
+        "strategy_settings": {
+          "binomial_ci_confidence": 0.95,
+          "binomial_ci_method": "wilson",
+          "binomial_ci_min_samples": 100,
+          "binomial_ci_target": "c_collision",
+          "binomial_ci_target_width": 0.02,
+          "dkw_target_metric": "z_margin",
+          "dkw_target_metrics": [
+            "min_ttc",
+            "min_distance"
+          ],
+          "focus_noise": 0.05,
+          "focus_points": [
+            {
+              "dx0": 10.09,
+              "ego_speed": 37.98,
+              "npc_speed": 14.2
+            },
+            {
+              "dx0": 14.81,
+              "ego_speed": 39.8,
+              "npc_speed": 13.49
+            },
+            {
+              "dx0": 10.23,
+              "ego_speed": 35.96,
+              "npc_speed": 17.8
+            },
+            {
+              "dx0": 13.29,
+              "ego_speed": 39.33,
+              "npc_speed": 13.95
+            },
+            {
+              "dx0": 14.16,
+              "ego_speed": 35.43,
+              "npc_speed": 10.02
+            },
+            {
+              "dx0": 11.17,
+              "ego_speed": 31.9,
+              "npc_speed": 11.91
+            }
+          ],
+          "initial_exploration_limit": 100,
+          "margin_max_uncertainty": 0.05,
+          "margin_range": [
+            0.3,
+            0.48
+          ],
+          "max_samples": 10000,
+          "min_samples": 500,
+          "stability_history_length": 50,
+          "stability_hysteresis": [
+            0.4,
+            0.6
+          ],
+          "stability_reference_points": 2000,
+          "stability_required_streak": 3,
+          "stability_shift_threshold": 0.01,
+          "step2_max_exploration": 500,
+          "target_priorities": [
+            "c_collision",
+            "c_ttc_0.3",
+            "c_ttc_0.5",
+            "c_ttc_0.7",
+            "c_ttc_0.9",
+            "c_ttc_1.1",
+            "c_ttc_1.2",
+            "c_ttc_1.3",
+            "c_ttc_1.5"
+          ]
+        }
+      },
+      "strategy": "orchestration.strategy.ActiveLearningStrategist",
+      "target_total": 10
+    },
+    "awsim:ttc_edge": {
+      "mode_runners": {
+        "binomial_mode": {
+          "class": "BinomialModeRunner",
+          "config": {
+            "anytime_valid": false,
+            "case_kind": "uturn",
+            "confidence": 0.95,
+            "config_module_name": "targets.awsim.case_kinds.uturn",
+            "max_samples": 10,
+            "method": "wilson",
+            "min_samples": 100,
+            "param_names": [
+              "dx0",
+              "ego_speed",
+              "npc_speed"
+            ],
+            "region": "custom",
+            "target": "c_collision",
+            "target_width": 0.02
+          }
+        },
+        "dkw_mode": {
+          "class": "DKWModeRunner",
+          "config": {
+            "base_samples": 50,
+            "case_kind": "uturn",
+            "config_module_name": "targets.awsim.case_kinds.uturn",
+            "max_samples": 10,
+            "minimum_value": 0.0,
+            "param_names": [
+              "dx0",
+              "ego_speed",
+              "npc_speed"
+            ],
+            "pure_smc": false,
+            "region": "custom",
+            "simultaneous": false,
+            "target_epsilon": 0.15,
+            "target_metric": "z_margin",
+            "target_metrics": [
+              "min_ttc",
+              "min_distance"
+            ],
+            "total_delta": 0.05
+          }
+        },
+        "ebstop_mode": {
+          "class": "EBStopModeRunner",
+          "config": {
+            "case_kind": "uturn",
+            "confidence": 0.95,
+            "config_module_name": "targets.awsim.case_kinds.uturn",
+            "epsilon": 0.1,
+            "max_samples": 2000,
+            "param_names": [
+              "dx0",
+              "ego_speed",
+              "npc_speed"
+            ],
+            "region": "custom",
+            "target": "min_ttc",
+            "value_range": [
+              0.0,
+              10.0
+            ]
+          }
+        },
+        "sprt_mode": {
+          "class": "SPRTModeRunner",
+          "config": {
+            "beta": 0.05,
+            "case_kind": "uturn",
+            "confidence": 0.95,
+            "config_module_name": "targets.awsim.case_kinds.uturn",
+            "max_samples": 10,
+            "min_samples": 0,
+            "p0": 0.1,
+            "p1": 0.01,
+            "param_names": [
+              "dx0",
+              "ego_speed",
+              "npc_speed"
+            ],
+            "region": "custom",
+            "target": "c_collision"
+          }
+        }
+      },
+      "request": null,
+      "strategist": {
+        "MAX_SAMPLES": 10000,
+        "param_names": [
+          "dx0",
+          "ego_speed",
+          "npc_speed"
+        ],
+        "random_seed": 42,
+        "run_mode": "ttc_edge",
+        "scenario_name": "uturn",
+        "strategy_settings": {
+          "binomial_ci_confidence": 0.95,
+          "binomial_ci_method": "wilson",
+          "binomial_ci_min_samples": 100,
+          "binomial_ci_target": "c_collision",
+          "binomial_ci_target_width": 0.02,
+          "dkw_target_metric": "z_margin",
+          "dkw_target_metrics": [
+            "min_ttc",
+            "min_distance"
+          ],
+          "focus_noise": 0.05,
+          "focus_points": [
+            {
+              "dx0": 10.09,
+              "ego_speed": 37.98,
+              "npc_speed": 14.2
+            },
+            {
+              "dx0": 14.81,
+              "ego_speed": 39.8,
+              "npc_speed": 13.49
+            },
+            {
+              "dx0": 10.23,
+              "ego_speed": 35.96,
+              "npc_speed": 17.8
+            },
+            {
+              "dx0": 13.29,
+              "ego_speed": 39.33,
+              "npc_speed": 13.95
+            },
+            {
+              "dx0": 14.16,
+              "ego_speed": 35.43,
+              "npc_speed": 10.02
+            },
+            {
+              "dx0": 11.17,
+              "ego_speed": 31.9,
+              "npc_speed": 11.91
+            }
+          ],
+          "initial_exploration_limit": 100,
+          "margin_max_uncertainty": 0.05,
+          "margin_range": [
+            0.3,
+            0.48
+          ],
+          "max_samples": 10000,
+          "min_samples": 500,
+          "stability_history_length": 50,
+          "stability_hysteresis": [
+            0.4,
+            0.6
+          ],
+          "stability_reference_points": 2000,
+          "stability_required_streak": 3,
+          "stability_shift_threshold": 0.01,
+          "step2_max_exploration": 500,
+          "target_priorities": [
+            "c_collision",
+            "c_ttc_0.3",
+            "c_ttc_0.5",
+            "c_ttc_0.7",
+            "c_ttc_0.9",
+            "c_ttc_1.1",
+            "c_ttc_1.2",
+            "c_ttc_1.3",
+            "c_ttc_1.5"
+          ]
+        }
+      },
+      "strategy": "orchestration.strategy.ActiveLearningStrategist",
+      "target_total": 10
+    },
+    "awsim:verify_consistency": {
+      "mode_runners": {
+        "binomial_mode": {
+          "class": "BinomialModeRunner",
+          "config": {
+            "anytime_valid": false,
+            "case_kind": "uturn",
+            "confidence": 0.95,
+            "config_module_name": "targets.awsim.case_kinds.uturn",
+            "max_samples": 10,
+            "method": "wilson",
+            "min_samples": 100,
+            "param_names": [
+              "dx0",
+              "ego_speed",
+              "npc_speed"
+            ],
+            "region": "custom",
+            "target": "c_collision",
+            "target_width": 0.02
+          }
+        },
+        "dkw_mode": {
+          "class": "DKWModeRunner",
+          "config": {
+            "base_samples": 50,
+            "case_kind": "uturn",
+            "config_module_name": "targets.awsim.case_kinds.uturn",
+            "max_samples": 10,
+            "minimum_value": 0.0,
+            "param_names": [
+              "dx0",
+              "ego_speed",
+              "npc_speed"
+            ],
+            "pure_smc": false,
+            "region": "custom",
+            "simultaneous": false,
+            "target_epsilon": 0.15,
+            "target_metric": "z_margin",
+            "target_metrics": [
+              "min_ttc",
+              "min_distance"
+            ],
+            "total_delta": 0.05
+          }
+        },
+        "ebstop_mode": {
+          "class": "EBStopModeRunner",
+          "config": {
+            "case_kind": "uturn",
+            "confidence": 0.95,
+            "config_module_name": "targets.awsim.case_kinds.uturn",
+            "epsilon": 0.1,
+            "max_samples": 2000,
+            "param_names": [
+              "dx0",
+              "ego_speed",
+              "npc_speed"
+            ],
+            "region": "custom",
+            "target": "min_ttc",
+            "value_range": [
+              0.0,
+              10.0
+            ]
+          }
+        },
+        "sprt_mode": {
+          "class": "SPRTModeRunner",
+          "config": {
+            "beta": 0.05,
+            "case_kind": "uturn",
+            "confidence": 0.95,
+            "config_module_name": "targets.awsim.case_kinds.uturn",
+            "max_samples": 10,
+            "min_samples": 0,
+            "p0": 0.1,
+            "p1": 0.01,
+            "param_names": [
+              "dx0",
+              "ego_speed",
+              "npc_speed"
+            ],
+            "region": "custom",
+            "target": "c_collision"
+          }
+        }
+      },
+      "request": null,
+      "strategist": {
+        "MAX_SAMPLES": 10000,
+        "param_names": [
+          "dx0",
+          "ego_speed",
+          "npc_speed"
+        ],
+        "random_seed": 42,
+        "run_mode": "verify_consistency",
+        "scenario_name": "uturn",
+        "strategy_settings": {
+          "binomial_ci_confidence": 0.95,
+          "binomial_ci_method": "wilson",
+          "binomial_ci_min_samples": 100,
+          "binomial_ci_target": "c_collision",
+          "binomial_ci_target_width": 0.02,
+          "dkw_target_metric": "z_margin",
+          "dkw_target_metrics": [
+            "min_ttc",
+            "min_distance"
+          ],
+          "focus_noise": 0.05,
+          "focus_points": [
+            {
+              "dx0": 10.09,
+              "ego_speed": 37.98,
+              "npc_speed": 14.2
+            },
+            {
+              "dx0": 14.81,
+              "ego_speed": 39.8,
+              "npc_speed": 13.49
+            },
+            {
+              "dx0": 10.23,
+              "ego_speed": 35.96,
+              "npc_speed": 17.8
+            },
+            {
+              "dx0": 13.29,
+              "ego_speed": 39.33,
+              "npc_speed": 13.95
+            },
+            {
+              "dx0": 14.16,
+              "ego_speed": 35.43,
+              "npc_speed": 10.02
+            },
+            {
+              "dx0": 11.17,
+              "ego_speed": 31.9,
+              "npc_speed": 11.91
+            }
+          ],
+          "initial_exploration_limit": 100,
+          "margin_max_uncertainty": 0.05,
+          "margin_range": [
+            0.3,
+            0.48
+          ],
+          "max_samples": 10000,
+          "min_samples": 500,
+          "stability_history_length": 50,
+          "stability_hysteresis": [
+            0.4,
+            0.6
+          ],
+          "stability_reference_points": 2000,
+          "stability_required_streak": 3,
+          "stability_shift_threshold": 0.01,
+          "step2_max_exploration": 500,
+          "target_priorities": [
+            "c_collision",
+            "c_ttc_0.3",
+            "c_ttc_0.5",
+            "c_ttc_0.7",
+            "c_ttc_0.9",
+            "c_ttc_1.1",
+            "c_ttc_1.2",
+            "c_ttc_1.3",
+            "c_ttc_1.5"
+          ]
+        }
+      },
+      "strategy": "orchestration.strategy.ActiveLearningStrategist",
+      "target_total": null
+    },
+    "awsim:worst_ttc": {
+      "mode_runners": {
+        "binomial_mode": {
+          "class": "BinomialModeRunner",
+          "config": {
+            "anytime_valid": false,
+            "case_kind": "uturn",
+            "confidence": 0.95,
+            "config_module_name": "targets.awsim.case_kinds.uturn",
+            "max_samples": 10,
+            "method": "wilson",
+            "min_samples": 100,
+            "param_names": [
+              "dx0",
+              "ego_speed",
+              "npc_speed"
+            ],
+            "region": "custom",
+            "target": "c_collision",
+            "target_width": 0.02
+          }
+        },
+        "dkw_mode": {
+          "class": "DKWModeRunner",
+          "config": {
+            "base_samples": 50,
+            "case_kind": "uturn",
+            "config_module_name": "targets.awsim.case_kinds.uturn",
+            "max_samples": 10,
+            "minimum_value": 0.0,
+            "param_names": [
+              "dx0",
+              "ego_speed",
+              "npc_speed"
+            ],
+            "pure_smc": false,
+            "region": "custom",
+            "simultaneous": false,
+            "target_epsilon": 0.15,
+            "target_metric": "z_margin",
+            "target_metrics": [
+              "min_ttc",
+              "min_distance"
+            ],
+            "total_delta": 0.05
+          }
+        },
+        "ebstop_mode": {
+          "class": "EBStopModeRunner",
+          "config": {
+            "case_kind": "uturn",
+            "confidence": 0.95,
+            "config_module_name": "targets.awsim.case_kinds.uturn",
+            "epsilon": 0.1,
+            "max_samples": 2000,
+            "param_names": [
+              "dx0",
+              "ego_speed",
+              "npc_speed"
+            ],
+            "region": "custom",
+            "target": "min_ttc",
+            "value_range": [
+              0.0,
+              10.0
+            ]
+          }
+        },
+        "sprt_mode": {
+          "class": "SPRTModeRunner",
+          "config": {
+            "beta": 0.05,
+            "case_kind": "uturn",
+            "confidence": 0.95,
+            "config_module_name": "targets.awsim.case_kinds.uturn",
+            "max_samples": 10,
+            "min_samples": 0,
+            "p0": 0.1,
+            "p1": 0.01,
+            "param_names": [
+              "dx0",
+              "ego_speed",
+              "npc_speed"
+            ],
+            "region": "custom",
+            "target": "c_collision"
+          }
+        }
+      },
+      "request": null,
+      "strategist": {
+        "MAX_SAMPLES": 10000,
+        "param_names": [
+          "dx0",
+          "ego_speed",
+          "npc_speed"
+        ],
+        "random_seed": 42,
+        "run_mode": "worst_ttc",
+        "scenario_name": "uturn",
+        "strategy_settings": {
+          "binomial_ci_confidence": 0.95,
+          "binomial_ci_method": "wilson",
+          "binomial_ci_min_samples": 100,
+          "binomial_ci_target": "c_collision",
+          "binomial_ci_target_width": 0.02,
+          "dkw_target_metric": "z_margin",
+          "dkw_target_metrics": [
+            "min_ttc",
+            "min_distance"
+          ],
+          "focus_noise": 0.05,
+          "focus_points": [
+            {
+              "dx0": 10.09,
+              "ego_speed": 37.98,
+              "npc_speed": 14.2
+            },
+            {
+              "dx0": 14.81,
+              "ego_speed": 39.8,
+              "npc_speed": 13.49
+            },
+            {
+              "dx0": 10.23,
+              "ego_speed": 35.96,
+              "npc_speed": 17.8
+            },
+            {
+              "dx0": 13.29,
+              "ego_speed": 39.33,
+              "npc_speed": 13.95
+            },
+            {
+              "dx0": 14.16,
+              "ego_speed": 35.43,
+              "npc_speed": 10.02
+            },
+            {
+              "dx0": 11.17,
+              "ego_speed": 31.9,
+              "npc_speed": 11.91
+            }
+          ],
+          "initial_exploration_limit": 100,
+          "margin_max_uncertainty": 0.05,
+          "margin_range": [
+            0.3,
+            0.48
+          ],
+          "max_samples": 10000,
+          "min_samples": 500,
+          "stability_history_length": 50,
+          "stability_hysteresis": [
+            0.4,
+            0.6
+          ],
+          "stability_reference_points": 2000,
+          "stability_required_streak": 3,
+          "stability_shift_threshold": 0.01,
+          "step2_max_exploration": 500,
+          "target_priorities": [
+            "c_collision",
+            "c_ttc_0.3",
+            "c_ttc_0.5",
+            "c_ttc_0.7",
+            "c_ttc_0.9",
+            "c_ttc_1.1",
+            "c_ttc_1.2",
+            "c_ttc_1.3",
+            "c_ttc_1.5"
+          ]
+        }
+      },
+      "strategy": "orchestration.strategy.ActiveLearningStrategist",
+      "target_total": 10
+    },
+    "bernoulli:binomial_ci": {
+      "request": {
+        "bounds": null,
+        "confidence": 0.95,
+        "method": "binomial_ci",
+        "metric": "c_failure",
+        "options": {
+          "anytime_valid": false,
+          "max_samples": 10,
+          "method": "wilson",
+          "min_samples": 10,
+          "region": "custom"
+        },
+        "target_width": 0.02
+      },
+      "strategy": "orchestration.random_parameter_sampling.RandomParameterSamplingStrategy",
+      "strategy_config": {
+        "case_id_prefix": null,
+        "case_kind": "uturn",
+        "input_distribution": {
+          "u_failure": {
+            "distribution": "uniform",
+            "max": 1.0,
+            "min": 0.0
+          },
+          "u_score": {
+            "distribution": "uniform",
+            "max": 1.0,
+            "min": 0.0
+          },
+          "u_time": {
+            "distribution": "uniform",
+            "max": 1.0,
+            "min": 0.0
+          }
+        },
+        "max_samples": 10,
+        "params": {},
+        "reason_prefix": "BERNOULLI_IID_SAMPLING",
+        "run_model_check_once": false,
+        "seed": 42,
+        "tags": [],
+        "target": "bernoulli"
+      },
+      "target_total": null
+    },
+    "bernoulli:dkw": {
+      "request": {
+        "bounds": null,
+        "confidence": 0.95,
+        "method": "dkw",
+        "metric": "time_to_failure",
+        "options": {
+          "epsilon": 0.15,
+          "minimum_value": 0.0,
+          "q": 0.05,
+          "region": "custom",
+          "use_kde_weighting": false
+        },
+        "target_width": 0.15
+      },
+      "strategy": "orchestration.random_parameter_sampling.RandomParameterSamplingStrategy",
+      "strategy_config": {
+        "case_id_prefix": null,
+        "case_kind": "uturn",
+        "input_distribution": {
+          "u_failure": {
+            "distribution": "uniform",
+            "max": 1.0,
+            "min": 0.0
+          },
+          "u_score": {
+            "distribution": "uniform",
+            "max": 1.0,
+            "min": 0.0
+          },
+          "u_time": {
+            "distribution": "uniform",
+            "max": 1.0,
+            "min": 0.0
+          }
+        },
+        "max_samples": 10,
+        "params": {},
+        "reason_prefix": "BERNOULLI_IID_SAMPLING",
+        "run_model_check_once": false,
+        "seed": 42,
+        "tags": [],
+        "target": "bernoulli"
+      },
+      "target_total": null
+    },
+    "bernoulli:dkw_fixed": {
+      "request": {
+        "bounds": null,
+        "confidence": 0.95,
+        "method": "dkw",
+        "metric": "time_to_failure",
+        "options": {
+          "epsilon": 0.15,
+          "minimum_value": 0.0,
+          "q": 0.05,
+          "region": "custom",
+          "use_kde_weighting": false
+        },
+        "target_width": 0.15
+      },
+      "strategy": "orchestration.random_parameter_sampling.RandomParameterSamplingStrategy",
+      "strategy_config": {
+        "case_id_prefix": null,
+        "case_kind": "uturn",
+        "input_distribution": {
+          "u_failure": {
+            "distribution": "uniform",
+            "max": 1.0,
+            "min": 0.0
+          },
+          "u_score": {
+            "distribution": "uniform",
+            "max": 1.0,
+            "min": 0.0
+          },
+          "u_time": {
+            "distribution": "uniform",
+            "max": 1.0,
+            "min": 0.0
+          }
+        },
+        "max_samples": 10,
+        "params": {},
+        "reason_prefix": "BERNOULLI_IID_SAMPLING",
+        "run_model_check_once": false,
+        "seed": 42,
+        "tags": [],
+        "target": "bernoulli"
+      },
+      "target_total": null
+    },
+    "bernoulli:ebstop": {
+      "request": {
+        "bounds": null,
+        "confidence": 0.95,
+        "method": "ebstop",
+        "metric": "score",
+        "options": {
+          "epsilon": 0.1,
+          "max_samples": 10,
+          "region": "custom",
+          "value_range": [
+            0.0,
+            10.0
+          ]
+        },
+        "target_width": null
+      },
+      "strategy": "orchestration.random_parameter_sampling.RandomParameterSamplingStrategy",
+      "strategy_config": {
+        "case_id_prefix": null,
+        "case_kind": "uturn",
+        "input_distribution": {
+          "u_failure": {
+            "distribution": "uniform",
+            "max": 1.0,
+            "min": 0.0
+          },
+          "u_score": {
+            "distribution": "uniform",
+            "max": 1.0,
+            "min": 0.0
+          },
+          "u_time": {
+            "distribution": "uniform",
+            "max": 1.0,
+            "min": 0.0
+          }
+        },
+        "max_samples": 10,
+        "params": {},
+        "reason_prefix": "BERNOULLI_IID_SAMPLING",
+        "run_model_check_once": false,
+        "seed": 42,
+        "tags": [],
+        "target": "bernoulli"
+      },
+      "target_total": null
+    },
+    "bernoulli:sprt": {
+      "request": {
+        "bounds": null,
+        "confidence": 0.95,
+        "method": "sprt",
+        "metric": "c_failure",
+        "options": {
+          "beta": 0.05,
+          "max_samples": 10,
+          "min_samples": 0,
+          "p0": 0.1,
+          "p1": 0.01,
+          "region": "custom"
+        },
+        "target_width": null
+      },
+      "strategy": "orchestration.random_parameter_sampling.RandomParameterSamplingStrategy",
+      "strategy_config": {
+        "case_id_prefix": null,
+        "case_kind": "uturn",
+        "input_distribution": {
+          "u_failure": {
+            "distribution": "uniform",
+            "max": 1.0,
+            "min": 0.0
+          },
+          "u_score": {
+            "distribution": "uniform",
+            "max": 1.0,
+            "min": 0.0
+          },
+          "u_time": {
+            "distribution": "uniform",
+            "max": 1.0,
+            "min": 0.0
+          }
+        },
+        "max_samples": 10,
+        "params": {},
+        "reason_prefix": "BERNOULLI_IID_SAMPLING",
+        "run_model_check_once": false,
+        "seed": 42,
+        "tags": [],
+        "target": "bernoulli"
+      },
+      "target_total": null
+    },
+    "dynamics:binomial_ci": {
+      "request": {
+        "bounds": null,
+        "confidence": 0.95,
+        "method": "binomial_ci",
+        "metric": "c_collision",
+        "options": {
+          "anytime_valid": false,
+          "max_samples": 10,
+          "method": "wilson",
+          "min_samples": 10,
+          "region": "custom"
+        },
+        "target_width": 0.02
+      },
+      "strategy": "orchestration.random_parameter_sampling.RandomParameterSamplingStrategy",
+      "strategy_config": {
+        "case_id_prefix": null,
+        "case_kind": "uturn",
+        "input_distribution": {
+          "dx0": {
+            "distribution": "uniform",
+            "max": 25.0,
+            "min": 10.0
+          },
+          "ego_speed": {
+            "distribution": "uniform",
+            "max": 40.0,
+            "min": 30.0
+          },
+          "npc_speed": {
+            "distribution": "uniform",
+            "max": 25.0,
+            "min": 10.0
+          }
+        },
+        "max_samples": 10,
+        "params": {},
+        "reason_prefix": "DYNAMICS_IID_SAMPLING",
+        "run_model_check_once": false,
+        "seed": 42,
+        "tags": [],
+        "target": "dynamics"
+      },
+      "target_total": null
+    },
+    "dynamics:dkw": {
+      "request": {
+        "bounds": null,
+        "confidence": 0.95,
+        "method": "dkw",
+        "metric": "min_ttc",
+        "options": {
+          "epsilon": 0.15,
+          "minimum_value": 0.0,
+          "q": 0.05,
+          "region": "custom",
+          "use_kde_weighting": false
+        },
+        "target_width": 0.15
+      },
+      "strategy": "orchestration.random_parameter_sampling.RandomParameterSamplingStrategy",
+      "strategy_config": {
+        "case_id_prefix": null,
+        "case_kind": "uturn",
+        "input_distribution": {
+          "dx0": {
+            "distribution": "uniform",
+            "max": 25.0,
+            "min": 10.0
+          },
+          "ego_speed": {
+            "distribution": "uniform",
+            "max": 40.0,
+            "min": 30.0
+          },
+          "npc_speed": {
+            "distribution": "uniform",
+            "max": 25.0,
+            "min": 10.0
+          }
+        },
+        "max_samples": 10,
+        "params": {},
+        "reason_prefix": "DYNAMICS_IID_SAMPLING",
+        "run_model_check_once": false,
+        "seed": 42,
+        "tags": [],
+        "target": "dynamics"
+      },
+      "target_total": null
+    },
+    "dynamics:dkw_fixed": {
+      "request": {
+        "bounds": null,
+        "confidence": 0.95,
+        "method": "dkw",
+        "metric": "min_ttc",
+        "options": {
+          "epsilon": 0.15,
+          "minimum_value": 0.0,
+          "q": 0.05,
+          "region": "custom",
+          "use_kde_weighting": false
+        },
+        "target_width": 0.15
+      },
+      "strategy": "orchestration.random_parameter_sampling.RandomParameterSamplingStrategy",
+      "strategy_config": {
+        "case_id_prefix": null,
+        "case_kind": "uturn",
+        "input_distribution": {
+          "dx0": {
+            "distribution": "uniform",
+            "max": 25.0,
+            "min": 10.0
+          },
+          "ego_speed": {
+            "distribution": "uniform",
+            "max": 40.0,
+            "min": 30.0
+          },
+          "npc_speed": {
+            "distribution": "uniform",
+            "max": 25.0,
+            "min": 10.0
+          }
+        },
+        "max_samples": 10,
+        "params": {},
+        "reason_prefix": "DYNAMICS_IID_SAMPLING",
+        "run_model_check_once": false,
+        "seed": 42,
+        "tags": [],
+        "target": "dynamics"
+      },
+      "target_total": null
+    },
+    "dynamics:ebstop": {
+      "request": {
+        "bounds": null,
+        "confidence": 0.95,
+        "method": "ebstop",
+        "metric": "min_ttc",
+        "options": {
+          "epsilon": 0.1,
+          "max_samples": 10,
+          "region": "custom",
+          "value_range": [
+            0.0,
+            10.0
+          ]
+        },
+        "target_width": null
+      },
+      "strategy": "orchestration.random_parameter_sampling.RandomParameterSamplingStrategy",
+      "strategy_config": {
+        "case_id_prefix": null,
+        "case_kind": "uturn",
+        "input_distribution": {
+          "dx0": {
+            "distribution": "uniform",
+            "max": 25.0,
+            "min": 10.0
+          },
+          "ego_speed": {
+            "distribution": "uniform",
+            "max": 40.0,
+            "min": 30.0
+          },
+          "npc_speed": {
+            "distribution": "uniform",
+            "max": 25.0,
+            "min": 10.0
+          }
+        },
+        "max_samples": 10,
+        "params": {},
+        "reason_prefix": "DYNAMICS_IID_SAMPLING",
+        "run_model_check_once": false,
+        "seed": 42,
+        "tags": [],
+        "target": "dynamics"
+      },
+      "target_total": null
+    },
+    "dynamics:sprt": {
+      "request": {
+        "bounds": null,
+        "confidence": 0.95,
+        "method": "sprt",
+        "metric": "c_collision",
+        "options": {
+          "beta": 0.05,
+          "max_samples": 10,
+          "min_samples": 0,
+          "p0": 0.1,
+          "p1": 0.01,
+          "region": "custom"
+        },
+        "target_width": null
+      },
+      "strategy": "orchestration.random_parameter_sampling.RandomParameterSamplingStrategy",
+      "strategy_config": {
+        "case_id_prefix": null,
+        "case_kind": "uturn",
+        "input_distribution": {
+          "dx0": {
+            "distribution": "uniform",
+            "max": 25.0,
+            "min": 10.0
+          },
+          "ego_speed": {
+            "distribution": "uniform",
+            "max": 40.0,
+            "min": 30.0
+          },
+          "npc_speed": {
+            "distribution": "uniform",
+            "max": 25.0,
+            "min": 10.0
+          }
+        },
+        "max_samples": 10,
+        "params": {},
+        "reason_prefix": "DYNAMICS_IID_SAMPLING",
+        "run_model_check_once": false,
+        "seed": 42,
+        "tags": [],
+        "target": "dynamics"
+      },
+      "target_total": null
+    },
+    "prism:binomial_ci": {
+      "request": {
+        "bounds": null,
+        "confidence": 0.95,
+        "method": "binomial_ci",
+        "metric": "c_failure",
+        "options": {
+          "anytime_valid": false,
+          "max_samples": 10,
+          "method": "wilson",
+          "min_samples": 10,
+          "region": "custom"
+        },
+        "target_width": 0.02
+      },
+      "strategy": "orchestration.fixed_parameter_sampling.FixedParameterSamplingStrategy",
+      "strategy_config": {
+        "case_id_prefix": null,
+        "case_kind": "uturn",
+        "max_samples": 10,
+        "params": {
+          "steps": 20
+        },
+        "reason_prefix": "PRISM_FIXED_SAMPLING",
+        "run_model_check_once": true,
+        "tags": [],
+        "target": "prism"
+      },
+      "target_total": null
+    },
+    "prism:dkw": {
+      "request": null,
+      "strategy": "orchestration.prism_dkw_sampling.PrismDkwSamplingStrategy",
+      "strategy_config": {
+        "case_id_prefix": null,
+        "case_kind": "uturn",
+        "max_samples": 10,
+        "params": {
+          "steps": 20
+        },
+        "reason_prefix": "PRISM_FIXED_SAMPLING",
+        "run_model_check_once": true,
+        "tags": [],
+        "target": "prism"
+      },
+      "target_total": null
+    },
+    "prism:dkw_fixed": {
+      "request": null,
+      "strategy": "orchestration.prism_dkw_sampling.PrismDkwSamplingStrategy",
+      "strategy_config": {
+        "case_id_prefix": null,
+        "case_kind": "uturn",
+        "max_samples": 10,
+        "params": {
+          "steps": 20
+        },
+        "reason_prefix": "PRISM_FIXED_SAMPLING",
+        "run_model_check_once": true,
+        "tags": [],
+        "target": "prism"
+      },
+      "target_total": null
+    },
+    "prism:ebstop": {
+      "request": {
+        "bounds": null,
+        "confidence": 0.95,
+        "method": "ebstop",
+        "metric": "min_ttc",
+        "options": {
+          "epsilon": 0.1,
+          "max_samples": 10,
+          "region": "custom",
+          "value_range": [
+            0.0,
+            10.0
+          ]
+        },
+        "target_width": null
+      },
+      "strategy": "orchestration.fixed_parameter_sampling.FixedParameterSamplingStrategy",
+      "strategy_config": {
+        "case_id_prefix": null,
+        "case_kind": "uturn",
+        "max_samples": 10,
+        "params": {
+          "steps": 20
+        },
+        "reason_prefix": "PRISM_FIXED_SAMPLING",
+        "run_model_check_once": true,
+        "tags": [],
+        "target": "prism"
+      },
+      "target_total": null
+    },
+    "prism:explore": {
+      "request": null,
+      "strategy": "orchestration.strategy.ParameterCaseStrategy",
+      "strategy_config": {
+        "case_id": null,
+        "case_kind": "uturn",
+        "expected_trace_path": null,
+        "local_loop_num": null,
+        "params": {
+          "steps": 20
+        },
+        "reason": "manual_orchestrator_run",
+        "scenario_type": null,
+        "simulation_output_dir": null,
+        "tags": [],
+        "target": "prism"
+      },
+      "target_total": 1
+    },
+    "prism:sprt": {
+      "request": {
+        "bounds": null,
+        "confidence": 0.95,
+        "method": "sprt",
+        "metric": "c_collision",
+        "options": {
+          "beta": 0.05,
+          "max_samples": 10,
+          "min_samples": 0,
+          "p0": 0.1,
+          "p1": 0.01,
+          "region": "custom"
+        },
+        "target_width": null
+      },
+      "strategy": "orchestration.fixed_parameter_sampling.FixedParameterSamplingStrategy",
+      "strategy_config": {
+        "case_id_prefix": null,
+        "case_kind": "uturn",
+        "max_samples": 10,
+        "params": {
+          "steps": 20
+        },
+        "reason_prefix": "PRISM_FIXED_SAMPLING",
+        "run_model_check_once": true,
+        "tags": [],
+        "target": "prism"
+      },
+      "target_total": null
+    }
+  }
+}

@@ -16,7 +16,9 @@ from targets.awsim.case_kinds import (
     build_default_case_kind_module_name,
     load_focus_points,
 )
-from targets.statistical import load_statistical_target_profile
+from evaluation.stopping_rules import STOPPING_RULE_NAMES
+from targets.registry import apply_target_defaults, default_config_module, list_target_names
+from targets.statistical import load_statistical_target_profile, supports_iid_sampling
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -46,7 +48,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Path to the JSONL file where EvaluationRecord rows are appended.",
     )
     parser.add_argument("--case-id", default=None, help="Override case id. Defaults to fixture stem.")
-    parser.add_argument("--case-kind", default="uturn", help="Case kind label.")
+    parser.add_argument(
+        "--case-kind",
+        default=None,
+        help="Case kind label (default: the target's default, uturn for awsim/dynamics/prism).",
+    )
     parser.add_argument(
         "--mode",
         choices=LEGACY_MODES,
@@ -56,7 +62,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--target",
         default="awsim",
-        choices=["awsim", "bbsl", "dynamics", "prism"],
+        choices=list_target_names(),
         help="Target name for the worker.",
     )
     parser.add_argument(
@@ -526,6 +532,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional minimum sample count before binomial_ci may stop early.",
     )
     parser.add_argument(
+        "--stopping-rule",
+        dest="stopping_rule",
+        choices=["legacy", *STOPPING_RULE_NAMES],
+        default="legacy",
+        help=(
+            "Stopping rule with an explicit evaluation schedule and guarantee (evaluation/stopping_rules.py). "
+            "legacy (default) keeps each mode's own stopping logic. *_fixed_strict evaluates once at "
+            "--max-samples; *_sequential_anytime is valid whenever it stops. Available for IID-sampling targets "
+            "and fixed-parameter sampling; the rule must match --mode."
+        ),
+    )
+    parser.add_argument(
         "--binomial-anytime-valid",
         "--binomial_anytime_valid",
         dest="binomial_anytime_valid",
@@ -668,6 +686,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def validate_args(args: argparse.Namespace) -> None:
+    apply_target_defaults(args)
+    _validate_stopping_rule(args)
     fixture_mode = bool(getattr(args, "fixture", None))
     simulation_mode = bool(getattr(args, "params", []))
     replay_mode = bool(getattr(args, "replay_csv", None))
@@ -699,7 +719,7 @@ def validate_args(args: argparse.Namespace) -> None:
         if source == destination:
             raise ValueError("--replay-csv and --dataset-csv must be different files")
     dynamics_statistical_mode = (
-        getattr(args, "target", "awsim") == "dynamics"
+        supports_iid_sampling(getattr(args, "target", "awsim"))
         and getattr(args, "mode", "explore")
         in {"binomial_ci", "sprt", "dkw", "dkw_fixed", "ebstop"}
     )
@@ -712,9 +732,9 @@ def validate_args(args: argparse.Namespace) -> None:
     if getattr(args, "target", "awsim") == "dynamics" and getattr(args, "case_kind", "uturn") != "uturn":
         raise ValueError("target=dynamics currently supports only --case-kind uturn")
     if dynamics_statistical_mode and getattr(args, "max_samples", None) is None:
-        raise ValueError("dynamics statistical sampling requires --max-samples")
+        raise ValueError(f"{args.target} statistical sampling requires --max-samples")
     if dynamics_statistical_mode and getattr(args, "dataset_csv", None) is None:
-        raise ValueError("dynamics statistical sampling requires --dataset-csv")
+        raise ValueError(f"{args.target} statistical sampling requires --dataset-csv")
     prism_sampling_mode = (
         getattr(args, "target", "awsim") == "prism"
         and simulation_mode
@@ -903,11 +923,26 @@ def validate_args(args: argparse.Namespace) -> None:
         raise ValueError("AWSIM-only direct execution options are not supported for non-awsim targets")
 
 
+def _validate_stopping_rule(args: argparse.Namespace) -> None:
+    from orchestration.composed_strategy import RULE_MODES
+
+    rule = getattr(args, "stopping_rule", "legacy")
+    if rule == "legacy":
+        return
+    if getattr(args, "mode", "explore") not in RULE_MODES[rule]:
+        raise ValueError(
+            f"--stopping-rule {rule} needs --mode {'/'.join(sorted(RULE_MODES[rule]))}, got {args.mode}"
+        )
+    if getattr(args, "max_samples", None) is None:
+        raise ValueError(f"--stopping-rule {rule} requires --max-samples")
+
+
 def normalize_args(
     args: argparse.Namespace,
     *,
     argv: Sequence[str] | None = None,
 ) -> argparse.Namespace:
+    apply_target_defaults(args)
     raw_argv = list(argv) if argv is not None else []
     explicit_config_module = "--config-module" in raw_argv
     explicit_focus_points = "--focus_points" in raw_argv
@@ -923,26 +958,30 @@ def normalize_args(
                 "prism"
             ).binary_metric
         if getattr(args, "config_module", None) is None:
-            args.config_module = (
-                "scenario_specs.uturn"
-                if getattr(args, "target", "") == "dynamics"
-                else f"targets.awsim.case_kinds.{args.case_kind}"
-            )
+            args.config_module = default_config_module(args.target, args.case_kind)
         if (
-            getattr(args, "target", "") == "dynamics"
+            supports_iid_sampling(getattr(args, "target", ""))
             and getattr(args, "mode", "explore")
             in {"binomial_ci", "sprt", "dkw", "dkw_fixed", "ebstop"}
         ):
             from orchestration.random_parameter_sampling import normalize_input_distribution
-            from scenario_specs.uturn import PARAM_RANGES
 
             raw_distribution = getattr(args, "dynamics_input_distribution", None)
             if raw_distribution is None:
                 fixed = parse_param_assignments(getattr(args, "params", []))
+                if args.target == "dynamics":
+                    from scenario_specs.uturn import PARAM_RANGES
+
+                    default_distribution = {
+                        key: {"distribution": "uniform", "min": lower, "max": upper}
+                        for key, (lower, upper) in PARAM_RANGES.items()
+                    }
+                else:
+                    default_distribution = dict(
+                        load_statistical_target_profile(args.target).default_input_distribution or {}
+                    )
                 raw_distribution = {
-                    key: {"distribution": "uniform", "min": lower, "max": upper}
-                    for key, (lower, upper) in PARAM_RANGES.items()
-                    if key not in fixed
+                    key: value for key, value in default_distribution.items() if key not in fixed
                 }
             else:
                 try:
@@ -1080,6 +1119,7 @@ def build_orchestrator_config(args: argparse.Namespace) -> OrchestratorConfig:
         binomial_target_width=getattr(args, "binomial_target_width", 0.02),
         binomial_min_samples=getattr(args, "binomial_min_samples", None),
         binomial_anytime_valid=getattr(args, "binomial_anytime_valid", False),
+        stopping_rule=getattr(args, "stopping_rule", "legacy"),
         sprt_target=getattr(args, "sprt_target", "c_collision"),
         sprt_p0=getattr(args, "sprt_p0", 0.1),
         sprt_p1=getattr(args, "sprt_p1", 0.01),
@@ -1119,13 +1159,14 @@ def run_orchestrator(
     orchestrator = Orchestrator(queue=queue)
     summary = orchestrator.run(build_orchestrator_config(args))
     if (
-        args.target == "dynamics"
+        supports_iid_sampling(args.target)
         and args.mode in {"binomial_ci", "sprt", "dkw", "dkw_fixed", "ebstop"}
     ):
         artifact_path = Path(f"{Path(args.output).expanduser()}.summary.json").resolve()
         artifact_path.parent.mkdir(parents=True, exist_ok=True)
         summary["statistical_artifact"] = str(artifact_path)
-        summary["dynamics_decision_mode"] = args.dynamics_decision_mode
+        if args.target == "dynamics":
+            summary["dynamics_decision_mode"] = args.dynamics_decision_mode
         artifact_path.write_text(
             json.dumps(summary, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",

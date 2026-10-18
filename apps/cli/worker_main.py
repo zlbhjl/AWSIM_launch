@@ -31,7 +31,12 @@ from runtime.cluster.result_sink import (
 from runtime.repository.local_history import LocalHistory
 from runtime.container.profile import SUPPORTED_CONTAINER_PROFILES
 from runtime.container.gpu_health import probe_nvidia_smi
-from targets.registry import build_target_components
+from targets.registry import (
+    apply_target_defaults,
+    build_target_components,
+    default_config_module,
+    list_target_names,
+)
 from targets.awsim.case_kinds import (
     SUPPORTED_SCENARIO_PROFILES,
     build_default_case_kind_module_name,
@@ -171,7 +176,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Path to the JSONL file where EvaluationRecord rows are appended.",
     )
     parser.add_argument("--case-id", default=None, help="Override case id. Defaults to fixture stem.")
-    parser.add_argument("--case-kind", default="uturn", help="Case kind label.")
+    parser.add_argument(
+        "--case-kind",
+        default=None,
+        help="Case kind label (default: the target's default, uturn for awsim/dynamics/prism).",
+    )
     parser.add_argument(
         "--type",
         dest="legacy_type",
@@ -187,7 +196,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--target",
         default="awsim",
-        choices=["awsim", "bbsl", "dynamics", "prism"],
+        choices=list_target_names(),
         help="Target name for the worker.",
     )
     parser.add_argument(
@@ -317,6 +326,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def validate_args(args: argparse.Namespace) -> None:
+    apply_target_defaults(args)
     fixture_mode = bool(args.fixture)
     simulation_mode = bool(args.params)
     queue_mode = bool(args.queue_actor_name)
@@ -384,6 +394,7 @@ def normalize_args(
     *,
     argv: Sequence[str] | None = None,
 ) -> argparse.Namespace:
+    apply_target_defaults(args)
     raw_argv = list(argv) if argv is not None else []
     explicit_case_kind = "--case-kind" in raw_argv
     explicit_config_module = "--config-module" in raw_argv
@@ -392,11 +403,7 @@ def normalize_args(
 
     if args.target != "awsim":
         if args.config_module is None:
-            args.config_module = (
-                "scenario_specs.uturn"
-                if args.target == "dynamics"
-                else "targets.awsim.case_kinds.uturn"
-            )
+            args.config_module = default_config_module(args.target, args.case_kind)
         return args
 
     if (

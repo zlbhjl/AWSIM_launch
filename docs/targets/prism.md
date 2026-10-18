@@ -12,7 +12,7 @@ PRISMは車両シナリオの代替ではなく、**AWSIM_launchが使ってい�
 
 2026-09-15に21・22・23・24号機の実クラスタで、40本疎通試験および基準+4条件(各200〜500本、95% Wilson CI幅0.10で逐次停止)を実行して検証済みです。検証中に見つかったRay head/Pythonバージョン/JSON出力まわりの不具合と、条件ごとの結果は[PRISM対応計画の「16. 実クラスタ検証結果」](../prism_integration_plan.md#16-実クラスタ検証結果-2026-09-15)を参照してください。
 
-上記5条件はいずれも「厳密確率が95%CIに含まれたか」を1回ずつ確認したものであり、CIの被覆率(理論上95%であるべき割合)そのものを検証したものではありません。被覆率を実際に検証するには、同一条件・同一パラメータで実験全体(逐次サンプリング+CI計算)を数百〜数千回繰り返し、厳密確率がCIに含まれた割合が95%に近いかを集計する実験が必要です。PRISMは厳密確率を毎回同じ値で即座に計算できるため、この規模の繰り返し実験もAWSIM側では不可能な検証としてPRISM対象でのみ実行可能です。現時点では未実施で、今後の検証候補です。
+上記5条件はいずれも「厳密確率が95%CIに含まれたか」を1回ずつ確認したものであり、CIの被覆率(理論上95%であるべき割合)そのものを検証したものではありません。被覆率を実際に検証するには、同一条件・同一パラメータで実験全体(逐次サンプリング+CI計算)を数百〜数千回繰り返し、真の値がCIに含まれた割合が95%に近いかを集計する実験が必要です。この実験は、真の値が式で分かる対象 `bernoulli` で、各統計手法について2,000回ずつ行いました([被覆率の検証](../validation/coverage.md))。統計評価と停止判定はPRISMとも共通なので、その結果はPRISMにも当てはまります。
 
 ```bash
 docker build \
@@ -212,8 +212,9 @@ found during validation and the per-condition results, see
 Each of these five conditions checked once whether the exact probability fell inside the 95% CI; this does not validate the CI
 coverage itself (the fraction that should be 95% in theory). Validating coverage requires repeating the whole experiment (sequential
 sampling plus CI computation) hundreds to thousands of times under the same conditions and counting how often the CI contains the
-exact probability. Because PRISM computes the exact probability instantly and identically every time, such repeated experiments are
-possible only with the PRISM target, not with AWSIM. This has not been done yet and is a candidate for future validation.
+true value. This was done with 2,000 repetitions per statistical method on `bernoulli`, a target whose true values are known exactly
+([coverage validation](../validation/coverage.md#english)). The statistical evaluation and stopping logic are shared with PRISM, so the
+results also apply to PRISM.
 
 ```bash
 docker build \

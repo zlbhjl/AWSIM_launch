@@ -95,6 +95,10 @@ Clopper–Pearson区間は近似を使わず直接計算するため、名目の
 (`dkw` / `approximate_sequential` / `approximate_sequential_kde` / `none_mixed_samples`)。
 `dkw` 以外の場合は、実行時に1回だけ注意が表示される。
 
+真の値が分かる対象で測った被覆率 (2,000回のくり返し) は、逐次の `dkw` が 82.6〜85.9%、1回だけ評価する `dkw_fixed` が 100% だった
+([validation/coverage.md](validation/coverage.md))。保証が必要な場合は、`--stopping-rule dkw_fixed_strict` (1回だけ評価) または
+`dkw_sequential_anytime` (評価のたびに誤り率を割り振る) を使う。どちらも被覆率 100% を確認している。
+
 **経験的Bernstein停止則(Empirical Bernstein Stopping)**(連続値・カウントの区間推定、相対
 誤差): DKWと同じく連続値・カウント指標が対象だが、目標が絶対誤差でなく相対誤差である点が異なる。
 実測した分散を使って停止判定するため、真の分散が小さい指標ほど少ないサンプル数で収束できる。
@@ -224,6 +228,11 @@ samples are drawn uniformly and independently from the target distribution and a
 Each evaluation records which of these applies in `diagnostics.guarantee`
 (`dkw` / `approximate_sequential` / `approximate_sequential_kde` / `none_mixed_samples`).
 If it is not `dkw`, a notice is printed once at run time.
+
+Coverage measured on a target with known truth (2,000 repetitions) was 82.6–85.9% for sequential `dkw` and 100% for `dkw_fixed`
+evaluated once ([validation/coverage.md](validation/coverage.md#english)). When a guarantee is required, use
+`--stopping-rule dkw_fixed_strict` (one evaluation) or `dkw_sequential_anytime` (an error budget spent at each evaluation); both reached
+100% coverage.
 
 **Empirical Bernstein Stopping** (interval estimation for continuous or count metrics, relative error): like DKW, it targets continuous
 or count metrics, but the target is a relative error rather than an absolute one. It stops based on the observed variance, so metrics

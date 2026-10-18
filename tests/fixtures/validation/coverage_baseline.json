@@ -1,0 +1,224 @@
+{
+ "binomial_cp_fixed_n100_p0.05:20261018": {
+  "correct": true,
+  "estimate": 0.03,
+  "interval": [
+   0.006229972,
+   0.085176053
+  ],
+  "sample_count": 100,
+  "verdict": null
+ },
+ "binomial_cp_fixed_n100_p0.05:20261019": {
+  "correct": true,
+  "estimate": 0.04,
+  "interval": [
+   0.011004494,
+   0.099257157
+  ],
+  "sample_count": 100,
+  "verdict": null
+ },
+ "binomial_cp_fixed_n100_p0.05:20261020": {
+  "correct": true,
+  "estimate": 0.08,
+  "interval": [
+   0.035171563,
+   0.151557636
+  ],
+  "sample_count": 100,
+  "verdict": null
+ },
+ "binomial_wilson_seq_w0.1_p0.2:20261018": {
+  "correct": true,
+  "estimate": 0.183406114,
+  "interval": [
+   0.138647481,
+   0.238611188
+  ],
+  "sample_count": 229,
+  "verdict": null
+ },
+ "binomial_wilson_seq_w0.1_p0.2:20261019": {
+  "correct": true,
+  "estimate": 0.238267148,
+  "interval": [
+   0.191893365,
+   0.291801098
+  ],
+  "sample_count": 277,
+  "verdict": null
+ },
+ "binomial_wilson_seq_w0.1_p0.2:20261020": {
+  "correct": true,
+  "estimate": 0.244680851,
+  "interval": [
+   0.19815727,
+   0.298066964
+  ],
+  "sample_count": 282,
+  "verdict": null
+ },
+ "dkw_iid_eps0.15:20261018": {
+  "correct": true,
+  "estimate": 0.015952362,
+  "interval": [
+   0.004251454,
+   0.149678202
+  ],
+  "sample_count": 60,
+  "verdict": null
+ },
+ "dkw_iid_eps0.15:20261019": {
+  "correct": true,
+  "estimate": 0.034941103,
+  "interval": [
+   0.001364701,
+   0.14818954
+  ],
+  "sample_count": 181,
+  "verdict": null
+ },
+ "dkw_iid_eps0.15:20261020": {
+  "correct": true,
+  "estimate": 0.023809954,
+  "interval": [
+   0.003531993,
+   0.137514506
+  ],
+  "sample_count": 85,
+  "verdict": null
+ },
+ "dkw_runner_seq_eps0.15:20261018": {
+  "correct": true,
+  "estimate": 0.067761415,
+  "interval": [
+   0.000663217,
+   0.149678202
+  ],
+  "sample_count": 402,
+  "verdict": null
+ },
+ "dkw_runner_seq_eps0.15:20261019": {
+  "correct": true,
+  "estimate": 0.036711932,
+  "interval": [
+   0.001364701,
+   0.14818954
+  ],
+  "sample_count": 173,
+  "verdict": null
+ },
+ "dkw_runner_seq_eps0.15:20261020": {
+  "correct": true,
+  "estimate": 0.062017109,
+  "interval": [
+   0.009888351,
+   0.137514506
+  ],
+  "sample_count": 70,
+  "verdict": null
+ },
+ "dkw_runner_seq_kde_explore300:20261018": {
+  "correct": false,
+  "estimate": 0.003434774,
+  "interval": [
+   2.242e-06,
+   0.032327536
+  ],
+  "sample_count": 0,
+  "verdict": null
+ },
+ "dkw_runner_seq_kde_explore300:20261019": {
+  "correct": false,
+  "estimate": 0.005432658,
+  "interval": [
+   3.5564e-05,
+   0.043786831
+  ],
+  "sample_count": 0,
+  "verdict": null
+ },
+ "dkw_runner_seq_kde_explore300:20261020": {
+  "correct": false,
+  "estimate": 0.004223514,
+  "interval": [
+   4.4059e-05,
+   0.035995916
+  ],
+  "sample_count": 0,
+  "verdict": null
+ },
+ "rule_binomial_fixed_strict_n100_p0.05:20261018": {
+  "correct": true,
+  "estimate": 0.03,
+  "interval": [
+   0.006229972,
+   0.085176053
+  ],
+  "sample_count": 100,
+  "verdict": null
+ },
+ "rule_binomial_fixed_strict_n100_p0.05:20261019": {
+  "correct": true,
+  "estimate": 0.04,
+  "interval": [
+   0.011004494,
+   0.099257157
+  ],
+  "sample_count": 100,
+  "verdict": null
+ },
+ "rule_binomial_fixed_strict_n100_p0.05:20261020": {
+  "correct": true,
+  "estimate": 0.08,
+  "interval": [
+   0.035171563,
+   0.151557636
+  ],
+  "sample_count": 100,
+  "verdict": null
+ },
+ "rule_sprt_wald_true_p0:20261018": {
+  "correct": true,
+  "estimate": 0.097560976,
+  "interval": null,
+  "sample_count": 164,
+  "verdict": "h0"
+ },
+ "rule_sprt_wald_true_p0:20261019": {
+  "correct": true,
+  "estimate": 0.12195122,
+  "interval": null,
+  "sample_count": 82,
+  "verdict": "h0"
+ },
+ "rule_sprt_wald_true_p0:20261020": {
+  "correct": true,
+  "estimate": 0.173913043,
+  "interval": null,
+  "sample_count": 46,
+  "verdict": "h0"
+ },
+ "sprt_true_p1:20261018": {
+  "correct": true,
+  "estimate": 0.014492754,
+  "interval": null,
+  "sample_count": 69,
+  "verdict": "h1"
+ },
+ "sprt_true_p1:20261019": {
+  "correct": true,
+  "estimate": 0.040322581,
+  "interval": null,
+  "sample_count": 124,
+  "verdict": "h1"
+ },
+ "sprt_true_p1:20261020": {
+  "correct": false,
+  "estimate": 0.100671141,
+  "interval": null,
+  "sample_count": 149,
+  "verdict": "h0"
+ }
+}

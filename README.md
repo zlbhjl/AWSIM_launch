@@ -18,6 +18,7 @@ A generic statistical verification framework that runs the system under test dir
 | `dynamics` | AWSIM の U ターンと同じ入力を ODE/SDE で計算する連続ダイナミクスモデル | Python のみ |
 | `prism` | PRISM の確率モデル (DTMC) の経路を Maude で判定 | Docker (CPU のみ) |
 | `bbsl` | 画像認識の検証結果 ([BBSL-test](https://github.com/IOKENTOI/BBSL-test)) を FT4D で評価 | BBSL-test |
+| `bernoulli` | 真の確率・分位点・平均が分かる最小の対象 (統計評価の検証と、拡張の例) | Python のみ |
 
 ## 特徴
 
@@ -174,6 +175,8 @@ python3 run_orchestrator_cluster_v2.py \
 - DKW 不等式の保証が成り立つのは、**`--mode dkw_fixed` を一様な標本だけで 1 回評価する場合**です (`--dkw-pure-smc`、または過去の探索データを引き継がない新規実行)。標本数は事前に n ≥ ln(2/δ)/(2ε²) で決めます (例: ε = 0.02、δ = 0.05 で n ≥ 4,611)。
 - `--mode dkw` (逐次) は、新しい標本ごとに区間を確認しますが、誤り率はステージ単位でしか配分していないため近似です。`--dkw-pure-smc` を付けないと、探索データを KDE で推定した重みで再利用するので、さらに近似が重なります。
 - 各評価の `diagnostics.guarantee` に、保証の種類 (`dkw` / `approximate_sequential` / `approximate_sequential_kde` / `none_mixed_samples`) が記録されます。
+- `--stopping-rule` で、評価のタイミングと保証が明確な統計アルゴリズムを選べます (`binomial_ci_fixed_strict`、`binomial_ci_sequential_anytime`、`dkw_fixed_strict`、`dkw_sequential_anytime`、`sprt_wald`、`ebstop_anytime`)。既定は今までどおりの動作 (`legacy`) です。IID 型の対象と PRISM の固定パラメータで使えます。
+- 真の値が分かる対象で、各手法の被覆率を 2,000 回のくり返しで測りました。逐次の DKW (legacy) は 82.6〜85.9% で約束 (95%) を下回り、新しいルールはすべて満たしました ([docs/validation/coverage.md](docs/validation/coverage.md))。
 
 ### 重点サンプリング
 
@@ -233,6 +236,8 @@ ROS・AWSIM・GPU は不要です。AW-CheckerPy や AW-Runtime-Monitor が必�
 | [docs/cluster_operations.md](docs/cluster_operations.md) | AWSIM クラスターの運用 (container profile、自動復旧、timeout、監視、可視化) |
 | [docs/autoware_versions.md](docs/autoware_versions.md) | Autoware 1.8.0 / 1.9.0 の既知事項 (EKF 診断による誤 MRM) |
 | [docs/scenario_authoring.md](docs/scenario_authoring.md) | AWSIM シナリオの追加方法と調整 |
+| [docs/extending.md](docs/extending.md) | 検証対象・判定器・統計手法の追加方法 (例: `bernoulli`) |
+| [docs/validation/coverage.md](docs/validation/coverage.md) | 統計評価の被覆率の検証 (真の値が分かる対象で) |
 | [docs/targets/dynamics.md](docs/targets/dynamics.md) | ODE/SDE 対象、AWSIM との比較、校正 |
 | [docs/targets/prism.md](docs/targets/prism.md) | PRISM / Maude 対象 |
 | [docs/targets/bbsl_ft4d.md](docs/targets/bbsl_ft4d.md) | BBSL / FT4D 連携 |
@@ -301,6 +306,7 @@ DKW, SPRT, EBStop) are shared.
 | `dynamics` | Continuous dynamics (ODE/SDE) with the same inputs as the AWSIM U-turn scenario | Python only |
 | `prism` | Paths of a PRISM probabilistic model (DTMC) judged by Maude | Docker (CPU only) |
 | `bbsl` | Evaluates image-recognition test results ([BBSL-test](https://github.com/IOKENTOI/BBSL-test)) with FT4D | BBSL-test |
+| `bernoulli` | A minimal target with exactly known probability, quantile, and mean (for validating the statistics and as an extension example) | Python only |
 
 ## Features
 
@@ -464,6 +470,11 @@ Notes on statistical guarantees:
   approximation.
 - Each evaluation records the kind of guarantee in `diagnostics.guarantee` (`dkw` / `approximate_sequential` /
   `approximate_sequential_kde` / `none_mixed_samples`).
+- `--stopping-rule` selects a statistical algorithm with an explicit evaluation schedule and guarantee (`binomial_ci_fixed_strict`,
+  `binomial_ci_sequential_anytime`, `dkw_fixed_strict`, `dkw_sequential_anytime`, `sprt_wald`, `ebstop_anytime`). The default (`legacy`)
+  keeps the current behavior. It works with IID-sampling targets and PRISM fixed parameters.
+- The coverage of each method was measured with 2,000 repetitions on a target with known truth. Sequential DKW (legacy) reached only
+  82.6–85.9%, below the promised 95%; all new rules met it ([docs/validation/coverage.md](docs/validation/coverage.md)).
 
 ### Importance sampling
 
@@ -525,6 +536,8 @@ ROS, AWSIM, and a GPU are not needed. Tests that need AW-CheckerPy or AW-Runtime
 | [docs/cluster_operations.md](docs/cluster_operations.md) | Operating an AWSIM cluster (container profiles, automatic recovery, timeouts, monitoring, plotting) |
 | [docs/autoware_versions.md](docs/autoware_versions.md) | Known issues with Autoware 1.8.0 / 1.9.0 (false MRM triggered by EKF diagnostics) |
 | [docs/scenario_authoring.md](docs/scenario_authoring.md) | Adding and tuning AWSIM scenarios |
+| [docs/extending.md](docs/extending.md) | Adding a target, a judge, or a statistical method (example: `bernoulli`) |
+| [docs/validation/coverage.md](docs/validation/coverage.md) | Coverage validation of the statistical evaluation (on a target with known truth) |
 | [docs/targets/dynamics.md](docs/targets/dynamics.md) | The ODE/SDE target, comparison with AWSIM, calibration |
 | [docs/targets/prism.md](docs/targets/prism.md) | The PRISM / Maude target |
 | [docs/targets/bbsl_ft4d.md](docs/targets/bbsl_ft4d.md) | BBSL / FT4D integration |

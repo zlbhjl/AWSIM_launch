@@ -1235,7 +1235,7 @@ def test_orchestrator_runs_prism_dkw_fixed_dispatches_all_samples_then_evaluates
 
 
 def test_dynamics_decision_modes_map_to_binary_metrics() -> None:
-    from orchestration.orchestrator import DYNAMICS_DECISION_METRICS
+    from targets.dynamics.plugin import DYNAMICS_DECISION_METRICS
 
     assert DYNAMICS_DECISION_METRICS == {
         "judgment": "c_collision",

@@ -11,6 +11,7 @@ STATISTICAL_TARGET_PROFILE = StatisticalTargetProfile(
     region="custom",
     region_policy_name="passthrough",
     minimum_dkw_value=0.0,
+    iid_sampling=True,
 )
 
 

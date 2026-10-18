@@ -23,9 +23,16 @@ from runtime.cluster.ray_queue import TaskQueue
 from runtime.cluster.task_queue_gateway import TaskQueueGateway
 from runtime.repository.statistical_history import StatisticalHistoryRepository
 from runtime.repository.strategy_dataset import StrategyDatasetRepository
+from targets.registry import get_target_plugin
 from targets.statistical import (
     build_statistical_region_policy,
     load_statistical_target_profile,
+)
+from orchestration.strategy_registry import (
+    SELF_TERMINATING_STRATEGIES,
+    check_strategy,
+    select_strategy_name,
+    strategy_builder,
 )
 from .resume import ResumeConfig, ResumeService
 from .replay import ReplayCsvStrategy, ReplayCsvStrategyConfig
@@ -46,13 +53,35 @@ from .random_parameter_sampling import (
 )
 
 
-# Binary metric per dynamics decision mode.  "judgment" uses the physical
-# overlap (AWSIM-substitute use); "screening" uses the calibrated clearance
-# margin so that candidates are re-validated in AWSIM.
-DYNAMICS_DECISION_METRICS = {
-    "judgment": "c_collision",
-    "screening": "c_screening_candidate",
-}
+def _target_plugin(target: str) -> object | None:
+    try:
+        return get_target_plugin(target)
+    except ValueError:
+        return None
+
+
+def _fixed_parameter_reason_prefix(target: str) -> str:
+    return str(getattr(_target_plugin(target), "fixed_parameter_reason_prefix", f"{target.upper()}_FIXED_SAMPLING"))
+
+
+def _runs_model_check_once(target: str) -> bool:
+    return bool(getattr(_target_plugin(target), "run_model_check_once", False))
+
+
+def _iid_statistical_metrics(config: "OrchestratorConfig") -> dict[str, object]:
+    """Metrics for the IID statistical modes: the target's own hook, else its profile."""
+    hook = getattr(_target_plugin(config.target), "iid_statistical_metrics", None)
+    if callable(hook):
+        return dict(hook(config))
+    # Global CLI defaults (c_collision / min_ttc) fall back to the target's own metrics.
+    profile = load_statistical_target_profile(config.target)
+    return {
+        "binary": profile.binary_metric if config.binomial_target == "c_collision" else config.binomial_target,
+        "sprt": profile.binary_metric if config.sprt_target == "c_collision" else config.sprt_target,
+        "dkw": profile.dkw_metric,
+        "ebstop": profile.resolved_ebstop_metric if config.ebstop_target == "min_ttc" else config.ebstop_target,
+        "minimum_dkw_value": profile.minimum_dkw_value,
+    }
 
 
 @dataclass(frozen=True)
@@ -103,6 +132,8 @@ class OrchestratorConfig:
     binomial_target_width: float = 0.02
     binomial_min_samples: int | None = None
     binomial_anytime_valid: bool = False
+    # Stopping rule from evaluation.stopping_rules; "legacy" keeps the mode's own stopping logic.
+    stopping_rule: str = "legacy"
     sprt_target: str = "c_collision"
     sprt_p0: float = 0.1
     sprt_p1: float = 0.01
@@ -495,33 +526,28 @@ class Orchestrator:
         | ActiveLearningStrategist
         | FixedParameterSamplingStrategy
     ):
-        if config.fixture is not None:
-            return FixedCaseStrategy(
-                FixedCaseStrategyConfig(
-                    fixture=config.fixture,
-                    case_id=config.case_id,
-                    case_kind=config.case_kind,
-                    target=config.target,
-                    reason=config.reason,
-                    tags=list(config.tags),
-                )
+        if config.fixture is None:
+            check_strategy(config)
+        return strategy_builder(select_strategy_name(config))(self, config)
+
+    def _build_fixture_strategy(self, config: OrchestratorConfig) -> FixedCaseStrategy:
+        return FixedCaseStrategy(
+            FixedCaseStrategyConfig(
+                fixture=config.fixture,
+                case_id=config.case_id,
+                case_kind=config.case_kind,
+                target=config.target,
+                reason=config.reason,
+                tags=list(config.tags),
             )
+        )
 
-        if (
-            config.target == "dynamics"
-            and config.run_mode in {"binomial_ci", "sprt", "dkw", "dkw_fixed", "ebstop"}
-        ):
+    def _build_fixed_parameter_sampling_strategy(
+        self, config: OrchestratorConfig
+    ) -> FixedParameterSamplingStrategy:
+        if config.run_mode == "binomial_ci":
             if config.max_samples is None:
-                raise ValueError("dynamics statistical sampling requires max_samples")
-            return self._build_dynamics_sampling_strategy(config)
-
-        if (
-            config.target == "prism"
-            and config.params
-            and config.run_mode == "binomial_ci"
-        ):
-            if config.max_samples is None:
-                raise ValueError("PRISM fixed sampling requires max_samples")
+                raise ValueError(f"{config.target.upper()} fixed sampling requires max_samples")
             dataset_repository = self._build_dataset_repository(config)
             min_samples = (
                 int(config.binomial_min_samples)
@@ -536,9 +562,9 @@ class Orchestrator:
                     max_samples=int(config.max_samples),
                     experiment_id=config.experiment_id,
                     case_id_prefix=config.case_id,
-                    reason_prefix="PRISM_FIXED_SAMPLING",
+                    reason_prefix=_fixed_parameter_reason_prefix(config.target),
                     tags=tuple(config.tags),
-                    run_model_check_once=True,
+                    run_model_check_once=_runs_model_check_once(config.target),
                 ),
                 dataset_repository=dataset_repository,
                 statistical_service=BinomialCIService(),
@@ -556,14 +582,9 @@ class Orchestrator:
                     },
                 ),
             )
-
-        if (
-            config.target == "prism"
-            and config.params
-            and config.run_mode == "sprt"
-        ):
+        if config.run_mode == "sprt":
             if config.max_samples is None:
-                raise ValueError("PRISM fixed sampling requires max_samples")
+                raise ValueError(f"{config.target.upper()} fixed sampling requires max_samples")
             dataset_repository = self._build_dataset_repository(config)
             min_samples = (
                 int(config.sprt_min_samples)
@@ -578,9 +599,9 @@ class Orchestrator:
                     max_samples=int(config.max_samples),
                     experiment_id=config.experiment_id,
                     case_id_prefix=config.case_id,
-                    reason_prefix="PRISM_FIXED_SAMPLING",
+                    reason_prefix=_fixed_parameter_reason_prefix(config.target),
                     tags=tuple(config.tags),
-                    run_model_check_once=True,
+                    run_model_check_once=_runs_model_check_once(config.target),
                 ),
                 dataset_repository=dataset_repository,
                 statistical_service=SPRTService(),
@@ -598,14 +619,9 @@ class Orchestrator:
                     },
                 ),
             )
-
-        if (
-            config.target == "prism"
-            and config.params
-            and config.run_mode == "ebstop"
-        ):
+        if config.run_mode == "ebstop":
             if config.max_samples is None:
-                raise ValueError("PRISM fixed sampling requires max_samples")
+                raise ValueError(f"{config.target.upper()} fixed sampling requires max_samples")
             dataset_repository = self._build_dataset_repository(config)
             return FixedParameterSamplingStrategy(
                 FixedParameterSamplingStrategyConfig(
@@ -615,9 +631,9 @@ class Orchestrator:
                     max_samples=int(config.max_samples),
                     experiment_id=config.experiment_id,
                     case_id_prefix=config.case_id,
-                    reason_prefix="PRISM_FIXED_SAMPLING",
+                    reason_prefix=_fixed_parameter_reason_prefix(config.target),
                     tags=tuple(config.tags),
-                    run_model_check_once=True,
+                    run_model_check_once=_runs_model_check_once(config.target),
                 ),
                 dataset_repository=dataset_repository,
                 statistical_service=EBStopService(),
@@ -633,108 +649,92 @@ class Orchestrator:
                     },
                 ),
             )
+        raise ValueError(f"fixed parameter sampling does not support --mode {config.run_mode!r}")
 
-        if (
-            config.target == "prism"
-            and config.params
-            and config.run_mode in ("dkw", "dkw_fixed")
-        ):
-            if config.max_samples is None:
-                raise ValueError("PRISM fixed sampling requires max_samples")
-            dataset_repository = self._build_dataset_repository(config)
-            dkw_service = _RecordingDKWService(DKWService())
-            dkw_mode_runner = DKWModeRunner.from_runtime_config(
-                param_names=[],
-                target_metric=config.prism_dkw_target_metric,
-                target_metrics=[config.prism_dkw_target_metric],
-                total_delta=1.0 - config.prism_dkw_confidence,
-                target_epsilon=config.prism_dkw_target_epsilon,
-                base_samples=config.prism_dkw_base_samples,
-                region="custom",
-                pure_smc=True,
-                simultaneous=False,
-                max_samples=int(config.max_samples),
-                dkw_service=dkw_service,
+    def _build_fixed_parameter_dkw_strategy(self, config: OrchestratorConfig) -> PrismDkwSamplingStrategy:
+        if config.max_samples is None:
+            raise ValueError(f"{config.target.upper()} fixed sampling requires max_samples")
+        dataset_repository = self._build_dataset_repository(config)
+        dkw_service = _RecordingDKWService(DKWService())
+        dkw_mode_runner = DKWModeRunner.from_runtime_config(
+            param_names=[],
+            target_metric=config.prism_dkw_target_metric,
+            target_metrics=[config.prism_dkw_target_metric],
+            total_delta=1.0 - config.prism_dkw_confidence,
+            target_epsilon=config.prism_dkw_target_epsilon,
+            base_samples=config.prism_dkw_base_samples,
+            region="custom",
+            pure_smc=True,
+            simultaneous=False,
+            max_samples=int(config.max_samples),
+            dkw_service=dkw_service,
+            case_kind=config.case_kind,
+        )
+        return PrismDkwSamplingStrategy(
+            FixedParameterSamplingStrategyConfig(
+                target=config.target,
                 case_kind=config.case_kind,
+                params=dict(config.params),
+                max_samples=int(config.max_samples),
+                experiment_id=config.experiment_id,
+                case_id_prefix=config.case_id,
+                reason_prefix=_fixed_parameter_reason_prefix(config.target),
+                tags=tuple(config.tags),
+                run_model_check_once=_runs_model_check_once(config.target),
+            ),
+            dataset_repository=dataset_repository,
+            dkw_mode_runner=dkw_mode_runner,
+            sequential=(config.run_mode == "dkw"),
+        )
+
+    def _build_parameter_case_strategy(self, config: OrchestratorConfig) -> ParameterCaseStrategy:
+        return ParameterCaseStrategy(
+            ParameterCaseStrategyConfig(
+                params=dict(config.params),
+                case_id=config.case_id,
+                case_kind=config.case_kind,
+                target=config.target,
+                reason=config.reason,
+                tags=list(config.tags),
+                scenario_type=config.scenario_type,
+                simulation_output_dir=config.simulation_output_dir,
+                expected_trace_path=config.expected_trace_path,
+                local_loop_num=config.local_loop_num,
             )
-            return PrismDkwSamplingStrategy(
-                FixedParameterSamplingStrategyConfig(
-                    target=config.target,
-                    case_kind=config.case_kind,
-                    params=dict(config.params),
-                    max_samples=int(config.max_samples),
-                    experiment_id=config.experiment_id,
-                    case_id_prefix=config.case_id,
-                    reason_prefix="PRISM_FIXED_SAMPLING",
-                    tags=tuple(config.tags),
-                    run_model_check_once=True,
+        )
+
+    def _build_replay_strategy(self, config: OrchestratorConfig) -> ReplayCsvStrategy:
+        strategy_config = importlib.import_module(config.config_module)
+        case_definition = self._load_replay_case_definition(
+            strategy_config,
+            config.case_kind,
+        )
+        input_types = dict(case_definition.get("fixed_params", {}))
+        for name, bounds in dict(case_definition.get("param_ranges", {})).items():
+            if name in input_types:
+                continue
+            try:
+                input_types[name] = float(bounds[0])
+            except (KeyError, TypeError, IndexError, ValueError):
+                input_types[name] = ""
+        return ReplayCsvStrategy(
+            ReplayCsvStrategyConfig(
+                source_csv=config.replay_csv,
+                input_types=input_types,
+                case_kind=config.case_kind,
+                scenario_type=str(
+                    case_definition.get("scenario_type", config.case_kind)
                 ),
-                dataset_repository=dataset_repository,
-                dkw_mode_runner=dkw_mode_runner,
-                sequential=(config.run_mode == "dkw"),
+                target=config.target,
+                reason_pattern=config.replay_reason_pattern,
+                expected_count=config.replay_expected_count,
+                completed_source_loop_nums=frozenset(
+                    self._load_completed_replay_source_loops(config)
+                ),
             )
+        )
 
-        if config.params and config.target == "prism" and config.run_mode not in (
-            "explore",
-            "binomial_ci",
-            "sprt",
-            "ebstop",
-            "dkw",
-            "dkw_fixed",
-        ):
-            raise ValueError(
-                f"target=prism has no live execution path for --mode {config.run_mode!r} "
-                "(only explore/binomial_ci/sprt/ebstop/dkw/dkw_fixed are wired to a real "
-                "PRISM strategy); refusing to silently fall back to a single one-off case"
-            )
-
-        if config.params:
-            return ParameterCaseStrategy(
-                ParameterCaseStrategyConfig(
-                    params=dict(config.params),
-                    case_id=config.case_id,
-                    case_kind=config.case_kind,
-                    target=config.target,
-                    reason=config.reason,
-                    tags=list(config.tags),
-                    scenario_type=config.scenario_type,
-                    simulation_output_dir=config.simulation_output_dir,
-                    expected_trace_path=config.expected_trace_path,
-                    local_loop_num=config.local_loop_num,
-                )
-            )
-
-        if config.replay_csv is not None:
-            strategy_config = importlib.import_module(config.config_module)
-            case_definition = self._load_replay_case_definition(
-                strategy_config,
-                config.case_kind,
-            )
-            input_types = dict(case_definition.get("fixed_params", {}))
-            for name, bounds in dict(case_definition.get("param_ranges", {})).items():
-                if name in input_types:
-                    continue
-                try:
-                    input_types[name] = float(bounds[0])
-                except (KeyError, TypeError, IndexError, ValueError):
-                    input_types[name] = ""
-            return ReplayCsvStrategy(
-                ReplayCsvStrategyConfig(
-                    source_csv=config.replay_csv,
-                    input_types=input_types,
-                    case_kind=config.case_kind,
-                    scenario_type=str(
-                        case_definition.get("scenario_type", config.case_kind)
-                    ),
-                    target=config.target,
-                    reason_pattern=config.replay_reason_pattern,
-                    expected_count=config.replay_expected_count,
-                    completed_source_loop_nums=frozenset(
-                        self._load_completed_replay_source_loops(config)
-                    ),
-                )
-            )
-
+    def _build_active_learning_strategy(self, config: OrchestratorConfig) -> ActiveLearningStrategist:
         strategy_config = importlib.import_module(config.config_module)
         dataset_repository = self._build_dataset_repository(config)
         statistical_profile = load_statistical_target_profile(config.target)
@@ -792,10 +792,17 @@ class Orchestrator:
     def _build_dynamics_sampling_strategy(
         self, config: OrchestratorConfig
     ) -> RandomParameterSamplingStrategy:
-        """Map dynamics metrics to their statistically valid estimator family."""
+        """Map metrics of an IID-sampling target to their statistically valid estimator family."""
+        if config.max_samples is None:
+            raise ValueError(f"{config.target} statistical sampling requires max_samples")
         max_samples = int(config.max_samples or 0)
         mode = config.run_mode
-        binary_metric = DYNAMICS_DECISION_METRICS[config.dynamics_decision_mode]
+        metrics = _iid_statistical_metrics(config)
+        binary_metric = metrics["binary"]
+        sprt_metric = metrics["sprt"]
+        dkw_metric = metrics["dkw"]
+        ebstop_metric = metrics["ebstop"]
+        minimum_dkw_value = metrics["minimum_dkw_value"]
         if mode == "binomial_ci":
             service = BinomialCIService()
             request = StatisticalRequest(
@@ -809,7 +816,7 @@ class Orchestrator:
         elif mode == "sprt":
             service = SPRTService()
             request = StatisticalRequest(
-                method="sprt", metric=binary_metric, confidence=config.sprt_confidence,
+                method="sprt", metric=sprt_metric, confidence=config.sprt_confidence,
                 options={"p0": config.sprt_p0, "p1": config.sprt_p1,
                          "beta": config.sprt_beta, "region": "custom",
                          "min_samples": config.sprt_min_samples or 0, "max_samples": max_samples},
@@ -817,23 +824,23 @@ class Orchestrator:
         elif mode in {"dkw", "dkw_fixed"}:
             service = DKWService()
             request = StatisticalRequest(
-                method="dkw", metric="min_ttc", confidence=config.prism_dkw_confidence,
+                method="dkw", metric=dkw_metric, confidence=config.prism_dkw_confidence,
                 target_width=config.prism_dkw_target_epsilon,
                 options={"q": 0.05, "region": "custom", "use_kde_weighting": False,
-                         "epsilon": config.prism_dkw_target_epsilon, "minimum_value": 0.0},
+                         "epsilon": config.prism_dkw_target_epsilon, "minimum_value": minimum_dkw_value},
             )
         else:
             service = EBStopService()
             request = StatisticalRequest(
-                method="ebstop", metric="min_ttc", confidence=config.ebstop_confidence,
+                method="ebstop", metric=ebstop_metric, confidence=config.ebstop_confidence,
                 options={"epsilon": config.ebstop_epsilon, "value_range": config.ebstop_value_range,
                          "region": "custom", "max_samples": max_samples},
             )
         return RandomParameterSamplingStrategy(
             RandomParameterSamplingConfig(
-                target="dynamics", case_kind=config.case_kind, params=dict(config.params),
+                target=config.target, case_kind=config.case_kind, params=dict(config.params),
                 max_samples=max_samples, experiment_id=config.experiment_id,
-                case_id_prefix=config.case_id, reason_prefix="DYNAMICS_IID_SAMPLING",
+                case_id_prefix=config.case_id, reason_prefix=f"{config.target.upper()}_IID_SAMPLING",
                 tags=tuple(config.tags), input_distribution=config.dynamics_input_distribution,
                 seed=config.sampling_seed,
             ),
@@ -1018,14 +1025,7 @@ class Orchestrator:
         return completed
 
     def _resolve_target_total(self, config: OrchestratorConfig, last_loop_num: int) -> int | None:
-        if (
-            config.target == "dynamics"
-            and config.run_mode in {"binomial_ci", "sprt", "ebstop", "dkw", "dkw_fixed"}
-        ) or (
-            config.target == "prism"
-            and config.params
-            and config.run_mode in {"binomial_ci", "sprt", "ebstop", "dkw", "dkw_fixed"}
-        ):
+        if select_strategy_name(config, include_fixture=False) in SELF_TERMINATING_STRATEGIES:
             return None
         if config.fixture is not None or config.params:
             return last_loop_num + 1

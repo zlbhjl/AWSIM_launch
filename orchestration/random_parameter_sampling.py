@@ -6,6 +6,7 @@ import random
 from collections.abc import Mapping
 from dataclasses import dataclass
 
+from orchestration.seeding import INPUT_STREAM, SDE_NOISE_STREAM, derive_seed
 from contracts.execution import TestCase
 from .fixed_parameter_sampling import (
     FixedParameterSamplingStrategy,
@@ -52,7 +53,9 @@ class RandomParameterSamplingStrategy(FixedParameterSamplingStrategy):
         sample_index = self._baseline_completed_count + self.issued_count
         sampled = self.sample_parameters(sample_index)
         if str(self.params.get("solver_kind", "ode")) == "sde":
-            sampled["sde_seed"] = int(self.params.get("sde_seed", self.seed)) + sample_index
+            sampled["sde_seed"] = derive_seed(
+                int(self.params.get("sde_seed", self.seed)), sample_index, SDE_NOISE_STREAM
+            )
         prefix = self.config.case_id_prefix or f"{self.config.case_kind}-{self.experiment_id}"
         return TestCase(
             case_id=f"{_safe_identifier(prefix)}-{sample_index:04d}",
@@ -68,7 +71,7 @@ class RandomParameterSamplingStrategy(FixedParameterSamplingStrategy):
         )
 
     def sample_parameters(self, sample_index: int) -> dict[str, float]:
-        rng = random.Random(self.seed + int(sample_index))
+        rng = random.Random(derive_seed(self.seed, int(sample_index), INPUT_STREAM))
         return {name: rng.uniform(float(spec["min"]), float(spec["max"])) for name, spec in self.input_distribution.items()}
 
     def statistical_report_payload(self) -> dict[str, object] | None:
