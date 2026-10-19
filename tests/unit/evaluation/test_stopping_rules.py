@@ -129,3 +129,36 @@ def test_sprt_wald_labels_the_existing_service() -> None:
     assert decision.stop
     assert decision.report.diagnostics["stopping_rule"] == "sprt_wald"
     assert decision.report.diagnostics["guarantee"] == Guarantee.ANYTIME.value
+
+
+def test_stagewise_rule_evaluates_once_per_stage_on_its_first_samples() -> None:
+    from evaluation.stopping_rules import DKWSequentialStagewise, stage_delta
+
+    rule = DKWSequentialStagewise(metric="t", target_width=1e-9, max_samples=100, base_samples=2, lower_support=0.0)
+    values = np.linspace(0.1, 5.0, 20)
+
+    assert not rule.decide(_frame("t", values[:1]), issued=1).stop
+    first = rule.decide(_frame("t", values[:3]), issued=3)
+    # Stages 1 (n=2) and 2 (n=8) are both evaluated once when 9 results arrive together.
+    later = rule.decide(_frame("t", values[:9]), issued=9)
+    again = rule.decide(_frame("t", values[:9]), issued=9)
+
+    assert first.report.sample_count == 2
+    assert first.report.diagnostics["stage_delta"] == pytest.approx(stage_delta(0.05, 1))
+    assert later.report.sample_count == 8
+    assert later.report.diagnostics["stage"] == 2
+    assert again.report.diagnostics["stage"] == 2
+    assert sum(stage_delta(0.05, s) for s in range(1, 30)) < 0.05
+
+
+def test_stagewise_rule_stops_at_the_width_or_at_max_samples() -> None:
+    from evaluation.stopping_rules import DKWSequentialStagewise
+
+    wide = DKWSequentialStagewise(metric="t", target_width=100.0, max_samples=100, base_samples=2, lower_support=0.0)
+    capped = DKWSequentialStagewise(metric="t", target_width=1e-9, max_samples=10, base_samples=2, lower_support=0.0)
+    values = np.linspace(0.1, 5.0, 20)
+
+    assert wide.decide(_frame("t", values), issued=20).report.next_action == "stop"
+    decision = capped.decide(_frame("t", values), issued=20)
+    assert decision.stop and decision.report.next_action == "stop_max_samples"
+    assert decision.report.sample_count == 10

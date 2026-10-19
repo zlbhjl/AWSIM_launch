@@ -1,17 +1,20 @@
 from __future__ import annotations
 
 import importlib
+import math
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
 from contracts.execution import TestCase
+from contracts.experiment import SampleKind
 from contracts.statistics import StatisticalRequest
 from evaluation.binomial_ci import BinomialCIService
 from evaluation.sprt import SPRTService
 from evaluation.ebstop import EBStopService
 from evaluation.dkw import DKWService
+from evaluation.stopping_rules import DKWFixedStrict, DKWSequentialStagewise
 from orchestration.cache_policy import resolve_strategy_cache_size
 from orchestration.dkw_mode import DKWModeRunner
 from orchestration.prism_dkw_sampling import (
@@ -66,6 +69,14 @@ def _fixed_parameter_reason_prefix(target: str) -> str:
 
 def _runs_model_check_once(target: str) -> bool:
     return bool(getattr(_target_plugin(target), "run_model_check_once", False))
+
+
+def _fixed_parameter_minimum_dkw_value(target: str) -> float | None:
+    """Lower support of the DKW metric from the target's profile, if it has one."""
+    try:
+        return load_statistical_target_profile(target).minimum_dkw_value
+    except (ImportError, TypeError):
+        return None
 
 
 def _iid_statistical_metrics(config: "OrchestratorConfig") -> dict[str, object]:
@@ -669,6 +680,7 @@ class Orchestrator:
             max_samples=int(config.max_samples),
             dkw_service=dkw_service,
             case_kind=config.case_kind,
+            minimum_value=_fixed_parameter_minimum_dkw_value(config.target),
         )
         return PrismDkwSamplingStrategy(
             FixedParameterSamplingStrategyConfig(
@@ -822,12 +834,26 @@ class Orchestrator:
                          "min_samples": config.sprt_min_samples or 0, "max_samples": max_samples},
             )
         elif mode in {"dkw", "dkw_fixed"}:
-            service = DKWService()
+            # dkw evaluates once per stage with a split budget; dkw_fixed evaluates once at
+            # max_samples. Either way the DKW guarantee holds at the time the run stops.
+            from orchestration.composed_strategy import StoppingRuleService
+
+            lower_support = -math.inf if minimum_dkw_value is None else float(minimum_dkw_value)
+            if mode == "dkw":
+                rule = DKWSequentialStagewise(
+                    metric=dkw_metric, target_width=config.prism_dkw_target_epsilon, max_samples=max_samples,
+                    base_samples=config.prism_dkw_base_samples, confidence=config.prism_dkw_confidence,
+                    lower_support=lower_support,
+                )
+            else:
+                rule = DKWFixedStrict(
+                    metric=dkw_metric, sample_size=max_samples, confidence=config.prism_dkw_confidence,
+                    lower_support=lower_support,
+                )
+            service = StoppingRuleService(rule, SampleKind.IID_UNIFORM)
             request = StatisticalRequest(
                 method="dkw", metric=dkw_metric, confidence=config.prism_dkw_confidence,
-                target_width=config.prism_dkw_target_epsilon,
-                options={"q": 0.05, "region": "custom", "use_kde_weighting": False,
-                         "epsilon": config.prism_dkw_target_epsilon, "minimum_value": minimum_dkw_value},
+                target_width=config.prism_dkw_target_epsilon, options={"stopping_rule": rule.spec.name},
             )
         else:
             service = EBStopService()

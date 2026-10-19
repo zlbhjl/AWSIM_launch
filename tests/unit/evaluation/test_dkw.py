@@ -1,3 +1,6 @@
+import math
+
+import numpy as np
 import pandas as pd
 
 from contracts.evaluation import EvaluationRecord
@@ -107,7 +110,10 @@ def test_evaluate_statistical_request_returns_statistical_report() -> None:
     assert report.sample_count == 4
     assert report.interval is not None
     assert report.diagnostics["status"] == "success"
-    assert report.next_action == "stop"
+    # n=4, delta=0.1: epsilon ~0.61 > q, so the lower bound is the support
+    # (-inf) and four samples cannot meet any finite target width.
+    assert report.interval[0] == float("-inf")
+    assert report.next_action == "collect_more_samples"
 
 
 def test_evaluate_statistical_request_multiple_splits_error_budget() -> None:
@@ -273,3 +279,27 @@ def test_evaluate_request_keeps_raw_count_when_kde_lowers_effective_size() -> No
     assert report.diagnostics["raw_sample_count"] == 6
     assert report.diagnostics["effective_sample_size"] < 6.0
     assert report.sample_count == int(report.diagnostics["effective_sample_size"])
+
+
+def test_wide_band_extends_the_interval_to_the_support() -> None:
+    # n=2: epsilon ~0.96. The quantile may lie below the smallest sample and
+    # above the largest one, so the interval must not stop at 0.39 / 0.42.
+    frame = pd.DataFrame({"t": [0.39, 0.42], "status": ["success"] * 2})
+
+    with_support = calculate_quantile_with_dkw(frame, target_column="t", q=0.05, minimum_value=0.0)
+    without_support = calculate_quantile_with_dkw(frame, target_column="t", q=0.05)
+
+    assert with_support["lower_bound"] == 0.0
+    assert with_support["upper_bound"] == math.inf
+    assert without_support["lower_bound"] == -math.inf
+
+
+def test_unweighted_interval_matches_the_order_statistic_formula() -> None:
+    from evaluation.stopping_rules import dkw_quantile_interval
+
+    rng = np.random.default_rng(0)
+    for n in (2, 10, 100, 500, 800, 3000):
+        values = rng.exponential(size=n)
+        result = calculate_quantile_with_dkw(pd.DataFrame({"t": values}), target_column="t", q=0.05, delta=0.05)
+
+        assert (result["lower_bound"], result["upper_bound"]) == dkw_quantile_interval(values, 0.05, 0.05)

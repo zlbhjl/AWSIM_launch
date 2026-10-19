@@ -14,12 +14,15 @@ Coverage validation of the statistical evaluation on a target with known truth. 
 - 道具: `tools/validation/coverage_experiment.py`。実験で実際に使う停止判定のコードをそのまま動かし、データの保存先だけをメモリに置き換えます。
   - 経路 `iid`: IID 型の対象 (dynamics、bernoulli) と `--stopping-rule` の戦略
   - 経路 `dkw_runner`: AWSIM と PRISM の `--mode dkw` / `dkw_fixed` が使う `DKWModeRunner`
+  - DKW の評価の時期 (ステージ)・区間・推定値は、どちらの経路も同じコード (`evaluation/stopping_rules.py` の `StagewiseSchedule`、
+    `dkw_quantile_interval`、`empirical_quantile`) を使います。両方の経路が同じデータで同じ判断をすることをテストで確かめています。
 - 評価のタイミング: 標本が 1 つ届くたびに評価します。これは CLI を `--queue-high-water 1` で動かした場合と完全に一致します (同じ seed で確認)。
   既定の CLI は `worker 数 × 4` 件ずつ発行するため、評価の回数は少なく、止めたあとに数件多く集めます。
 - 真の値: 失敗確率 p、指数分布 (λ=1) の 5% 点 −ln(0.95) ≈ 0.0513、Beta(2,5) の平均 2/7。
 - 判定: 区間が真の値を含むか (二項・DKW)、間違った仮説を採択しなかったか (SPRT)、相対誤差が ε 以内か (EBStop)。
 - くり返し: 各条件 2,000 回。表の [ ] は被覆率そのものの 95% Clopper-Pearson 区間です。
-- 実施: 2026-10-18 (コミット `d9028e8` 以降のコード)。
+- 実施: 2026-10-18 (コミット `d9028e8` 以降のコード)。DKW の行は、legacy の区間の端を直した後に 2026-10-19 に測り直しました
+  (下の「分かったこと」4)。修正前の値も ( ) で残しています。
 
 ## 結果
 
@@ -35,9 +38,10 @@ Coverage validation of the statistical evaluation on a target with known truth. 
 | 二項・Wilson / Clopper-Pearson、幅 0.1 で停止 (p=0.2) | 95.3% / 96.1% | 242 / 262 |
 | SPRT (H0: p=0.1、H1: p=0.05、α=β=0.05)、真の p=0.1 / 0.05 | 94.95% / 96.65% | 145 / 163 |
 | EBStop (Beta(2,5) の平均、相対誤差 0.1) | 100% [99.8, 100] | 3,417 |
-| DKW・`DKWModeRunner` の `dkw_fixed` (n=500、1 回だけ評価) | 100% [99.8, 100] | 500 |
-| **DKW・`DKWModeRunner` の `dkw` (逐次、幅 0.15)** | **85.9%** [84.2, 87.3] | 272 |
-| **DKW・IID の経路の `dkw` / `dkw_fixed` (逐次、幅 0.15)** | **82.6%** [80.9, 84.2] | 158 |
+| DKW・`DKWModeRunner` の `dkw_fixed` (n=500、1 回だけ評価) | 100% [99.8, 100] (修正前 100%) | 500 |
+| DKW・`DKWModeRunner` の `dkw` (逐次、幅 0.15) | 100% [99.8, 100] (修正前 **85.9%**、端の修正のみ 100%) | 511 (修正前 272、端の修正のみ 352) |
+| DKW・IID の経路の `dkw` (逐次、幅 0.15) | 100% [99.8, 100] (修正前 **82.6%**、端の修正のみ 99.9%) | 508 (修正前 158、端の修正のみ 215) |
+| DKW・IID の経路の `dkw_fixed` (n=500、1 回だけ評価) | 100% [99.8, 100] (修正前は `dkw` と同じ逐次評価) | 500 |
 
 ### 探索データを再利用した場合 (`--dkw-pure-smc` なし)
 
@@ -45,9 +49,9 @@ Coverage validation of the statistical evaluation on a target with known truth. 
 
 | 条件 | 正しかった割合 | 新しく集めた標本数 |
 |---|---|---|
-| `dkw` (逐次)、探索データを KDE の重みで再利用 | **12.6%** [11.2, 14.1] | 0 |
+| `dkw` (逐次)、探索データを KDE の重みで再利用 | **11.7%** [10.3, 13.2] (修正前 12.6%) | 50 (修正前 0) |
 | `dkw_fixed`、探索データを重みなしで混ぜる (新しい標本 500 件) | **5.0%** [4.1, 6.0] | 500 |
-| `dkw` (逐次)、`--dkw-pure-smc` で探索データを無視 | 85.9% [84.2, 87.3] | 272 |
+| `dkw` (逐次)、`--dkw-pure-smc` で探索データを無視 | 100% [99.8, 100] (修正前 85.9%) | 511 (修正前 272) |
 
 ### `--stopping-rule` の新しい統計アルゴリズム
 
@@ -58,6 +62,7 @@ Coverage validation of the statistical evaluation on a target with known truth. 
 | `binomial_ci_sequential_anytime` (幅 0.1、p=0.2) | 100% [99.8, 100] | 2,158 |
 | `dkw_fixed_strict` (n=1,000) | 100% [99.8, 100] | 1,000 |
 | `dkw_sequential_anytime` (幅 0.15) | 100% [99.8, 100] | 1,132 |
+| `dkw_sequential_stagewise` (幅 0.15、IID の経路の `dkw` と同じ) | 100% [99.8, 100] | 508 |
 | `sprt_wald`、真の p=0.1 / 0.05 | 94.95% / 96.65% | 145 / 163 |
 | `ebstop_anytime` | 100% [99.8, 100] | 3,417 |
 
@@ -65,14 +70,24 @@ Coverage validation of the statistical evaluation on a target with known truth. 
 
 1. **1 回だけ評価する区間、SPRT、EBStop は約束どおりです。** 1 回だけ評価する二項区間の値は、理論値
    (n=100、p=0.05 で Wilson 96.6%、Clopper-Pearson 98.3%) と一致しました。
-2. **途中で止めると、被覆率が下がります。** 二項区間でも約束の 95% ぎりぎりまで下がり (Wilson 94.95%)、
-   DKW では 82.6〜85.9% まで下がります。標本ごとに区間を確かめ、狭くなった時点で止めるため、たまたま狭くなった区間が選ばれやすくなるからです。
-3. **IID の経路の `dkw_fixed` は、名前に反して逐次評価です。** `dkw` と同じ処理で、`--max-samples` に達する前に止まります。
-4. **legacy の DKW の区間は、標本が少ないと狭すぎます。** DKW の帯の幅 ε = √(ln(2/δ)/(2n)) が分位点の q より大きいとき、
-   下端は「取りうる最小値」まで広がるべきですが、legacy は最も小さい標本の値で打ち切っています。新しいルールは正しく広げます。
+2. **途中で止めると、被覆率が下がります。** 二項区間では約束の 95% ぎりぎりまで下がります (Wilson 94.95%)。
+   標本ごとに区間を確かめ、狭くなった時点で止めるため、たまたま狭くなった区間が選ばれやすくなるからです。
+   DKW も修正前は 82.6〜85.9% まで下がっていましたが、主な原因は 4 と 3 の不具合でした。
+3. **(修正済み) 逐次の `dkw` は、誤り率をステージに分けていたのに、ステージの中で標本ごとに評価していました。** 評価の回数だけ
+   外れる機会が増えるので、誤り率の合計 Σ δ/2^s < δ が成り立っていませんでした。現在は、ステージ s の終わり (最初の 50·s² 個の
+   標本がそろった時点) に 1 回だけ、誤り率 δ/2^s で評価します。これで、どのステージで止まっても保証が成り立ちます。
+   止まる時点は 50 / 200 / 450 / 800 / 1,250 個のどれかになり、標本数は約 1.45 倍 (352 → 511) に増えました。
+   また IID の経路の `dkw_fixed` は、名前に反して `dkw` と同じ逐次評価だったので、`--max-samples` で 1 回だけ評価するようにしました。
+4. **(修正済み) legacy の DKW の区間は、標本が少ないと狭すぎました。** DKW の帯の幅 ε = √(ln(2/δ)/(2n)) が分位点の q より
+   大きいとき、下端は「取りうる最小値」まで、下側の帯が q に届かないときは上端は +∞ まで広がるべきです
+   (Howard & Ramdas 2022, 式 14)。legacy は最も小さい標本・最も大きい標本の値で打ち切っていたため、n=2〜10 で
+   「十分」と判定して止まり、そのときの被覆率は 10% 程度でした (外れはほぼすべて「真値 < 下端」)。
+   `evaluation/dkw.py` を直した後は、逐次の `dkw` でも 99.9〜100% です。q=0.05、δ=0.05 では n ≥ 738 になるまで下端は
+   最小値のままなので、幅による停止は事実上「上端が幅以下」で判定されます。
 5. **探索データを混ぜると、保証はほぼなくなります。** KDE の重みでも、この偏りはほとんど直せませんでした。
    しかも探索データだけで区間が十分狭く見えるため、新しい一様な標本を 1 つも取らずに止まりました。
-6. **新しいルールは、すべて約束を満たしました。** 代わりに、逐次のルールは標本数が legacy の 7〜9 倍になります。
+   外れはすべて「真値 > 上端」(偏りで区間が低すぎる) なので、4 の修正では変わりません。KDE の補正は近似です。
+6. **新しいルールは、すべて約束を満たしました。** 代わりに、逐次のルールは標本数が legacy の 3〜9 倍 (二項 8〜9 倍、DKW は修正後の legacy の約 2.2 倍) になります。
    100% は保守的すぎるので、少ない標本数で保証を保つ方法 (confidence sequence など) が今後の改良の候補です。
 7. **(検証の途中で見つけた不具合)** IID の経路は、標本 i の乱数を `seed + i` で作っていたため、seed が 1 つ違うだけの実験が
    ほぼ同じ標本を使っていました (100 標本中 99 標本が共通)。現在は `orchestration/seeding.py` の `derive_seed` で直してあります。
@@ -82,8 +97,9 @@ Coverage validation of the statistical evaluation on a target with known truth. 
 | 目的 | 選ぶもの |
 |---|---|
 | 保証が必要で、標本数を事前に決められる | `--stopping-rule binomial_ci_fixed_strict` / `dkw_fixed_strict` (標本数は n ≥ ln(2/δ)/(2ε²) で決める) |
-| 保証が必要で、途中で止めたい | `--stopping-rule binomial_ci_sequential_anytime` / `dkw_sequential_anytime` |
-| 早さを優先し、近似でよい | legacy (既定) |
+| 保証が必要で、途中で止めたい (二項) | `--stopping-rule binomial_ci_sequential_anytime` |
+| 保証が必要で、途中で止めたい (DKW) | `--mode dkw` (= `dkw_sequential_stagewise`、ステージの終わりだけ評価)。評価のたびに止められる `dkw_sequential_anytime` は標本数が約 2.2 倍 |
+| 早さを優先し、近似でよい | legacy の `--mode binomial_ci` / `sprt` (被覆率は約束の境目、約 95%) |
 | 探索データを使う | 保証はない。結果は経験的な参考値として扱う |
 
 `--stopping-rule` は、現在は IID 型の対象と PRISM の固定パラメータで使えます。AWSIM の探索戦略では、まだ使えません。
@@ -97,7 +113,7 @@ OMP_NUM_THREADS=1 python3 -m tools.validation.coverage_experiment --reps 2000 --
 ```
 
 各条件の結果は `artifacts/coverage/summary.json`、1 回ごとの結果は `runs.csv` に保存されます。
-`tests/unit/tools/test_coverage_baseline.py` は、8 条件 × 3 seed の結果が変わっていないことを確かめます。
+`tests/unit/tools/test_coverage_baseline.py` は、9 条件 × 3 seed の結果が変わっていないことを確かめます。
 
 ## 制約
 
@@ -126,6 +142,9 @@ AWSIM, PRISM, and dynamics.
   in-memory table.
   - Engine `iid`: IID-sampling targets (dynamics, bernoulli) and the `--stopping-rule` strategies
   - Engine `dkw_runner`: `DKWModeRunner`, used by `--mode dkw` / `dkw_fixed` on AWSIM and PRISM
+  - Both engines use the same code for the DKW evaluation schedule (stages), interval, and estimate (`StagewiseSchedule`,
+    `dkw_quantile_interval`, and `empirical_quantile` in `evaluation/stopping_rules.py`). A test checks that both make the same decisions
+    on the same data.
 - Evaluation timing: after every sample. This is identical to running the CLI with `--queue-high-water 1` (checked with the same
   seeds). By default the CLI issues `4 × workers` cases at a time, so it evaluates less often and collects a few extra samples after
   deciding to stop.
@@ -133,7 +152,8 @@ AWSIM, PRISM, and dynamics.
 - Correctness: the interval contains the truth (binomial, DKW), the wrong hypothesis was not accepted (SPRT), or the relative error is
   within ε (EBStop).
 - Repetitions: 2,000 per condition. The brackets [ ] are 95% Clopper-Pearson intervals of the coverage itself.
-- Run on 2026-10-18 (code from commit `d9028e8` on).
+- Run on 2026-10-18 (code from commit `d9028e8` on). The DKW rows were measured again on 2026-10-19 after fixing the legacy interval
+  ends (Finding 4) and the evaluation schedule of sequential `dkw` (Finding 3); the earlier values are kept in ( ).
 
 ## Results
 
@@ -149,9 +169,10 @@ AWSIM, PRISM, and dynamics.
 | Binomial, Wilson / Clopper-Pearson, stop at width 0.1 (p=0.2) | 95.3% / 96.1% | 242 / 262 |
 | SPRT (H0: p=0.1, H1: p=0.05, α=β=0.05), true p=0.1 / 0.05 | 94.95% / 96.65% | 145 / 163 |
 | EBStop (mean of Beta(2,5), relative error 0.1) | 100% [99.8, 100] | 3,417 |
-| DKW, `DKWModeRunner` `dkw_fixed` (n=500, one evaluation) | 100% [99.8, 100] | 500 |
-| **DKW, `DKWModeRunner` `dkw` (sequential, width 0.15)** | **85.9%** [84.2, 87.3] | 272 |
-| **DKW, IID path `dkw` / `dkw_fixed` (sequential, width 0.15)** | **82.6%** [80.9, 84.2] | 158 |
+| DKW, `DKWModeRunner` `dkw_fixed` (n=500, one evaluation) | 100% [99.8, 100] (before the fix 100%) | 500 |
+| DKW, `DKWModeRunner` `dkw` (sequential, width 0.15) | 100% [99.8, 100] (before the fixes **85.9%**, ends fix only 100%) | 511 (before 272, ends fix only 352) |
+| DKW, IID path `dkw` (sequential, width 0.15) | 100% [99.8, 100] (before the fixes **82.6%**, ends fix only 99.9%) | 508 (before 158, ends fix only 215) |
+| DKW, IID path `dkw_fixed` (n=500, one evaluation) | 100% [99.8, 100] (before: sequential, the same as `dkw`) | 500 |
 
 ### Reusing exploration data (without `--dkw-pure-smc`)
 
@@ -159,9 +180,9 @@ AWSIM, PRISM, and dynamics.
 
 | Condition | Correct | New samples collected |
 |---|---|---|
-| `dkw` (sequential), exploration data reused with KDE weights | **12.6%** [11.2, 14.1] | 0 |
+| `dkw` (sequential), exploration data reused with KDE weights | **11.7%** [10.3, 13.2] (before 12.6%) | 50 (before 0) |
 | `dkw_fixed`, exploration data mixed in unweighted (500 new samples) | **5.0%** [4.1, 6.0] | 500 |
-| `dkw` (sequential), `--dkw-pure-smc` ignores the exploration data | 85.9% [84.2, 87.3] | 272 |
+| `dkw` (sequential), `--dkw-pure-smc` ignores the exploration data | 100% [99.8, 100] (before the fixes 85.9%) | 511 (before 272) |
 
 ### New statistical algorithms (`--stopping-rule`)
 
@@ -172,6 +193,7 @@ AWSIM, PRISM, and dynamics.
 | `binomial_ci_sequential_anytime` (width 0.1, p=0.2) | 100% [99.8, 100] | 2,158 |
 | `dkw_fixed_strict` (n=1,000) | 100% [99.8, 100] | 1,000 |
 | `dkw_sequential_anytime` (width 0.15) | 100% [99.8, 100] | 1,132 |
+| `dkw_sequential_stagewise` (width 0.15, the same as IID-path `dkw`) | 100% [99.8, 100] | 508 |
 | `sprt_wald`, true p=0.1 / 0.05 | 94.95% / 96.65% | 145 / 163 |
 | `ebstop_anytime` | 100% [99.8, 100] | 3,417 |
 
@@ -179,14 +201,25 @@ AWSIM, PRISM, and dynamics.
 
 1. **Intervals evaluated once, SPRT, and EBStop keep their promise.** The binomial intervals evaluated once match theory (Wilson 96.6%
    and Clopper-Pearson 98.3% at n=100, p=0.05).
-2. **Stopping early lowers coverage.** Even binomial intervals fall to the edge of 95% (Wilson 94.95%), and DKW falls to 82.6–85.9%.
-   Checking the interval after every sample and stopping as soon as it is narrow favors intervals that happen to be narrow.
-3. **On the IID path, `dkw_fixed` is sequential despite its name.** It is the same as `dkw` and stops before `--max-samples`.
-4. **Legacy DKW intervals are too narrow with few samples.** When the band width ε = √(ln(2/δ)/(2n)) exceeds the quantile q, the lower
-   bound should extend to the lower support, but the legacy code stops at the smallest sample. The new rules extend it correctly.
+2. **Stopping early lowers coverage.** Binomial intervals fall to the edge of 95% (Wilson 94.95%). Checking the interval after every
+   sample and stopping as soon as it is narrow favors intervals that happen to be narrow. DKW fell to 82.6–85.9% before the fix, but
+   mainly because of the bugs in Findings 4 and 3.
+3. **(Fixed) Sequential `dkw` split the error rate across stages but evaluated after every sample within a stage.** Each evaluation is
+   another chance to miss, so the total Σ δ/2^s < δ did not hold. Now stage s is evaluated once, when the first 50·s² samples are in,
+   with error rate δ/2^s, so the guarantee holds at whatever stage the run stops. Runs stop at 50 / 200 / 450 / 800 / 1,250 samples,
+   and the sample size grew about 1.45 times (352 → 511). On the IID path, `dkw_fixed` was sequential like `dkw` despite its name; it
+   now evaluates once at `--max-samples`.
+4. **(Fixed) Legacy DKW intervals were too narrow with few samples.** When the band width ε = √(ln(2/δ)/(2n)) exceeds the quantile q,
+   the lower bound should extend to the lower support, and when the lower band never reaches q, the upper bound should be +∞
+   (Howard & Ramdas 2022, eq. 14). The legacy code stopped at the smallest and largest samples, so it judged the interval sufficient
+   at n=2–10, where coverage was about 10% (almost all misses had the truth below the lower bound). After fixing `evaluation/dkw.py`,
+   even the sequential `dkw` covers 99.9–100%. With q=0.05 and δ=0.05, the lower bound stays at the support until n ≥ 738, so
+   stopping by width effectively means "the upper bound is at most the width".
 5. **Mixing in exploration data removes the guarantee almost entirely.** KDE weights barely corrected this bias, and because the
    exploration data alone already made the interval look narrow, the run stopped without collecting a single new uniform sample.
-6. **All new rules keep their promise.** In exchange, the sequential rules need 7–9 times as many samples as legacy. 100% is overly
+   All misses have the truth above the upper bound (the bias makes the interval too low), so the fix in Finding 4 does not change
+   this. The KDE correction is an approximation.
+6. **All new rules keep their promise.** In exchange, the sequential rules need 3–9 times as many samples as legacy (binomial 8–9 times, DKW about 2.2 times the fixed legacy). 100% is overly
    conservative; methods that keep the guarantee with fewer samples (such as confidence sequences) are candidates for improvement.
 7. **(A bug found during validation)** The IID path seeded sample i with `seed + i`, so experiments whose seeds differed by one shared
    almost all samples (99 of 100). This is fixed by `derive_seed` in `orchestration/seeding.py`.
@@ -196,8 +229,9 @@ AWSIM, PRISM, and dynamics.
 | Goal | Choice |
 |---|---|
 | A guarantee, with the sample size fixed in advance | `--stopping-rule binomial_ci_fixed_strict` / `dkw_fixed_strict` (choose n ≥ ln(2/δ)/(2ε²)) |
-| A guarantee, stopping as soon as possible | `--stopping-rule binomial_ci_sequential_anytime` / `dkw_sequential_anytime` |
-| Speed first, an approximation is acceptable | legacy (default) |
+| A guarantee, stopping as soon as possible (binomial) | `--stopping-rule binomial_ci_sequential_anytime` |
+| A guarantee, stopping as soon as possible (DKW) | `--mode dkw` (= `dkw_sequential_stagewise`, evaluated at stage ends only); `dkw_sequential_anytime`, which can stop at any evaluation, needs about 2.2 times as many samples |
+| Speed first, an approximation is acceptable | legacy `--mode binomial_ci` / `sprt` (coverage sits at the edge, about 95%) |
 | Using exploration data | No guarantee; treat the result as an empirical reference |
 
 `--stopping-rule` currently works with IID-sampling targets and PRISM fixed parameters, not yet with the AWSIM exploration strategist.
@@ -211,7 +245,7 @@ OMP_NUM_THREADS=1 python3 -m tools.validation.coverage_experiment --reps 2000 --
 ```
 
 Per-condition results are saved in `artifacts/coverage/summary.json` and per-repetition results in `runs.csv`.
-`tests/unit/tools/test_coverage_baseline.py` checks that the results of 8 conditions × 3 seeds do not change.
+`tests/unit/tools/test_coverage_baseline.py` checks that the results of 9 conditions × 3 seeds do not change.
 
 ## Limitations
 

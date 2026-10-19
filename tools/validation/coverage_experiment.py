@@ -140,11 +140,18 @@ SCENARIOS: tuple[Scenario, ...] = (
         {"sprt_p0": 0.1, "sprt_p1": 0.05, "sprt_beta": 0.05, "sprt_confidence": 0.95, "max_samples": 20000},
     ),
     Scenario(
-        "dkw_iid_eps0.15", "iid", "dkw_fixed",
-        "IID path (dynamics/bernoulli) --mode dkw_fixed: re-evaluated after every sample at the full level, "
+        "dkw_iid_seq_eps0.15", "iid", "dkw",
+        "IID path (dynamics/bernoulli) --mode dkw: one evaluation per stage (n=50 s^2, budget delta/2^s), "
         "stop at width 0.15; 5% quantile of Exponential(1)",
         {"rate": 1.0},
-        {"prism_dkw_confidence": 0.95, "prism_dkw_target_epsilon": 0.15, "max_samples": 5000},
+        {"prism_dkw_confidence": 0.95, "prism_dkw_target_epsilon": 0.15, "prism_dkw_base_samples": 50,
+         "max_samples": 5000},
+    ),
+    Scenario(
+        "dkw_iid_fixed_n500", "iid", "dkw_fixed",
+        "IID path (dynamics/bernoulli) --mode dkw_fixed: one evaluation at n=500; 5% quantile of Exponential(1)",
+        {"rate": 1.0},
+        {"prism_dkw_confidence": 0.95, "prism_dkw_target_epsilon": 1.0, "max_samples": 500},
     ),
     Scenario(
         "dkw_runner_fixed_n500", "dkw_runner", "dkw_fixed",
@@ -154,7 +161,8 @@ SCENARIOS: tuple[Scenario, ...] = (
     ),
     Scenario(
         "dkw_runner_seq_eps0.15", "dkw_runner", "dkw",
-        "DKWModeRunner --mode dkw (AWSIM/PRISM): sequential with per-stage budget, stop at width 0.15",
+        "DKWModeRunner --mode dkw (AWSIM/PRISM): one evaluation per stage (n=50 s^2, budget delta/2^s), "
+        "stop at width 0.15",
         {"rate": 1.0},
         {"total_delta": 0.05, "target_epsilon": 0.15, "base_samples": 50, "max_samples": 5000},
     ),

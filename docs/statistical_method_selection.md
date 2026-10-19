@@ -77,27 +77,27 @@ Clopper–Pearson区間は近似を使わず直接計算するため、名目の
 **Dvoretzky–Kiefer–Wolfowitz不等式**(連続値・カウントの区間推定、絶対誤差): 経験分布関数と
 真の分布関数との差を、分布の形を仮定せずサンプル数だけから抑えられる不等式。これを使って任意の
 分位点の信頼区間を計算する。DKW不等式の保証が成り立つのは、評価対象の分布から一様・独立に
-引いた標本で、**1回だけ**評価する場合である。
+引いた標本で、評価を**1回だけ**行うか、評価の回数に合わせて誤り率を分ける場合である。
 
 - 固定サンプル数版(`--mode dkw_fixed`)は、先に決めた数 n だけ集めてから1回だけ評価する。
   一様標本だけ(`--dkw-pure-smc`、または過去の探索データを引き継がない新規実行)であれば
   **DKW不等式の保証がそのまま成り立つ**。必要な n は事前に n ≥ ln(2/δ)/(2ε²) で決める
   (例: ε=0.02, δ=0.05 で n ≥ 4,611。`--dkw-simultaneous` では δ を指標数で割る)。
-- 逐次版(`--mode dkw`)は、サンプルを増やしながら区間幅が目標値以下になった時点で止める。
-  誤り率予算はステージ単位(第kステージに δ/2^k)で配分しているが、評価は新しい標本を発行する
-  たびに毎回行うため、**同じステージ内での繰り返しの確認は予算に含まれていない**。そのため
-  逐次版の区間は**近似**である。`--dkw-pure-smc` を付けないと、探索データをKDEで推定した重みで
-  再利用するため、さらに近似が重なる。
+- 逐次版(`--mode dkw`)は、ステージ s の終わり(最初の 50·s² 個の標本がそろった時点。50 は
+  `--prism-dkw-base-samples` / `DKW_BASE_SAMPLES`)に**1回だけ**、誤り率 δ/2^s で評価し、区間幅が
+  目標値以下なら止める。評価はステージごとに1回なので、誤り率の合計は Σ δ/2^s < δ に収まり、
+  一様標本だけなら**どのステージで止まっても DKW不等式の保証が成り立つ**。`--dkw-pure-smc` を
+  付けないと、探索データをKDEで推定した重みで再利用するため、区間は**近似**になる。
 - `--mode dkw_fixed` で過去の探索データ(`--resume-from`)が混ざり、`--dkw-pure-smc` を付けない
   場合は、偏った標本を重みなしで使うため**保証は成り立たない**。
 
 評価結果の `diagnostics.guarantee` に、どれに当たるかが記録される
-(`dkw` / `approximate_sequential` / `approximate_sequential_kde` / `none_mixed_samples`)。
+(`dkw` / `approximate_kde` / `none_mixed_samples`)。
 `dkw` 以外の場合は、実行時に1回だけ注意が表示される。
 
-真の値が分かる対象で測った被覆率 (2,000回のくり返し) は、逐次の `dkw` が 82.6〜85.9%、1回だけ評価する `dkw_fixed` が 100% だった
-([validation/coverage.md](validation/coverage.md))。保証が必要な場合は、`--stopping-rule dkw_fixed_strict` (1回だけ評価) または
-`dkw_sequential_anytime` (評価のたびに誤り率を割り振る) を使う。どちらも被覆率 100% を確認している。
+真の値が分かる対象で測った被覆率 (2,000回のくり返し) は、逐次の `dkw` も1回だけ評価する `dkw_fixed` も 100% だった
+([validation/coverage.md](validation/coverage.md))。修正前の逐次の `dkw` (区間の端の誤りと、ステージ内での標本ごとの評価) は
+82.6〜85.9% だった。
 
 **経験的Bernstein停止則(Empirical Bernstein Stopping)**(連続値・カウントの区間推定、相対
 誤差): DKWと同じく連続値・カウント指標が対象だが、目標が絶対誤差でなく相対誤差である点が異なる。
@@ -114,9 +114,8 @@ Clopper–Pearson区間は近似を使わず直接計算するため、名目の
 のに必要なサンプル数が実測でおよそ5〜8倍に増えるため、既定では無効(オプトイン)。
 
 `sprt`・`ebstop`は、設計自体に何度も覗き見ることへの保護が組み込まれているため、
-`binomial_ci`のような追加のオプトインは不要。`--mode dkw`はステージ単位の予算配分だけで、
-ステージ内の繰り返しの確認は保護されていない(上記のDKWの解説を参照)。保証が必要な場合は
-`--mode dkw_fixed`を使う。
+`binomial_ci`のような追加のオプトインは不要。`--mode dkw`も、ステージごとに1回だけ評価し、
+誤り率をステージに分けているため保護されている(上記のDKWの解説を参照)。
 
 ## 各決定軸の意味(クイックリファレンス)
 
@@ -212,27 +211,28 @@ construction, the error rate of the decision does not exceed the specified value
 **Dvoretzky–Kiefer–Wolfowitz inequality** (interval estimation for continuous or count metrics, absolute error): an inequality that
 bounds the difference between the empirical and the true distribution function from the sample size alone, without assuming the
 shape of the distribution. It is used to compute a confidence interval for any quantile. The DKW inequality's guarantee holds when the
-samples are drawn uniformly and independently from the target distribution and are evaluated **only once**.
+samples are drawn uniformly and independently from the target distribution and are evaluated **only once**, or the error rate is
+split across the evaluations.
 
 - The fixed-sample version (`--mode dkw_fixed`) collects a predetermined number n of samples and evaluates once. With uniform samples
   only (`--dkw-pure-smc`, or a new run that does not carry over exploration data), **the DKW guarantee holds as is**. Choose n in
   advance with n ≥ ln(2/δ)/(2ε²) (for example, n ≥ 4,611 for ε = 0.02 and δ = 0.05; with `--dkw-simultaneous`, divide δ by the number
   of metrics).
-- The sequential version (`--mode dkw`) adds samples and stops once the interval width falls to the target. The error budget is split
-  per stage (δ/2^k for stage k), but the interval is evaluated every time a new sample is issued, so **repeated checks within the same
-  stage are not covered by the budget**. The sequential interval is therefore **an approximation**. Without `--dkw-pure-smc`, it also
-  reuses exploration data with weights estimated by KDE, which adds another approximation.
+- The sequential version (`--mode dkw`) evaluates **once** at the end of each stage s (when the first 50·s² samples are in; 50 is
+  `--prism-dkw-base-samples` / `DKW_BASE_SAMPLES`) with error rate δ/2^s, and stops when the interval width is at most the target.
+  Because each stage is evaluated once, the error rates add up to Σ δ/2^s < δ, so with uniform samples only **the DKW guarantee holds
+  at whatever stage the run stops**. Without `--dkw-pure-smc`, it reuses exploration data with weights estimated by KDE, and the
+  interval is **an approximation**.
 - If `--mode dkw_fixed` is run with past exploration data (`--resume-from`) mixed in and without `--dkw-pure-smc`, biased samples are
   used without weights, and **the guarantee does not hold**.
 
 Each evaluation records which of these applies in `diagnostics.guarantee`
-(`dkw` / `approximate_sequential` / `approximate_sequential_kde` / `none_mixed_samples`).
+(`dkw` / `approximate_kde` / `none_mixed_samples`).
 If it is not `dkw`, a notice is printed once at run time.
 
-Coverage measured on a target with known truth (2,000 repetitions) was 82.6–85.9% for sequential `dkw` and 100% for `dkw_fixed`
-evaluated once ([validation/coverage.md](validation/coverage.md#english)). When a guarantee is required, use
-`--stopping-rule dkw_fixed_strict` (one evaluation) or `dkw_sequential_anytime` (an error budget spent at each evaluation); both reached
-100% coverage.
+Coverage measured on a target with known truth (2,000 repetitions) was 100% for both sequential `dkw` and `dkw_fixed` evaluated once
+([validation/coverage.md](validation/coverage.md#english)). Before the fixes (wrong interval ends and evaluation after every sample within
+a stage), sequential `dkw` reached only 82.6–85.9%.
 
 **Empirical Bernstein Stopping** (interval estimation for continuous or count metrics, relative error): like DKW, it targets continuous
 or count metrics, but the target is a relative error rather than an absolute one. It stops based on the observed variance, so metrics
@@ -248,8 +248,7 @@ checked. In exchange, the number of samples needed to reach the same target widt
 default (opt-in).
 
 `sprt` and `ebstop` have protection against repeated peeking built into their design, so they need no opt-in like `binomial_ci`.
-`--mode dkw` only splits the budget per stage and does not protect repeated checks within a stage (see the DKW explanation above). Use
-`--mode dkw_fixed` when a guarantee is required.
+`--mode dkw` is protected as well: it evaluates once per stage and splits the error rate across stages (see the DKW explanation above).
 
 ## Meaning of each decision axis (quick reference)
 

@@ -1521,7 +1521,7 @@ def test_active_learning_strategist_binomial_ci_uses_region_aware_rejection_samp
 def test_active_learning_strategist_dkw_stops_when_report_is_sufficient() -> None:
     class Repo:
         def load_dataset(self):
-            return pd.DataFrame([{"loop_num": 1, "min_ttc": 1.0}])
+            return pd.DataFrame([{"loop_num": 1, "min_ttc": 1.0, "reason": "SMC: Sequential-DKW Sampling (Stage 1)"}])
 
     class FakeDKWService:
         def evaluate_request(self, _data, _request):
@@ -1543,7 +1543,7 @@ def test_active_learning_strategist_dkw_stops_when_report_is_sufficient() -> Non
             DKW_TARGET_METRIC="min_ttc",
             DKW_TOTAL_DELTA=0.05,
             DKW_TARGET_EPSILON=0.15,
-            DKW_BASE_SAMPLES=50,
+            DKW_BASE_SAMPLES=1,  # stage 1 is complete with the one sample
         ),
         dataset_repository=Repo(),
         dkw_service=FakeDKWService(),
@@ -1560,7 +1560,7 @@ def test_active_learning_strategist_dkw_stops_when_report_is_sufficient() -> Non
 def test_active_learning_strategist_dkw_writes_history_record() -> None:
     class Repo:
         def load_dataset(self):
-            return pd.DataFrame([{"loop_num": 4, "min_ttc": 1.0}])
+            return pd.DataFrame([{"loop_num": 4, "min_ttc": 1.0, "reason": "SMC: Sequential-DKW Sampling (Stage 1)"}])
 
     class HistoryRepo:
         def __init__(self):
@@ -1590,7 +1590,7 @@ def test_active_learning_strategist_dkw_writes_history_record() -> None:
             DKW_TARGET_METRIC="min_ttc",
             DKW_TOTAL_DELTA=0.05,
             DKW_TARGET_EPSILON=0.15,
-            DKW_BASE_SAMPLES=50,
+            DKW_BASE_SAMPLES=1,  # stage 1 is complete with the one sample
         ),
         dataset_repository=Repo(),
         statistical_history_repository=history_repo,

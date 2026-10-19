@@ -19,6 +19,23 @@ class FrameRepository:
         return self.frame
 
 
+def _sample_rows(strategy, tasks, value=5.0) -> pd.DataFrame:
+    return pd.DataFrame(
+        [
+            {
+                "experiment_id": strategy.experiment_id,
+                "sampling_signature": strategy.sampling_signature,
+                "record_kind": "sample",
+                "status": "success",
+                "reason": task.reason,
+                "loop_num": index,
+                "steps_to_failure_capped": value,
+            }
+            for index, task in enumerate(tasks, start=1)
+        ]
+    )
+
+
 class FakeDKWService:
     """Reports 'collect_more_samples' until told to stop."""
 
@@ -90,8 +107,8 @@ def test_sequential_mode_issues_fixed_point_sample_tasks() -> None:
     assert first.input["execution_kind"] == "sample_path"
     assert "SMC" in first.reason
     assert first.case_id != second.case_id
-    assert strategy.latest_statistical_report is not None
-    assert strategy.latest_statistical_report.next_action == "collect_more_samples"
+    # Stage 1 needs base_samples=2 results before its single evaluation.
+    assert strategy.latest_statistical_report is None
 
 
 def test_sequential_mode_bootstraps_first_sample_without_evaluating_on_cold_start() -> None:
@@ -127,7 +144,10 @@ def test_sequential_mode_stops_when_dkw_converges() -> None:
 
     bootstrap = strategy.next_test_case()
     assert bootstrap is not None  # cold start: first sample is issued unevaluated
+    second = strategy.next_test_case()
+    assert second is not None  # stage 1 (n=2) is not complete yet
 
+    repository.frame = _sample_rows(strategy, [bootstrap, second])
     result = strategy.next_test_case()
 
     assert result is None
@@ -212,26 +232,13 @@ def test_statistical_report_payload_skips_probability_comparison_for_step_count_
 
     sample_task = strategy.next_test_case()  # captures exact_model_check, bootstraps 1st sample
     assert sample_task is not None
+    second_task = strategy.next_test_case()
+    assert second_task is not None
 
     repository.frame = pd.concat(
-        [
-            repository.frame,
-            pd.DataFrame(
-                [
-                    {
-                        "experiment_id": strategy.experiment_id,
-                        "sampling_signature": strategy.sampling_signature,
-                        "record_kind": "sample",
-                        "status": "success",
-                        "reason": sample_task.reason,
-                        "steps_to_failure_capped": 5.0,
-                    }
-                ]
-            ),
-        ],
-        ignore_index=True,
+        [repository.frame, _sample_rows(strategy, [sample_task, second_task])], ignore_index=True
     )
-    strategy.next_test_case()  # now evaluates the accumulated sample
+    strategy.next_test_case()  # stage 1 (n=2) is complete and evaluated
 
     payload = strategy.statistical_report_payload()
     assert payload is not None

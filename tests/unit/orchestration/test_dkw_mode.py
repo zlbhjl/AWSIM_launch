@@ -216,11 +216,11 @@ def test_dkw_mode_runner_saves_samples_on_stop() -> None:
             }
 
     samples_repo = SamplesRepo()
-    runner = _make_runner(dkw_service=StopDKWService(), samples_repo=samples_repo)
+    runner = _make_runner(dkw_service=StopDKWService(), samples_repo=samples_repo, base_samples=1)
     state = DKWModeState(dispatched_task_count=4)
 
     payload = runner.handle_sequential(
-        pd.DataFrame([{"loop_num": 4, "min_ttc": 1.0}]),
+        pd.DataFrame([{"loop_num": 4, "min_ttc": 1.0, "reason": "SMC: Sequential-DKW Sampling (Stage 1)"}]),
         state=state,
         get_random_point=lambda _index: {"dx0": 15.0, "ego_speed": 35.0, "npc_speed": 15.0},
     )
@@ -288,29 +288,65 @@ def test_dkw_fixed_with_exploration_rows_has_no_guarantee(capsys) -> None:
     assert "--dkw-pure-smc" in capsys.readouterr().err
 
 
-def test_dkw_sequential_is_approximate_and_the_notice_is_shown_once(capsys) -> None:
-    rows = [{"min_ttc": 1.0, "reason": "SMC: Sequential-DKW Sampling (Stage 1)"},
-            {"min_ttc": 2.0, "reason": "SMC: Sequential-DKW Sampling (Stage 1)"}]
+class _CountingService(_FixedReportService):
+    def __init__(self, report):
+        super().__init__(report)
+        self.datasets = []
+
+    def evaluate_request(self, data, request):
+        self.datasets.append((data.copy(), request.confidence))
+        return self.report
+
+
+def _smc_rows(values, start=1):
+    return [{"loop_num": start + i, "min_ttc": v, "status": "success",
+             "reason": "SMC: Sequential-DKW Sampling (Stage 1)"} for i, v in enumerate(values)]
+
+
+def test_dkw_sequential_evaluates_each_stage_once_and_has_the_dkw_guarantee(capsys) -> None:
+    rows = _smc_rows([1.0, 2.0])
     report = _report_with_rows(rows)
-    runner = _make_runner(dkw_service=_FixedReportService(report), pure_smc=True, max_samples=10)
-    state = DKWModeState()
+    service = _CountingService(report)
+    runner = _make_runner(dkw_service=service, pure_smc=True, base_samples=2, max_samples=100)
+    state = DKWModeState(dispatched_task_count=2)
 
     runner.handle_sequential(pd.DataFrame(rows), state=state, get_random_point=_point)
     runner.handle_sequential(pd.DataFrame(rows), state=state, get_random_point=_point)
 
-    assert report.diagnostics["guarantee"] == "approximate_sequential"
-    assert capsys.readouterr().err.count("[DKW]") == 1
+    # Stage 1 (n=2) is evaluated once at confidence 1 - 0.05/2; stage 2 waits for 8 samples.
+    assert len(service.datasets) == 1
+    assert service.datasets[0][1] == 1 - 0.05 / 2
+    assert state.stage == 2
+    assert report.diagnostics["guarantee"] == "dkw"
+    assert capsys.readouterr().err == ""
+
+
+def test_dkw_sequential_waits_for_the_stage_and_uses_its_first_samples() -> None:
+    report = _report_with_rows(_smc_rows([1.0]))
+    service = _CountingService(report)
+    runner = _make_runner(dkw_service=service, pure_smc=True, base_samples=3, max_samples=100)
+    state = DKWModeState(dispatched_task_count=5)
+
+    runner.handle_sequential(pd.DataFrame(_smc_rows([5.0, 4.0])), state=state, get_random_point=_point)
+    assert service.datasets == []
+
+    # Results arrive out of order; the stage uses the first three by issue order.
+    rows = list(reversed(_smc_rows([5.0, 4.0, 3.0, 2.0, 1.0])))
+    runner.handle_sequential(pd.DataFrame(rows), state=state, get_random_point=_point)
+
+    assert len(service.datasets) == 1
+    assert sorted(service.datasets[0][0]["min_ttc"]) == [3.0, 4.0, 5.0]
 
 
 def test_dkw_sequential_without_pure_smc_is_marked_as_kde_approximation(capsys) -> None:
     rows = [{"min_ttc": 1.0, "reason": "Boundary exploration"},
             {"min_ttc": 2.0, "reason": "SMC: Sequential-DKW Sampling (Stage 1)"}]
     report = _report_with_rows(rows)
-    runner = _make_runner(dkw_service=_FixedReportService(report), pure_smc=False, max_samples=10)
+    runner = _make_runner(dkw_service=_FixedReportService(report), pure_smc=False, base_samples=1, max_samples=10)
 
     runner.handle_sequential(pd.DataFrame(rows), state=DKWModeState(), get_random_point=_point)
 
-    assert report.diagnostics["guarantee"] == "approximate_sequential_kde"
+    assert report.diagnostics["guarantee"] == "approximate_kde"
     assert "KDE" in capsys.readouterr().err
 
 
@@ -322,3 +358,43 @@ def test_dkw_guarantee_is_recorded_for_each_simultaneous_metric() -> None:
     runner.handle_fixed(pd.DataFrame(rows), state=DKWModeState(dispatched_task_count=1), get_random_point=_point)
 
     assert report.diagnostics["guarantee"] == "dkw"
+
+
+def test_awsim_prism_runner_and_iid_rule_make_the_same_decisions() -> None:
+    import numpy as np
+
+    from evaluation.dkw import DKWService
+    from evaluation.stopping_rules import DKWSequentialStagewise
+
+    class History:
+        def __init__(self):
+            self.last = None
+
+        def append_dkw_record(self, record):
+            self.last = dict(record)
+
+    for seed in range(5):
+        values = np.random.default_rng(seed).exponential(size=2000)
+        history = History()
+        runner = DKWModeRunner.from_runtime_config(
+            param_names=["dx0"], target_metric="t", target_metrics=["t"], total_delta=0.05,
+            target_epsilon=0.15, base_samples=20, region="custom", pure_smc=True, simultaneous=False,
+            max_samples=2000, dkw_service=DKWService(), statistical_history_repository=history,
+            minimum_value=0.0,
+        )
+        rule = DKWSequentialStagewise(metric="t", target_width=0.15, max_samples=2000, base_samples=20,
+                                      lower_support=0.0)
+        state, rows = DKWModeState(), []
+        while True:
+            payload = runner.handle_sequential(pd.DataFrame(rows) if rows else None, state=state,
+                                               get_random_point=lambda index: {"dx0": float(index)})
+            if payload.get("system_command") == "stop":
+                break
+            rows.append({"loop_num": len(rows) + 1, "t": values[len(rows)], "status": "success",
+                         "reason": payload["reason"]})
+        decision = rule.decide(pd.DataFrame(rows), issued=len(rows))
+
+        assert decision.stop
+        assert history.last["ess"] == decision.report.sample_count
+        assert (history.last["lower_bound"], history.last["upper_bound"]) == decision.report.interval
+        assert history.last["estimate"] == decision.report.estimate

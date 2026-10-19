@@ -1008,10 +1008,10 @@ def test_orchestrator_runs_prism_dkw_sequential_from_a_cold_start(tmp_path) -> N
 
     assert summary["enqueued"] >= 2  # model check + at least one sample-path task
     assert summary["completed_count"] == summary["enqueued"]
-    assert "SMC Verification Complete" in summary["stop_reason"]
-    # n=1 is a degenerate case for the DKW quantile search (evaluation/dkw.py
-    # rejects it as "not enough data yet"), so at least 2 real samples must
-    # have been evaluated before a "sufficient" report is possible.
+    # Even constant data cannot narrow the interval for q=0.05 within 200
+    # samples: while the DKW margin exceeds q, the quantile may lie anywhere
+    # down to the lower support, so the run keeps sampling up to max_samples.
+    assert "reached max_samples=200" in summary["stop_reason"]
     assert summary["statistical_report"]["sample_count"] >= 2
     assert summary["statistical_report"]["metric"] == "steps_to_failure_capped"
     assert summary["statistical_report"]["exact_model_check"]["comparison_skipped_reason"]

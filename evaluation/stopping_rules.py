@@ -9,6 +9,10 @@ depends on how often that happens. The rules here fix the schedule themselves:
 - ``*_sequential_anytime``: evaluate after every new sample, spending the error
   budget as delta_k = 6 delta / (pi^2 k^2) on the k-th evaluation. Since
   sum_k delta_k <= delta, the result is valid at whatever time the rule stops.
+- ``dkw_sequential_stagewise``: evaluate once per stage, on the first
+  ``base * s^2`` samples at stage s, with budget delta / 2^s. Since
+  sum_s delta / 2^s < delta, the result is valid at whatever stage the rule
+  stops. This is the schedule of the legacy ``--mode dkw``.
 - ``sprt_wald`` and ``ebstop_anytime`` wrap the existing SPRT and EBStop
   services, which are sequential by design.
 
@@ -66,6 +70,36 @@ def dkw_quantile_interval(
     lower = float(ordered[lower_rank - 1]) if lower_rank >= 1 else lower_support
     upper = float(ordered[upper_rank - 1]) if upper_rank <= n else upper_support
     return lower, upper
+
+
+def empirical_quantile(values: np.ndarray, q: float) -> float:
+    """The q-quantile of the empirical distribution: the order statistic of rank ceil(nq)."""
+    ordered = np.sort(np.asarray(values, dtype=float))
+    rank = min(max(math.ceil(len(ordered) * q - 1e-12), 1), len(ordered))
+    return float(ordered[rank - 1])
+
+
+@dataclass(frozen=True)
+class StagewiseSchedule:
+    """Stage s is evaluated once, on the first ``base_samples * s^2`` samples, with budget delta / 2^s.
+
+    Since sum_s delta / 2^s < delta, a result is valid at whatever stage the
+    run stops. Shared by ``DKWSequentialStagewise`` and the AWSIM/PRISM
+    ``DKWModeRunner``.
+    """
+
+    base_samples: int
+    max_samples: int
+    delta: float
+
+    def size(self, stage: int) -> int:
+        return min(self.base_samples * stage**2, self.max_samples)
+
+    def delta_at(self, stage: int) -> float:
+        return stage_delta(self.delta, stage)
+
+    def is_last(self, stage: int) -> bool:
+        return self.size(stage) >= self.max_samples
 
 
 def _metric_values(data: pd.DataFrame | None, metric: str) -> np.ndarray:
@@ -199,7 +233,7 @@ class DKWFixedStrict:
         delta = 1.0 - self.confidence
         interval = dkw_quantile_interval(sample, self.q, delta, lower_support=self.lower_support)
         report = _report(
-            self.spec, self.metric, sample_count=self.sample_size, estimate=float(np.quantile(sample, self.q)),
+            self.spec, self.metric, sample_count=self.sample_size, estimate=empirical_quantile(sample, self.q),
             interval=interval, sufficient=True, next_action="stop",
             diagnostics={"confidence": self.confidence, "q": self.q, "delta": delta},
         )
@@ -230,12 +264,63 @@ class DKWSequentialAnytime:
             width = interval[1] - interval[0]
             done = width <= self.target_width or n >= self.max_samples
             self._last = _report(
-                self.spec, self.metric, sample_count=n, estimate=float(np.quantile(values, self.q)), interval=interval,
+                self.spec, self.metric, sample_count=n, estimate=empirical_quantile(values, self.q), interval=interval,
                 sufficient=done,
                 next_action="stop" if width <= self.target_width else ("stop_max_samples" if done else "collect_more_samples"),
                 diagnostics={"confidence": self.confidence, "q": self.q, "look": look, "look_delta": delta,
                              "interval_width": width},
             )
+        if self._last is not None and self._last.next_action in {"stop", "stop_max_samples"}:
+            return StopDecision(True, f"{self.spec.name}: {self._last.next_action} at n={self._last.sample_count}", self._last)
+        return StopDecision(False, report=self._last)
+
+
+def stage_delta(delta: float, stage: int) -> float:
+    """Error budget of stage ``stage`` (1-based) of the stagewise schedule; the budgets sum to less than ``delta``."""
+    return delta / 2**stage
+
+
+@dataclass
+class DKWSequentialStagewise:
+    metric: str
+    target_width: float
+    max_samples: int
+    base_samples: int = 50
+    q: float = 0.05
+    confidence: float = 0.95
+    lower_support: float = -math.inf
+    spec: StoppingRuleSpec = field(
+        default_factory=lambda: StoppingRuleSpec("dkw_sequential_stagewise", "dkw", Guarantee.ANYTIME, IID_KINDS)
+    )
+    _stage: int = 1
+    _last: StatisticalReport | None = None
+
+    @property
+    def schedule(self) -> StagewiseSchedule:
+        return StagewiseSchedule(self.base_samples, self.max_samples, 1.0 - self.confidence)
+
+    def decide(self, data: pd.DataFrame | None, *, issued: int) -> StopDecision:
+        values = _metric_values(data, self.metric)
+        schedule = self.schedule
+        # Several stages can complete between two calls when results arrive in
+        # batches; each one is still evaluated exactly once, in order.
+        while self._last is None or self._last.next_action == "collect_more_samples":
+            n = schedule.size(self._stage)
+            if len(values) < n:
+                break
+            sample = values[:n]
+            delta = schedule.delta_at(self._stage)
+            interval = dkw_quantile_interval(sample, self.q, delta, lower_support=self.lower_support)
+            width = interval[1] - interval[0]
+            done = width <= self.target_width or n >= self.max_samples
+            self._last = _report(
+                self.spec, self.metric, sample_count=n, estimate=empirical_quantile(sample, self.q), interval=interval,
+                sufficient=done,
+                next_action="stop" if width <= self.target_width else ("stop_max_samples" if done else "collect_more_samples"),
+                diagnostics={"confidence": self.confidence, "q": self.q, "stage": self._stage, "stage_delta": delta,
+                             "interval_width": width},
+            )
+            self._stage += 1
         if self._last is not None and self._last.next_action in {"stop", "stop_max_samples"}:
             return StopDecision(True, f"{self.spec.name}: {self._last.next_action} at n={self._last.sample_count}", self._last)
         return StopDecision(False, report=self._last)
@@ -270,6 +355,7 @@ STOPPING_RULE_NAMES = (
     "binomial_ci_sequential_anytime",
     "dkw_fixed_strict",
     "dkw_sequential_anytime",
+    "dkw_sequential_stagewise",
     "sprt_wald",
     "ebstop_anytime",
 )
@@ -279,10 +365,14 @@ __all__ = [
     "BinomialSequentialAnytime",
     "DKWFixedStrict",
     "DKWSequentialAnytime",
+    "DKWSequentialStagewise",
     "STOPPING_RULE_NAMES",
+    "StagewiseSchedule",
     "anytime_delta",
     "clopper_pearson",
     "dkw_quantile_interval",
     "ebstop_anytime",
+    "empirical_quantile",
     "sprt_wald",
+    "stage_delta",
 ]

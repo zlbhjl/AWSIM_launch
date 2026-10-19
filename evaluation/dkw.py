@@ -10,6 +10,7 @@ from sklearn.preprocessing import StandardScaler
 
 from contracts.evaluation import EvaluationRecord
 from contracts.statistics import StatisticalReport, StatisticalRequest
+from evaluation.stopping_rules import dkw_quantile_interval, empirical_quantile
 import point_extractors
 
 
@@ -264,11 +265,10 @@ def classify_dkw_guarantee(
 ) -> str:
     """Classify whether the DKW inequality's guarantee applies to an evaluation.
 
-    The guarantee holds only for a single evaluation of samples drawn
-    uniformly and independently from the target region (``dkw``).
-    ``sequential`` evaluations re-check after every new sample while the error
-    budget is split per stage only, so repeated checks within a stage are not
-    covered. KDE weights are estimated and clipped, so they are an empirical
+    The guarantee holds for samples drawn uniformly and independently from the
+    target region (``dkw``), evaluated either once or once per stage with the
+    error budget split across stages (``--mode dkw``). ``sequential`` marks
+    evaluations repeated without splitting the budget, which are not covered. KDE weights are estimated and clipped, so they are an empirical
     correction. Unweighted samples that were not drawn uniformly (for example,
     exploration data) give no guarantee.
     """
@@ -418,12 +418,27 @@ def calculate_quantile_with_dkw(
     lower_index = np.searchsorted(upper, q)
     upper_index = np.searchsorted(lower, q)
 
+    # The band F_n +/- epsilon also constrains F outside the samples: below
+    # the smallest sample the upper band is epsilon, so when epsilon >= q the
+    # quantile may lie anywhere down to the lower support; when the lower band
+    # never reaches q, it may lie anywhere above the largest sample
+    # (Howard & Ramdas 2022, eq. 14).
+    lower_support = -np.inf if minimum_value is None else float(minimum_value)
+    if use_kde_weighting:
+        lower_bound = lower_support if dkw_bounds["delta_margin"] >= q else x[lower_index]
+        upper_bound = x[upper_index] if upper_index < len(x) else np.inf
+        estimate = x[estimate_index] if estimate_index < len(x) else x[-1]
+    else:
+        # Unweighted samples use the same interval and estimate as the stopping rules.
+        lower_bound, upper_bound = dkw_quantile_interval(x, q, delta, lower_support=lower_support)
+        estimate = empirical_quantile(x, q)
+
     return {
         "q": q,
         "confidence_level": 1 - delta,
-        "estimate": x[estimate_index] if estimate_index < len(x) else x[-1],
-        "lower_bound": x[lower_index] if lower_index < len(x) else x[-1],
-        "upper_bound": x[upper_index] if upper_index < len(x) else x[-1],
+        "estimate": estimate,
+        "lower_bound": lower_bound,
+        "upper_bound": upper_bound,
         "sample_size": dkw_bounds["sample_size"],
         "raw_sample_count": dkw_bounds["raw_sample_count"],
         "filtered_df": dkw_bounds["filtered_df"],

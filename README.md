@@ -172,11 +172,13 @@ python3 run_orchestrator_cluster_v2.py \
 
 - `binomial_ci` は既定で、標本が増えるたびに同じ信頼水準で区間を計算し直します。何度も確認すること自体による誤り率の増加を抑えるには、`--binomial-anytime-valid` を使います (必要な標本数は増えます)。
 - 安全性の判断に使う確率の区間には、`--binomial-method clopper-pearson` を使ってください。Wilson は近似のため、真の確率が 0 や 1 に近いと実際のカバレッジが名目の水準を下回ることがあります。
-- DKW 不等式の保証が成り立つのは、**`--mode dkw_fixed` を一様な標本だけで 1 回評価する場合**です (`--dkw-pure-smc`、または過去の探索データを引き継がない新規実行)。標本数は事前に n ≥ ln(2/δ)/(2ε²) で決めます (例: ε = 0.02、δ = 0.05 で n ≥ 4,611)。
-- `--mode dkw` (逐次) は、新しい標本ごとに区間を確認しますが、誤り率はステージ単位でしか配分していないため近似です。`--dkw-pure-smc` を付けないと、探索データを KDE で推定した重みで再利用するので、さらに近似が重なります。
-- 各評価の `diagnostics.guarantee` に、保証の種類 (`dkw` / `approximate_sequential` / `approximate_sequential_kde` / `none_mixed_samples`) が記録されます。
-- `--stopping-rule` で、評価のタイミングと保証が明確な統計アルゴリズムを選べます (`binomial_ci_fixed_strict`、`binomial_ci_sequential_anytime`、`dkw_fixed_strict`、`dkw_sequential_anytime`、`sprt_wald`、`ebstop_anytime`)。既定は今までどおりの動作 (`legacy`) です。IID 型の対象と PRISM の固定パラメータで使えます。
-- 真の値が分かる対象で、各手法の被覆率を 2,000 回のくり返しで測りました。逐次の DKW (legacy) は 82.6〜85.9% で約束 (95%) を下回り、新しいルールはすべて満たしました ([docs/validation/coverage.md](docs/validation/coverage.md))。
+- DKW 不等式の保証は、一様な標本だけ (`--dkw-pure-smc`、または過去の探索データを引き継がない新規実行) なら、次の両方で成り立ちます。
+  - `--mode dkw_fixed`: `--max-samples` 個そろった時点で 1 回だけ評価します。標本数は事前に n ≥ ln(2/δ)/(2ε²) で決めます (例: ε = 0.02、δ = 0.05 で n ≥ 4,611)。
+  - `--mode dkw` (逐次): ステージ s の終わり (最初の b·s² 個がそろった時点。b は AWSIM の `DKW_BASE_SAMPLES` または `--prism-dkw-base-samples`) に 1 回だけ、誤り率 δ/2^s で評価します。誤り率の合計は δ 未満なので、どのステージで止まっても保証が成り立ちます。
+- `--dkw-pure-smc` を付けないと、探索データを KDE で推定した重みで再利用するので、区間は近似になります。
+- 各評価の `diagnostics.guarantee` に、保証の種類 (`dkw` / `approximate_kde` / `none_mixed_samples`) が記録されます。
+- `--stopping-rule` で、評価のタイミングと保証が明確な統計アルゴリズムを選べます (`binomial_ci_fixed_strict`、`binomial_ci_sequential_anytime`、`dkw_fixed_strict`、`dkw_sequential_anytime`、`dkw_sequential_stagewise`、`sprt_wald`、`ebstop_anytime`)。既定は今までどおりの動作 (`legacy`) です。IID 型の対象と PRISM の固定パラメータで使えます。
+- 真の値が分かる対象で、各手法の被覆率を 2,000 回のくり返しで測りました。逐次の DKW は、区間の端の誤りとステージ内での毎回の評価のため 82.6〜85.9% で約束 (95%) を下回っていました。両方を直した後は 100% で、新しいルールもすべて約束を満たしました ([docs/validation/coverage.md](docs/validation/coverage.md))。
 
 ### 重点サンプリング
 
@@ -462,19 +464,21 @@ Notes on statistical guarantees:
   inflated by these repeated checks, use `--binomial-anytime-valid` (it needs more samples).
 - For intervals used in safety decisions, use `--binomial-method clopper-pearson`. Wilson is an approximation, and its actual coverage
   can fall below the nominal level when the true probability is close to 0 or 1.
-- The DKW inequality's guarantee holds **only when `--mode dkw_fixed` evaluates uniform samples once** (`--dkw-pure-smc`, or a new run
-  that does not carry over exploration data). Choose the sample size in advance with n ≥ ln(2/δ)/(2ε²) (for example, n ≥ 4,611 for
-  ε = 0.02 and δ = 0.05).
-- `--mode dkw` (sequential) checks the interval after every new sample, but the error budget is split per stage only, so it is an
-  approximation. Without `--dkw-pure-smc`, it also reuses exploration data with weights estimated by KDE, which adds another
-  approximation.
-- Each evaluation records the kind of guarantee in `diagnostics.guarantee` (`dkw` / `approximate_sequential` /
-  `approximate_sequential_kde` / `none_mixed_samples`).
+- With uniform samples only (`--dkw-pure-smc`, or a new run that does not carry over exploration data), the DKW inequality's guarantee
+  holds in both modes:
+  - `--mode dkw_fixed` evaluates once when `--max-samples` samples are in. Choose the sample size in advance with
+    n ≥ ln(2/δ)/(2ε²) (for example, n ≥ 4,611 for ε = 0.02 and δ = 0.05).
+  - `--mode dkw` (sequential) evaluates once at the end of each stage s (when the first b·s² samples are in; b is AWSIM's `DKW_BASE_SAMPLES` or `--prism-dkw-base-samples`) with error rate δ/2^s.
+    The error rates add up to less than δ, so the guarantee holds at whatever stage the run stops.
+- Without `--dkw-pure-smc`, exploration data is reused with weights estimated by KDE, and the interval is an approximation.
+- Each evaluation records the kind of guarantee in `diagnostics.guarantee` (`dkw` / `approximate_kde` / `none_mixed_samples`).
 - `--stopping-rule` selects a statistical algorithm with an explicit evaluation schedule and guarantee (`binomial_ci_fixed_strict`,
-  `binomial_ci_sequential_anytime`, `dkw_fixed_strict`, `dkw_sequential_anytime`, `sprt_wald`, `ebstop_anytime`). The default (`legacy`)
+  `binomial_ci_sequential_anytime`, `dkw_fixed_strict`, `dkw_sequential_anytime`, `dkw_sequential_stagewise`, `sprt_wald`,
+  `ebstop_anytime`). The default (`legacy`)
   keeps the current behavior. It works with IID-sampling targets and PRISM fixed parameters.
-- The coverage of each method was measured with 2,000 repetitions on a target with known truth. Sequential DKW (legacy) reached only
-  82.6–85.9%, below the promised 95%; all new rules met it ([docs/validation/coverage.md](docs/validation/coverage.md)).
+- The coverage of each method was measured with 2,000 repetitions on a target with known truth. Sequential DKW reached only
+  82.6–85.9%, below the promised 95%, because of wrong interval ends and evaluation after every sample within a stage; after both
+  fixes it reaches 100%, and all new rules met the promise ([docs/validation/coverage.md](docs/validation/coverage.md)).
 
 ### Importance sampling
 

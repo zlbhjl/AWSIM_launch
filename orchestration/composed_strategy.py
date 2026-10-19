@@ -24,6 +24,7 @@ from evaluation.stopping_rules import (
     BinomialSequentialAnytime,
     DKWFixedStrict,
     DKWSequentialAnytime,
+    DKWSequentialStagewise,
     STOPPING_RULE_NAMES,
     ebstop_anytime,
     sprt_wald,
@@ -46,6 +47,7 @@ RULE_MODES = {
     "binomial_ci_sequential_anytime": {"binomial_ci"},
     "dkw_fixed_strict": {"dkw", "dkw_fixed"},
     "dkw_sequential_anytime": {"dkw", "dkw_fixed"},
+    "dkw_sequential_stagewise": {"dkw", "dkw_fixed"},
     "sprt_wald": {"sprt"},
     "ebstop_anytime": {"ebstop"},
 }
@@ -92,6 +94,11 @@ def build_stopping_rule(config: "OrchestratorConfig", metrics: dict[str, object]
         return DKWSequentialAnytime(metric=metrics["dkw"], target_width=config.prism_dkw_target_epsilon,
                                     max_samples=max_samples, q=DKW_QUANTILE,
                                     confidence=config.prism_dkw_confidence, lower_support=lower_support)
+    if name == "dkw_sequential_stagewise":
+        return DKWSequentialStagewise(metric=metrics["dkw"], target_width=config.prism_dkw_target_epsilon,
+                                      max_samples=max_samples, base_samples=config.prism_dkw_base_samples,
+                                      q=DKW_QUANTILE, confidence=config.prism_dkw_confidence,
+                                      lower_support=lower_support)
     if name == "sprt_wald":
         return sprt_wald(SPRTService(), StatisticalRequest(
             method="sprt", metric=metrics["sprt"], confidence=config.sprt_confidence,
@@ -140,7 +147,11 @@ def build_composed_iid_strategy(orchestrator: "Orchestrator", config: "Orchestra
 def build_composed_fixed_parameter_strategy(
     orchestrator: "Orchestrator", config: "OrchestratorConfig"
 ) -> FixedParameterSamplingStrategy:
-    from orchestration.orchestrator import _fixed_parameter_reason_prefix, _runs_model_check_once
+    from orchestration.orchestrator import (
+        _fixed_parameter_minimum_dkw_value,
+        _fixed_parameter_reason_prefix,
+        _runs_model_check_once,
+    )
 
     if config.max_samples is None:
         raise ValueError(f"{config.target.upper()} fixed sampling requires max_samples")
@@ -149,7 +160,7 @@ def build_composed_fixed_parameter_strategy(
         "sprt": config.sprt_target,
         "dkw": config.prism_dkw_target_metric,
         "ebstop": config.ebstop_target,
-        "minimum_dkw_value": None,
+        "minimum_dkw_value": _fixed_parameter_minimum_dkw_value(config.target),
     }
     rule = build_stopping_rule(config, metrics)
     return FixedParameterSamplingStrategy(

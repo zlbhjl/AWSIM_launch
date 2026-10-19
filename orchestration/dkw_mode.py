@@ -8,13 +8,13 @@ import pandas as pd
 
 from contracts.statistics import BoundsMap, StatisticalReport, StatisticalRequest
 from evaluation.dkw import (
-    DKW_GUARANTEE_APPROXIMATE_SEQUENTIAL,
-    DKW_GUARANTEE_APPROXIMATE_SEQUENTIAL_KDE,
+    DKW_GUARANTEE_APPROXIMATE_KDE,
     DKW_GUARANTEE_DKW,
     DKW_GUARANTEE_NONE_MIXED_SAMPLES,
     DKWService,
     classify_dkw_guarantee,
 )
+from evaluation.stopping_rules import StagewiseSchedule
 from contracts.statistical_region import (
     PassthroughStatisticalRegionPolicy,
     StatisticalRegionPolicy,
@@ -27,15 +27,9 @@ import point_extractors
 SMC_REASON_MARKER = "SMC"
 
 _GUARANTEE_NOTICES = {
-    DKW_GUARANTEE_APPROXIMATE_SEQUENTIAL: (
-        "[DKW] --mode dkw re-checks the interval after every new sample, but the error budget "
-        "is split per stage only, so the interval is approximate. For the DKW guarantee, use "
-        "--mode dkw_fixed with --dkw-pure-smc and a sample size n >= ln(2/delta) / (2 epsilon^2)."
-    ),
-    DKW_GUARANTEE_APPROXIMATE_SEQUENTIAL_KDE: (
-        "[DKW] --mode dkw without --dkw-pure-smc reuses exploration data with estimated KDE "
-        "weights, and re-checks after every new sample; the interval is approximate. For the "
-        "DKW guarantee, use --mode dkw_fixed with --dkw-pure-smc."
+    DKW_GUARANTEE_APPROXIMATE_KDE: (
+        "[DKW] Without --dkw-pure-smc, exploration data is reused with weights estimated by KDE; "
+        "the interval is an approximation. For the DKW guarantee, use --dkw-pure-smc."
     ),
     DKW_GUARANTEE_NONE_MIXED_SAMPLES: (
         "[DKW] The evaluated samples include rows that were not drawn uniformly by this mode "
@@ -195,6 +189,10 @@ class DKWModeRunner:
             next_dispatched_task_count += 1
             return point, next_random_index, next_dispatched_task_count
 
+    @property
+    def schedule(self) -> StagewiseSchedule:
+        return StagewiseSchedule(self.config.base_samples, self.config.max_samples, self.config.total_delta)
+
     def handle_sequential(
         self,
         df_dataset: pd.DataFrame | None,
@@ -202,73 +200,27 @@ class DKWModeRunner:
         state: DKWModeState,
         get_random_point: Callable[[int], dict[str, object]],
     ) -> dict[str, object]:
-        dkw_dataset = self._select_dataset(df_dataset)
-        request_confidence = 1.0 - (self.config.total_delta / (2**state.stage))
-        target_samples = self.config.base_samples * (state.stage**2)
+        # Each stage s is evaluated exactly once, on the first base * s^2 uniform
+        # samples, at confidence 1 - delta / 2^s. Since sum_s delta / 2^s < delta,
+        # the interval holds at whatever stage the run stops. Tasks keep being
+        # issued while a stage waits for its results; the extra samples go to the
+        # next stage. Several stages can complete between two calls.
+        while True:
+            stage_dataset, ready = self._stage_dataset(df_dataset, state)
+            if not ready:
+                break
+            was_last = self.schedule.is_last(state.stage)
+            outcome = self._evaluate_stage(stage_dataset, state)
+            state.stage += 1
+            if outcome is not None:
+                return outcome
+            if was_last:
+                break
+            if state.dispatched_task_count >= self.config.max_samples:
+                break
 
-        if self.config.simultaneous:
-            summary = self.dkw_service.evaluate_request_multiple_summary(
-                dkw_dataset,
-                metrics=self.config.target_metrics,
-                request=self._build_request(
-                    metric=(
-                        self.config.target_metrics[0]
-                        if self.config.target_metrics
-                        else self.config.target_metric
-                    ),
-                    confidence=request_confidence,
-                    use_kde_weighting=not self.config.pure_smc,
-                    stage_target_samples=target_samples,
-                    bounds=state.bounds,
-                ),
-            )
-            self._annotate_guarantee_from_summary(
-                summary, sequential=True, use_kde_weighting=not self.config.pure_smc
-            )
-            self._append_history_from_summary(summary, state)
-            if summary.get("next_action") == "stop":
-                self._save_samples_from_summary(summary)
-                return {
-                    "system_command": "stop",
-                    "reason": "SMC Simultaneous Verification Complete",
-                }
-            if summary.get("next_action") == "error":
-                return {
-                    "system_command": "stop",
-                    "reason": "DKW simultaneous evaluation error",
-                }
-            if summary.get("next_action") == "advance_stage":
-                state.stage += 1
-        else:
-            report = self.dkw_service.evaluate_request(
-                dkw_dataset,
-                self._build_request(
-                    metric=self.config.target_metric,
-                    confidence=request_confidence,
-                    use_kde_weighting=not self.config.pure_smc,
-                    stage_target_samples=target_samples,
-                    bounds=state.bounds,
-                ),
-            )
-            self._annotate_guarantee(
-                report, sequential=True, use_kde_weighting=not self.config.pure_smc
-            )
-            self._append_history(report, state)
-            if report.next_action == "stop":
-                self._save_samples_from_report(report)
-                return {
-                    "system_command": "stop",
-                    "reason": "SMC Verification Complete",
-                }
-            if report.next_action == "error":
-                return {
-                    "system_command": "stop",
-                    "reason": str(report.diagnostics.get("message", "DKW evaluation error")),
-                }
-            if report.next_action == "advance_stage":
-                state.stage += 1
-
-        if state.dispatched_task_count >= self.config.max_samples:
+        evaluated_all = state.stage > 1 and self.schedule.is_last(state.stage - 1)
+        if state.dispatched_task_count >= self.config.max_samples or evaluated_all:
             return {
                 "system_command": "stop",
                 "reason": (
@@ -277,6 +229,7 @@ class DKWModeRunner:
                 ),
             }
 
+        dkw_dataset = self._select_dataset(df_dataset)
         base_index = (
             len(dkw_dataset)
             if self.config.pure_smc and dkw_dataset is not None
@@ -292,6 +245,111 @@ class DKWModeRunner:
             )
         )
         return payload
+
+    def _evaluate_stage(
+        self, dkw_dataset: pd.DataFrame | None, state: DKWModeState
+    ) -> dict[str, object] | None:
+        request_confidence = 1.0 - self.schedule.delta_at(state.stage)
+        use_kde_weighting = not self.config.pure_smc
+        if self.config.simultaneous:
+            summary = self.dkw_service.evaluate_request_multiple_summary(
+                dkw_dataset,
+                metrics=self.config.target_metrics,
+                request=self._build_request(
+                    metric=(
+                        self.config.target_metrics[0]
+                        if self.config.target_metrics
+                        else self.config.target_metric
+                    ),
+                    confidence=request_confidence,
+                    use_kde_weighting=use_kde_weighting,
+                    bounds=state.bounds,
+                ),
+            )
+            self._annotate_guarantee_from_summary(
+                summary, sequential=False, use_kde_weighting=use_kde_weighting
+            )
+            self._append_history_from_summary(summary, state)
+            if summary.get("next_action") == "stop":
+                self._save_samples_from_summary(summary)
+                return {
+                    "system_command": "stop",
+                    "reason": "SMC Simultaneous Verification Complete",
+                }
+            if summary.get("next_action") == "error":
+                return {
+                    "system_command": "stop",
+                    "reason": "DKW simultaneous evaluation error",
+                }
+            return None
+        report = self.dkw_service.evaluate_request(
+            dkw_dataset,
+            self._build_request(
+                metric=self.config.target_metric,
+                confidence=request_confidence,
+                use_kde_weighting=use_kde_weighting,
+                bounds=state.bounds,
+            ),
+        )
+        self._annotate_guarantee(
+            report, sequential=False, use_kde_weighting=use_kde_weighting
+        )
+        self._append_history(report, state)
+        if report.next_action == "stop":
+            self._save_samples_from_report(report)
+            return {
+                "system_command": "stop",
+                "reason": "SMC Verification Complete",
+            }
+        if report.next_action == "error":
+            return {
+                "system_command": "stop",
+                "reason": str(report.diagnostics.get("message", "DKW evaluation error")),
+            }
+        return None
+
+    def _stage_dataset(
+        self, df_dataset: pd.DataFrame | None, state: DKWModeState
+    ) -> tuple[pd.DataFrame | None, bool]:
+        """Rows for the current stage, and whether the stage can be evaluated now.
+
+        The stage uses the first ``schedule.size(stage)`` uniform (SMC) samples that have a
+        usable value, in issue order; rows that are not SMC samples (exploration
+        data, only kept without --dkw-pure-smc) are always included. When no more
+        tasks can be issued, the last stage uses whatever samples are there.
+        The schedule is ``evaluation.stopping_rules.StagewiseSchedule``, the same
+        one ``DKWSequentialStagewise`` uses on the IID path.
+        """
+        dkw_dataset = self._select_dataset(df_dataset)
+        if dkw_dataset is None or dkw_dataset.empty:
+            return dkw_dataset, False
+        is_smc = _smc_mask(dkw_dataset)
+        usable = is_smc & self._usable_mask(dkw_dataset)
+        smc_rows = dkw_dataset[usable]
+        if "loop_num" in smc_rows.columns:
+            order = pd.to_numeric(smc_rows["loop_num"], errors="coerce")
+            smc_rows = smc_rows.assign(_order=order).sort_values("_order", kind="stable").drop(columns="_order")
+        size = self.schedule.size(state.stage)
+        exhausted = state.dispatched_task_count >= self.config.max_samples
+        if len(smc_rows) < size and not exhausted:
+            return dkw_dataset, False
+        selected = smc_rows.head(size)
+        stage_dataset = pd.concat([dkw_dataset[~is_smc], selected]) if (~is_smc).any() else selected
+        return stage_dataset, True
+
+    def _usable_mask(self, df: pd.DataFrame) -> pd.Series:
+        mask = pd.Series(True, index=df.index)
+        if "status" in df.columns:
+            mask &= df["status"].fillna("").astype(str).str.lower().eq("success")
+        metrics = self.config.target_metrics if self.config.simultaneous else [self.config.target_metric]
+        for metric in metrics:
+            if metric not in df.columns:
+                return pd.Series(False, index=df.index)
+            values = pd.to_numeric(df[metric], errors="coerce")
+            mask &= values.notna()
+            if self.config.minimum_value is not None:
+                mask &= values >= float(self.config.minimum_value)
+        return mask
 
     def handle_fixed(
         self,
@@ -527,6 +585,12 @@ class DKWModeRunner:
                 if repository is not None:
                     repository.save_dkw_samples(filtered_df)
                 return
+
+
+def _smc_mask(df: pd.DataFrame) -> pd.Series:
+    if "reason" not in df.columns:
+        return pd.Series(False, index=df.index)
+    return df["reason"].fillna("").astype(str).str.contains(SMC_REASON_MARKER, na=False)
 
 
 def _has_non_smc_samples(filtered_df: object) -> bool:

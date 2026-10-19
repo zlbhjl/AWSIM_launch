@@ -3204,11 +3204,7 @@
         "method": "dkw",
         "metric": "time_to_failure",
         "options": {
-          "epsilon": 0.15,
-          "minimum_value": 0.0,
-          "q": 0.05,
-          "region": "custom",
-          "use_kde_weighting": false
+          "stopping_rule": "dkw_sequential_stagewise"
         },
         "target_width": 0.15
       },
@@ -3250,11 +3246,7 @@
         "method": "dkw",
         "metric": "time_to_failure",
         "options": {
-          "epsilon": 0.15,
-          "minimum_value": 0.0,
-          "q": 0.05,
-          "region": "custom",
-          "use_kde_weighting": false
+          "stopping_rule": "dkw_fixed_strict"
         },
         "target_width": 0.15
       },
@@ -3437,11 +3429,7 @@
         "method": "dkw",
         "metric": "min_ttc",
         "options": {
-          "epsilon": 0.15,
-          "minimum_value": 0.0,
-          "q": 0.05,
-          "region": "custom",
-          "use_kde_weighting": false
+          "stopping_rule": "dkw_sequential_stagewise"
         },
         "target_width": 0.15
       },
@@ -3483,11 +3471,7 @@
         "method": "dkw",
         "metric": "min_ttc",
         "options": {
-          "epsilon": 0.15,
-          "minimum_value": 0.0,
-          "q": 0.05,
-          "region": "custom",
-          "use_kde_weighting": false
+          "stopping_rule": "dkw_fixed_strict"
         },
         "target_width": 0.15
       },
