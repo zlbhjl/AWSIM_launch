@@ -1,0 +1,93 @@
+budget: 10
+trials:
+- name: both_m0.15
+  noise:
+    kind: gaussian
+    mean_rule:
+      kind: constant
+      values:
+        w1: 0.15
+        w2: 0.15
+- name: both_m0.25
+  noise:
+    kind: gaussian
+    mean_rule:
+      kind: constant
+      values:
+        w1: 0.25
+        w2: 0.25
+- name: both_m0.35
+  noise:
+    kind: gaussian
+    mean_rule:
+      kind: constant
+      values:
+        w1: 0.35
+        w2: 0.35
+- name: mix_m0.25
+  noise:
+    kind: mixture
+    components:
+    - weight: 0.5
+      law:
+        kind: gaussian
+        mean_rule:
+          kind: constant
+          values:
+            w1: 0.25
+    - weight: 0.5
+      law:
+        kind: gaussian
+        mean_rule:
+          kind: constant
+          values:
+            w2: 0.5
+- name: mix_m0.35
+  noise:
+    kind: mixture
+    components:
+    - weight: 0.5
+      law:
+        kind: gaussian
+        mean_rule:
+          kind: constant
+          values:
+            w1: 0.35
+    - weight: 0.5
+      law:
+        kind: gaussian
+        mean_rule:
+          kind: constant
+          values:
+            w2: 0.7
+- name: both_m0.25_t5
+  noise:
+    kind: student_t
+    dof: 5
+    location_rule:
+      kind: constant
+      values:
+        w1: 0.25
+        w2: 0.25
+    covariance:
+      channels:
+      - w1
+      - w2
+      matrix:
+      - - 1.0
+        - 0.0
+      - - 0.0
+        - 1.0
+- name: both_m0.25_b0.2
+  noise:
+    kind: mixture
+    defensive_weight: 0.2
+    components:
+    - weight: 1.0
+      law:
+        kind: gaussian
+        mean_rule:
+          kind: constant
+          values:
+            w1: 0.25
+            w2: 0.25

@@ -1,0 +1,93 @@
+schema_version: 1
+experiment_id: ou_a_4sd_upper__q5_s0.8_1.2__final
+target: dynamics
+target_measure:
+  id: ou_a_4sd_upper_p
+  definition:
+    dynamics_schema_version: 2
+    model_id: ou_scalar
+    model_params:
+      theta: 1.0
+      sigma: 1.0
+    initial_law:
+      kind: point_mass
+      value:
+      - 0.0
+    solver:
+      kind: sde
+      dt_sec: 0.01
+      horizon_sec: 1.0
+    event:
+      kind: terminal_exceedance
+      threshold: 2.638745438381503
+      side: upper
+proposal:
+  id: q5_s0.8_1.2
+  mode: manual_proposal
+  definition:
+    dynamics_schema_version: 2
+    input:
+      kind: same_as_target
+    noise:
+      kind: mixture
+      components:
+      - weight: 0.5
+        law:
+          kind: gaussian
+          mean_rule:
+            kind: piecewise
+            pieces:
+            - time:
+              - 0.0
+              - 0.25
+              values:
+                w: 0.20286838200199228
+            - time:
+              - 0.25
+              - 0.5
+              values:
+                w: 0.260816162413828
+            - time:
+              - 0.5
+              - 0.75
+              values:
+                w: 0.3353162770116058
+            - time:
+              - 0.75
+              - null
+              values:
+                w: 0.43109677171970673
+      - weight: 0.5
+        law:
+          kind: gaussian
+          mean_rule:
+            kind: piecewise
+            pieces:
+            - time:
+              - 0.0
+              - 0.25
+              values:
+                w: 0.30430257300298835
+            - time:
+              - 0.25
+              - 0.5
+              values:
+                w: 0.39122424362074193
+            - time:
+              - 0.5
+              - 0.75
+              values:
+                w: 0.5029744155174087
+            - time:
+              - 0.75
+              - null
+              values:
+                w: 0.6466451575795601
+tuning_provenance:
+  record: configs/is_tuning/ou_a_4sd_upper/records/q5.json
+  trial: q5_s0.8_1.2
+  proposal_fingerprint: sha256:23804a567f9226a08a8f83d394438011226296d6ef27912fd5f20c7446b1e1d0
+  pilot_root_entropy: '20261023'
+  pilot_samples: 1000
+  rank: 1
+  fixed_at: '2026-10-23T13:50:28+09:00'

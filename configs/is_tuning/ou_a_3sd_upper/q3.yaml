@@ -1,0 +1,167 @@
+budget: 10
+trials:
+- name: q3_s0.8
+  noise:
+    kind: gaussian
+    mean_rule:
+      kind: piecewise
+      pieces:
+      - time:
+        - 0.0
+        - 0.25
+        rule:
+          kind: affine_state
+          channels:
+          - w
+          states: &id001
+          - x
+          offset:
+          - 0.16207010306454386
+          matrix:
+          - - -0.034510244821333816
+      - time:
+        - 0.25
+        - 0.5
+        rule:
+          kind: affine_state
+          channels:
+          - w
+          states: *id001
+          offset:
+          - 0.24319598759052763
+          matrix:
+          - - -0.06670735579171372
+      - time:
+        - 0.5
+        - 0.75
+        rule:
+          kind: affine_state
+          channels:
+          - w
+          states: *id001
+          offset:
+          - 0.43538016744667174
+          matrix:
+          - - -0.1543345656315387
+      - time:
+        - 0.75
+        - null
+        rule:
+          kind: affine_state
+          channels:
+          - w
+          states: *id001
+          offset:
+          - 2.741380722668712
+          matrix:
+          - - -1.3096097094184902
+- name: q3_s1.0
+  noise:
+    kind: gaussian
+    mean_rule:
+      kind: piecewise
+      pieces:
+      - time:
+        - 0.0
+        - 0.25
+        rule:
+          kind: affine_state
+          channels:
+          - w
+          states: &id002
+          - x
+          offset:
+          - 0.20258762883067982
+          matrix:
+          - - -0.043137806026667266
+      - time:
+        - 0.25
+        - 0.5
+        rule:
+          kind: affine_state
+          channels:
+          - w
+          states: *id002
+          offset:
+          - 0.30399498448815954
+          matrix:
+          - - -0.08338419473964215
+      - time:
+        - 0.5
+        - 0.75
+        rule:
+          kind: affine_state
+          channels:
+          - w
+          states: *id002
+          offset:
+          - 0.5442252093083396
+          matrix:
+          - - -0.19291820703942333
+      - time:
+        - 0.75
+        - null
+        rule:
+          kind: affine_state
+          channels:
+          - w
+          states: *id002
+          offset:
+          - 3.42672590333589
+          matrix:
+          - - -1.6370121367731127
+- name: q3_s1.2
+  noise:
+    kind: gaussian
+    mean_rule:
+      kind: piecewise
+      pieces:
+      - time:
+        - 0.0
+        - 0.25
+        rule:
+          kind: affine_state
+          channels:
+          - w
+          states: &id003
+          - x
+          offset:
+          - 0.24310515459681578
+          matrix:
+          - - -0.05176536723200072
+      - time:
+        - 0.25
+        - 0.5
+        rule:
+          kind: affine_state
+          channels:
+          - w
+          states: *id003
+          offset:
+          - 0.36479398138579144
+          matrix:
+          - - -0.10006103368757058
+      - time:
+        - 0.5
+        - 0.75
+        rule:
+          kind: affine_state
+          channels:
+          - w
+          states: *id003
+          offset:
+          - 0.6530702511700075
+          matrix:
+          - - -0.23150184844730798
+      - time:
+        - 0.75
+        - null
+        rule:
+          kind: affine_state
+          channels:
+          - w
+          states: *id003
+          offset:
+          - 4.112071084003068
+          matrix:
+          - - -1.9644145641277353

@@ -1,0 +1,281 @@
+{
+  "created_at": "2026-10-23T13:49:15+09:00",
+  "base_plan": "configs/is_tuning/ou_a_4sd_upper/base.yaml",
+  "base_plan_fingerprint": "sha256:eeea759dece2374f962679351605798325ca07693e28f9cdc942c45409bc4988",
+  "candidates": "configs/is_tuning/ou_a_4sd_upper/q4.yaml",
+  "budget": 10,
+  "samples_per_trial": 1000,
+  "phase": "pilot",
+  "root_entropy": "20261023",
+  "ranking_rule": "complete trials with an observed event, by relative standard error of the IS estimate",
+  "trials": [
+    {
+      "name": "q4_t5_s0.8",
+      "proposal": {
+        "dynamics_schema_version": 2,
+        "input": {
+          "kind": "same_as_target"
+        },
+        "noise": {
+          "kind": "student_t",
+          "dof": 5,
+          "location_rule": {
+            "kind": "piecewise",
+            "pieces": [
+              {
+                "time": [
+                  0.0,
+                  0.25
+                ],
+                "rule": {
+                  "kind": "affine_state",
+                  "channels": [
+                    "w"
+                  ],
+                  "states": [
+                    "x"
+                  ],
+                  "offset": [
+                    0.21609347075272517
+                  ],
+                  "matrix": [
+                    [
+                      -0.034510244821333816
+                    ]
+                  ]
+                }
+              },
+              {
+                "time": [
+                  0.25,
+                  0.5
+                ],
+                "rule": {
+                  "kind": "affine_state",
+                  "channels": [
+                    "w"
+                  ],
+                  "states": [
+                    "x"
+                  ],
+                  "offset": [
+                    0.32426131678737025
+                  ],
+                  "matrix": [
+                    [
+                      -0.06670735579171372
+                    ]
+                  ]
+                }
+              },
+              {
+                "time": [
+                  0.5,
+                  0.75
+                ],
+                "rule": {
+                  "kind": "affine_state",
+                  "channels": [
+                    "w"
+                  ],
+                  "states": [
+                    "x"
+                  ],
+                  "offset": [
+                    0.5805068899288957
+                  ],
+                  "matrix": [
+                    [
+                      -0.1543345656315387
+                    ]
+                  ]
+                }
+              },
+              {
+                "time": [
+                  0.75,
+                  null
+                ],
+                "rule": {
+                  "kind": "affine_state",
+                  "channels": [
+                    "w"
+                  ],
+                  "states": [
+                    "x"
+                  ],
+                  "offset": [
+                    3.655174296891616
+                  ],
+                  "matrix": [
+                    [
+                      -1.3096097094184902
+                    ]
+                  ]
+                }
+              }
+            ]
+          },
+          "covariance": {
+            "channels": [
+              "w"
+            ],
+            "matrix": [
+              [
+                1.0
+              ]
+            ]
+          }
+        }
+      },
+      "proposal_fingerprint": "sha256:57974737480d409471987a5ae11d3020236ba731a67d3041d0afd50da4440fce",
+      "final_status": "complete",
+      "estimate_is": 2.1918180916218322e-05,
+      "estimate_mc": 0.0,
+      "standard_error": 7.239506489035037e-06,
+      "relative_standard_error": 0.3302968670943936,
+      "diagnostic_interval_width": 2.837834396870537e-05,
+      "effective_sample_size": 11.65284302389324,
+      "max_log_importance_weight": -3.737768441233726,
+      "weight_bound": null,
+      "wall_time_sec": 4.260714475999521,
+      "seconds_per_path": 0.0021303572379997603
+    },
+    {
+      "name": "q4_t5_s1.0",
+      "proposal": {
+        "dynamics_schema_version": 2,
+        "input": {
+          "kind": "same_as_target"
+        },
+        "noise": {
+          "kind": "student_t",
+          "dof": 5,
+          "location_rule": {
+            "kind": "piecewise",
+            "pieces": [
+              {
+                "time": [
+                  0.0,
+                  0.25
+                ],
+                "rule": {
+                  "kind": "affine_state",
+                  "channels": [
+                    "w"
+                  ],
+                  "states": [
+                    "x"
+                  ],
+                  "offset": [
+                    0.27011683844090645
+                  ],
+                  "matrix": [
+                    [
+                      -0.043137806026667266
+                    ]
+                  ]
+                }
+              },
+              {
+                "time": [
+                  0.25,
+                  0.5
+                ],
+                "rule": {
+                  "kind": "affine_state",
+                  "channels": [
+                    "w"
+                  ],
+                  "states": [
+                    "x"
+                  ],
+                  "offset": [
+                    0.40532664598421275
+                  ],
+                  "matrix": [
+                    [
+                      -0.08338419473964215
+                    ]
+                  ]
+                }
+              },
+              {
+                "time": [
+                  0.5,
+                  0.75
+                ],
+                "rule": {
+                  "kind": "affine_state",
+                  "channels": [
+                    "w"
+                  ],
+                  "states": [
+                    "x"
+                  ],
+                  "offset": [
+                    0.7256336124111196
+                  ],
+                  "matrix": [
+                    [
+                      -0.19291820703942333
+                    ]
+                  ]
+                }
+              },
+              {
+                "time": [
+                  0.75,
+                  null
+                ],
+                "rule": {
+                  "kind": "affine_state",
+                  "channels": [
+                    "w"
+                  ],
+                  "states": [
+                    "x"
+                  ],
+                  "offset": [
+                    4.56896787111452
+                  ],
+                  "matrix": [
+                    [
+                      -1.6370121367731127
+                    ]
+                  ]
+                }
+              }
+            ]
+          },
+          "covariance": {
+            "channels": [
+              "w"
+            ],
+            "matrix": [
+              [
+                1.0
+              ]
+            ]
+          }
+        }
+      },
+      "proposal_fingerprint": "sha256:07b9e41c867b6893f77cc1b09b5651389c1e0f35647d16f8e8d92368b46153e8",
+      "final_status": "complete",
+      "estimate_is": 1.2455719496813054e-05,
+      "estimate_mc": 0.0,
+      "standard_error": 3.934405998379258e-06,
+      "relative_standard_error": 0.31587143555905567,
+      "diagnostic_interval_width": 1.54225881147634e-05,
+      "effective_sample_size": 12.694049014736652,
+      "max_log_importance_weight": -4.581251230614441,
+      "weight_bound": null,
+      "wall_time_sec": 3.9839714390000154,
+      "seconds_per_path": 0.0019919857195000077
+    }
+  ],
+  "ranking": [
+    "q4_t5_s1.0",
+    "q4_t5_s0.8"
+  ]
+}

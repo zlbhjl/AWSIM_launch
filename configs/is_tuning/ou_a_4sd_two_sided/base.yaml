@@ -1,0 +1,30 @@
+schema_version: 1
+experiment_id: ou_a_4sd_two_sided
+target: dynamics
+target_measure:
+  id: ou_a_4sd_two_sided_p
+  definition:
+    dynamics_schema_version: 2
+    model_id: ou_scalar
+    model_params:
+      theta: 1.0
+      sigma: 1.0
+    initial_law:
+      kind: point_mass
+      value:
+      - 0.0
+    solver:
+      kind: sde
+      dt_sec: 0.01
+      horizon_sec: 1.0
+    event:
+      kind: terminal_exceedance
+      threshold: 2.638745438381503
+      side: two_sided
+proposal:
+  id: q0_p
+  mode: manual_proposal
+  definition:
+    dynamics_schema_version: 2
+    input:
+      kind: same_as_target

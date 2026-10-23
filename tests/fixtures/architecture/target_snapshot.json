@@ -176,6 +176,7 @@
     "dynamics": {
       "backend": "targets.dynamics.backend.DynamicsBackend",
       "backend_config": {
+        "artifact_policy": "files",
         "output_root": "artifacts/dynamics",
         "source_module": "targets.dynamics.backend"
       },

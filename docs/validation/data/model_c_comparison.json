@@ -1,0 +1,82 @@
+{
+  "reference": {
+    "threshold": 1.5,
+    "paths": 10000000,
+    "seed": 20261024,
+    "hits": 9075,
+    "estimate": 0.0009075,
+    "ci95_clopper_pearson": [
+      0.0008889319443587745,
+      0.0009263579866669419
+    ],
+    "seconds": 65.3613851070404,
+    "pilot": {
+      "seed": 1,
+      "paths": 1000000,
+      "threshold_1.5": 0.000863,
+      "threshold_1.6": 0.000386
+    }
+  },
+  "samples": 2000,
+  "runs_per_plan": 10,
+  "seed_base": 20261201,
+  "summary": {
+    "configs/is_final_reference/nonlinear2d_max_1p5_q0.yaml": {
+      "runs": 10,
+      "complete": 10,
+      "mc": {
+        "mean": 0.0006500000000000001,
+        "std": 0.0007835106182362106,
+        "relative_std_to_reference": 0.8633725820784689,
+        "intervals_overlapping_reference": 9,
+        "intervals_missing": 0
+      },
+      "is": {
+        "mean": 0.0008000000000000004,
+        "std": 0.0005868938953886339,
+        "relative_std_to_reference": 0.6467150362409189,
+        "intervals_overlapping_reference": 8,
+        "intervals_missing": 2
+      },
+      "mean_seconds_per_path": 0.0022655156239500002
+    },
+    "configs/is_final_reference/nonlinear2d_max_1p5_q1.yaml": {
+      "runs": 10,
+      "complete": 10,
+      "mc": {
+        "mean": 0.0006500000000000001,
+        "std": 0.0007835106182362106,
+        "relative_std_to_reference": 0.8633725820784689,
+        "intervals_overlapping_reference": 9,
+        "intervals_missing": 0
+      },
+      "is": {
+        "mean": 0.0009016432401642291,
+        "std": 0.00021030689685873352,
+        "relative_std_to_reference": 0.2317431370344171,
+        "intervals_overlapping_reference": 9,
+        "intervals_missing": 0
+      },
+      "mean_seconds_per_path": 0.0024394789449249626
+    },
+    "configs/is_final_reference/nonlinear2d_max_1p5_q1d.yaml": {
+      "runs": 10,
+      "complete": 10,
+      "mc": {
+        "mean": 0.0006500000000000001,
+        "std": 0.0007835106182362106,
+        "relative_std_to_reference": 0.8633725820784689,
+        "intervals_overlapping_reference": 9,
+        "intervals_missing": 0
+      },
+      "is": {
+        "mean": 0.0009613278415589602,
+        "std": 0.00028965714926861344,
+        "relative_std_to_reference": 0.3191814317009515,
+        "intervals_overlapping_reference": 9,
+        "intervals_missing": 0
+      },
+      "mean_seconds_per_path": 0.0024368603003000317
+    }
+  }
+}

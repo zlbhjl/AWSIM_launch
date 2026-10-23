@@ -1,0 +1,303 @@
+{
+  "created_at": "2026-10-23T13:56:07+09:00",
+  "base_plan": "configs/is_tuning/nonlinear2d_max_1p5/base.yaml",
+  "base_plan_fingerprint": "sha256:02a28950fd3398c1fb196ec4c46125ae90df1de7f50ba00a675322f8e0059430",
+  "candidates": "configs/is_tuning/nonlinear2d_max_1p5/candidates.yaml",
+  "budget": 10,
+  "samples_per_trial": 1000,
+  "phase": "pilot",
+  "root_entropy": "20261023",
+  "ranking_rule": "complete trials with an observed event, by relative standard error of the IS estimate",
+  "trials": [
+    {
+      "name": "both_m0.15",
+      "proposal": {
+        "dynamics_schema_version": 2,
+        "input": {
+          "kind": "same_as_target"
+        },
+        "noise": {
+          "kind": "gaussian",
+          "mean_rule": {
+            "kind": "constant",
+            "values": {
+              "w1": 0.15,
+              "w2": 0.15
+            }
+          }
+        }
+      },
+      "proposal_fingerprint": "sha256:f3db59e35395131b1fb427ae802714f41d452f11f1bd5546e7ae9c09449e6a0b",
+      "final_status": "complete",
+      "estimate_is": 0.0010999156366234583,
+      "estimate_mc": 0.0,
+      "standard_error": 0.0002981568113137823,
+      "relative_standard_error": 0.2710724362725397,
+      "diagnostic_interval_width": 0.001168753223840636,
+      "effective_sample_size": 64.30203069704628,
+      "max_log_importance_weight": 4.139889904176641,
+      "weight_bound": null,
+      "wall_time_sec": 4.95259542399981,
+      "seconds_per_path": 0.002476297711999905
+    },
+    {
+      "name": "both_m0.25",
+      "proposal": {
+        "dynamics_schema_version": 2,
+        "input": {
+          "kind": "same_as_target"
+        },
+        "noise": {
+          "kind": "gaussian",
+          "mean_rule": {
+            "kind": "constant",
+            "values": {
+              "w1": 0.25,
+              "w2": 0.25
+            }
+          }
+        }
+      },
+      "proposal_fingerprint": "sha256:c960512a040dd7ddee9511823fe7a916dbbc39a901c43e03ae727cf6a7ccddb9",
+      "final_status": "complete",
+      "estimate_is": 0.0006132693322125753,
+      "estimate_mc": 0.0,
+      "standard_error": 8.993442324335932e-05,
+      "relative_standard_error": 0.14664751442712884,
+      "diagnostic_interval_width": 0.0003525364610547324,
+      "effective_sample_size": 11.539085277465837,
+      "max_log_importance_weight": 4.399816506961031,
+      "weight_bound": null,
+      "wall_time_sec": 4.743422917000316,
+      "seconds_per_path": 0.0023717114585001583
+    },
+    {
+      "name": "both_m0.35",
+      "proposal": {
+        "dynamics_schema_version": 2,
+        "input": {
+          "kind": "same_as_target"
+        },
+        "noise": {
+          "kind": "gaussian",
+          "mean_rule": {
+            "kind": "constant",
+            "values": {
+              "w1": 0.35,
+              "w2": 0.35
+            }
+          }
+        }
+      },
+      "proposal_fingerprint": "sha256:a901e05bc03321601d363b43cfa5ee6a6aa29f0d89dbe4d8beb1a07ba3ceae9d",
+      "final_status": "complete",
+      "estimate_is": 0.0003682931121947207,
+      "estimate_mc": 0.0,
+      "standard_error": 5.99466303686654e-05,
+      "relative_standard_error": 0.1627688066481432,
+      "diagnostic_interval_width": 0.00023498647303423848,
+      "effective_sample_size": 3.951679560143631,
+      "max_log_importance_weight": 2.659743109745307,
+      "weight_bound": null,
+      "wall_time_sec": 4.808066356000381,
+      "seconds_per_path": 0.002404033178000191
+    },
+    {
+      "name": "mix_m0.25",
+      "proposal": {
+        "dynamics_schema_version": 2,
+        "input": {
+          "kind": "same_as_target"
+        },
+        "noise": {
+          "kind": "mixture",
+          "components": [
+            {
+              "weight": 0.5,
+              "law": {
+                "kind": "gaussian",
+                "mean_rule": {
+                  "kind": "constant",
+                  "values": {
+                    "w1": 0.25
+                  }
+                }
+              }
+            },
+            {
+              "weight": 0.5,
+              "law": {
+                "kind": "gaussian",
+                "mean_rule": {
+                  "kind": "constant",
+                  "values": {
+                    "w2": 0.5
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "proposal_fingerprint": "sha256:081f3d105bd59653f2655ccd41d1223778c970c6db5beee12519fda18a9c2639",
+      "final_status": "complete",
+      "estimate_is": 0.0007516589097985263,
+      "estimate_mc": 0.0,
+      "standard_error": 0.00012833410114442226,
+      "relative_standard_error": 0.17073449069980526,
+      "diagnostic_interval_width": 0.0005030604324627765,
+      "effective_sample_size": 17.61143732268035,
+      "max_log_importance_weight": 5.132818713646827,
+      "weight_bound": null,
+      "wall_time_sec": 5.180356517000291,
+      "seconds_per_path": 0.0025901782585001456
+    },
+    {
+      "name": "mix_m0.35",
+      "proposal": {
+        "dynamics_schema_version": 2,
+        "input": {
+          "kind": "same_as_target"
+        },
+        "noise": {
+          "kind": "mixture",
+          "components": [
+            {
+              "weight": 0.5,
+              "law": {
+                "kind": "gaussian",
+                "mean_rule": {
+                  "kind": "constant",
+                  "values": {
+                    "w1": 0.35
+                  }
+                }
+              }
+            },
+            {
+              "weight": 0.5,
+              "law": {
+                "kind": "gaussian",
+                "mean_rule": {
+                  "kind": "constant",
+                  "values": {
+                    "w2": 0.7
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "proposal_fingerprint": "sha256:82dfb8e0f182a9ed07ad09bf6ee9314fa7aa423448fcfc5bcfa953891da0c5d0",
+      "final_status": "complete",
+      "estimate_is": 0.0007846378435969958,
+      "estimate_mc": 0.0,
+      "standard_error": 0.0002673953571226864,
+      "relative_standard_error": 0.340788249387606,
+      "diagnostic_interval_width": 0.001048170539187382,
+      "effective_sample_size": 6.111016832464987,
+      "max_log_importance_weight": 5.158793484922853,
+      "weight_bound": null,
+      "wall_time_sec": 5.181666861999474,
+      "seconds_per_path": 0.002590833430999737
+    },
+    {
+      "name": "both_m0.25_t5",
+      "proposal": {
+        "dynamics_schema_version": 2,
+        "input": {
+          "kind": "same_as_target"
+        },
+        "noise": {
+          "kind": "student_t",
+          "dof": 5,
+          "location_rule": {
+            "kind": "constant",
+            "values": {
+              "w1": 0.25,
+              "w2": 0.25
+            }
+          },
+          "covariance": {
+            "channels": [
+              "w1",
+              "w2"
+            ],
+            "matrix": [
+              [
+                1.0,
+                0.0
+              ],
+              [
+                0.0,
+                1.0
+              ]
+            ]
+          }
+        }
+      },
+      "proposal_fingerprint": "sha256:5e9706fce80b72e068087ea098d0db7783da752340bc1341ff44cb4df20da286",
+      "final_status": "complete",
+      "estimate_is": 9.248004402191534e-05,
+      "estimate_mc": 0.0,
+      "standard_error": 4.20436969704429e-05,
+      "relative_standard_error": 0.45462453456963803,
+      "diagnostic_interval_width": 0.0001648082636779677,
+      "effective_sample_size": 1.2008654613766034,
+      "max_log_importance_weight": 4.713472724637825,
+      "weight_bound": null,
+      "wall_time_sec": 6.532928454999819,
+      "seconds_per_path": 0.0032664642274999097
+    },
+    {
+      "name": "both_m0.25_b0.2",
+      "proposal": {
+        "dynamics_schema_version": 2,
+        "input": {
+          "kind": "same_as_target"
+        },
+        "noise": {
+          "kind": "mixture",
+          "defensive_weight": 0.2,
+          "components": [
+            {
+              "weight": 1.0,
+              "law": {
+                "kind": "gaussian",
+                "mean_rule": {
+                  "kind": "constant",
+                  "values": {
+                    "w1": 0.25,
+                    "w2": 0.25
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "proposal_fingerprint": "sha256:e5d695c8b0f674f7a92f16d355ba9962e2d8969f5fa01af35ed345cc638ab6cf",
+      "final_status": "complete",
+      "estimate_is": 0.0005408315919562586,
+      "estimate_mc": 0.0,
+      "standard_error": 7.456554096899877e-05,
+      "relative_standard_error": 0.1378720142795014,
+      "diagnostic_interval_width": 0.0002922915495739669,
+      "effective_sample_size": 224.00381618763447,
+      "max_log_importance_weight": 1.609436818816107,
+      "weight_bound": 5.0,
+      "wall_time_sec": 4.895804421000321,
+      "seconds_per_path": 0.0024479022105001603
+    }
+  ],
+  "ranking": [
+    "both_m0.25_b0.2",
+    "both_m0.25",
+    "both_m0.35",
+    "mix_m0.25",
+    "both_m0.15",
+    "mix_m0.35",
+    "both_m0.25_t5"
+  ]
+}

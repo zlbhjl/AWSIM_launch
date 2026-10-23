@@ -1,0 +1,22 @@
+# Model C (docs/sde_importance_sampling_plan.md §12): nonlinear drift, state-dependent
+# correlated diffusion; event: x1 or x2 above 1.5 at some grid time. The threshold
+# was fixed by an independent pilot (seed 1, 1e6 paths: 8.63e-4). There is no closed
+# form; the reference is an independent vectorised Monte Carlo (models/reference.py).
+schema_version: 1
+experiment_id: nonlinear2d_max_1p5
+target: dynamics
+target_measure:
+  id: nonlinear2d_max_1p5_p
+  definition:
+    dynamics_schema_version: 2
+    model_id: nonlinear2d
+    model_params: {drift_coupling: 0.5, modulation: 0.25, diffusion_scale: 0.5, correlation: 0.5}
+    initial_law: {kind: point_mass, value: [0.0, 0.0]}
+    solver: {kind: sde, dt_sec: 0.01, horizon_sec: 1.0}
+    event: {kind: max_exceedance, threshold: 1.5, side: upper}
+proposal:
+  id: q0_p
+  mode: manual_proposal
+  definition:
+    dynamics_schema_version: 2
+    input: {kind: same_as_target}

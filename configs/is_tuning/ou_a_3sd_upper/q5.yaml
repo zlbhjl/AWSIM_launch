@@ -1,0 +1,114 @@
+budget: 10
+trials:
+- name: q5_s0.8_1.2
+  noise:
+    kind: mixture
+    components:
+    - weight: 0.5
+      law:
+        kind: gaussian
+        mean_rule:
+          kind: piecewise
+          pieces:
+          - time:
+            - 0.0
+            - 0.25
+            values:
+              w: 0.15215128650149418
+          - time:
+            - 0.25
+            - 0.5
+            values:
+              w: 0.19561212181037096
+          - time:
+            - 0.5
+            - 0.75
+            values:
+              w: 0.25148720775870437
+          - time:
+            - 0.75
+            - null
+            values:
+              w: 0.32332257878978005
+    - weight: 0.5
+      law:
+        kind: gaussian
+        mean_rule:
+          kind: piecewise
+          pieces:
+          - time:
+            - 0.0
+            - 0.25
+            values:
+              w: 0.2282269297522413
+          - time:
+            - 0.25
+            - 0.5
+            values:
+              w: 0.2934181827155565
+          - time:
+            - 0.5
+            - 0.75
+            values:
+              w: 0.37723081163805644
+          - time:
+            - 0.75
+            - null
+            values:
+              w: 0.48498386818467
+- name: q5_s0.9_1.3
+  noise:
+    kind: mixture
+    components:
+    - weight: 0.5
+      law:
+        kind: gaussian
+        mean_rule:
+          kind: piecewise
+          pieces:
+          - time:
+            - 0.0
+            - 0.25
+            values:
+              w: 0.17117019731418096
+          - time:
+            - 0.25
+            - 0.5
+            values:
+              w: 0.22006363703666731
+          - time:
+            - 0.5
+            - 0.75
+            values:
+              w: 0.28292310872854237
+          - time:
+            - 0.75
+            - null
+            values:
+              w: 0.3637379011385026
+    - weight: 0.5
+      law:
+        kind: gaussian
+        mean_rule:
+          kind: piecewise
+          pieces:
+          - time:
+            - 0.0
+            - 0.25
+            values:
+              w: 0.24724584056492804
+          - time:
+            - 0.25
+            - 0.5
+            values:
+              w: 0.3178696979418529
+          - time:
+            - 0.5
+            - 0.75
+            values:
+              w: 0.4086667126078946
+          - time:
+            - 0.75
+            - null
+            values:
+              w: 0.5253991905333926

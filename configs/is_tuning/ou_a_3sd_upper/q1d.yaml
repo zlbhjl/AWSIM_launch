@@ -1,0 +1,33 @@
+budget: 10
+trials:
+- name: q1d_b0.2
+  noise:
+    kind: mixture
+    defensive_weight: 0.2
+    components:
+    - weight: 1.0
+      law:
+        kind: gaussian
+        mean_rule:
+          kind: piecewise
+          pieces:
+          - time:
+            - 0.0
+            - 0.25
+            values:
+              w: 0.19018910812686773
+          - time:
+            - 0.25
+            - 0.5
+            values:
+              w: 0.24451515226296372
+          - time:
+            - 0.5
+            - 0.75
+            values:
+              w: 0.31435900969838043
+          - time:
+            - 0.75
+            - null
+            values:
+              w: 0.40415322348722504

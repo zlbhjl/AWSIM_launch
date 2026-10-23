@@ -1,0 +1,204 @@
+{
+  "created_at": "2026-10-23T13:50:15+09:00",
+  "base_plan": "configs/is_tuning/ou_a_3sd_upper/base.yaml",
+  "base_plan_fingerprint": "sha256:6752f19b4f28ab353ef84f1dcd6dbc2c816c4fc5fc2958a125f3dad61984db11",
+  "candidates": "configs/is_tuning/ou_a_3sd_upper/q1.yaml",
+  "budget": 10,
+  "samples_per_trial": 1000,
+  "phase": "pilot",
+  "root_entropy": "20261023",
+  "ranking_rule": "complete trials with an observed event, by relative standard error of the IS estimate",
+  "trials": [
+    {
+      "name": "q1_s0.8",
+      "proposal": {
+        "dynamics_schema_version": 2,
+        "input": {
+          "kind": "same_as_target"
+        },
+        "noise_path_q": {
+          "distribution": "gaussian_drift",
+          "drift_schedule": [
+            {
+              "time": [
+                0.0,
+                0.25
+              ],
+              "channel_drifts": {
+                "w": 1.5215128650149417
+              }
+            },
+            {
+              "time": [
+                0.25,
+                0.5
+              ],
+              "channel_drifts": {
+                "w": 1.9561212181037095
+              }
+            },
+            {
+              "time": [
+                0.5,
+                0.75
+              ],
+              "channel_drifts": {
+                "w": 2.5148720775870435
+              }
+            },
+            {
+              "time": [
+                0.75,
+                null
+              ],
+              "channel_drifts": {
+                "w": 3.2332257878978004
+              }
+            }
+          ]
+        }
+      },
+      "proposal_fingerprint": "sha256:d01d7e93903d755c2cebe90d1e96a1147c40dfedbb38737cc909423f549f87af",
+      "final_status": "complete",
+      "estimate_is": 0.0012993374200284183,
+      "estimate_mc": 0.003,
+      "standard_error": 9.221155695093707e-05,
+      "relative_standard_error": 0.07096813770584724,
+      "diagnostic_interval_width": 0.00036146266116440133,
+      "effective_sample_size": 21.20333278863478,
+      "max_log_importance_weight": 4.875451482329993,
+      "weight_bound": null,
+      "wall_time_sec": 2.764359548000357,
+      "seconds_per_path": 0.0013821797740001785
+    },
+    {
+      "name": "q1_s1.0",
+      "proposal": {
+        "dynamics_schema_version": 2,
+        "input": {
+          "kind": "same_as_target"
+        },
+        "noise_path_q": {
+          "distribution": "gaussian_drift",
+          "drift_schedule": [
+            {
+              "time": [
+                0.0,
+                0.25
+              ],
+              "channel_drifts": {
+                "w": 1.9018910812686773
+              }
+            },
+            {
+              "time": [
+                0.25,
+                0.5
+              ],
+              "channel_drifts": {
+                "w": 2.445151522629637
+              }
+            },
+            {
+              "time": [
+                0.5,
+                0.75
+              ],
+              "channel_drifts": {
+                "w": 3.143590096983804
+              }
+            },
+            {
+              "time": [
+                0.75,
+                null
+              ],
+              "channel_drifts": {
+                "w": 4.04153223487225
+              }
+            }
+          ]
+        }
+      },
+      "proposal_fingerprint": "sha256:09717f3bd4968a2ce246616e08cc5b6518189904c7198f5cf9250238e09f7b00",
+      "final_status": "complete",
+      "estimate_is": 0.0014842430095013072,
+      "estimate_mc": 0.003,
+      "standard_error": 8.515147813181066e-05,
+      "relative_standard_error": 0.0573703076832552,
+      "diagnostic_interval_width": 0.00033378766073739784,
+      "effective_sample_size": 10.407071898983565,
+      "max_log_importance_weight": 5.199011923987598,
+      "weight_bound": null,
+      "wall_time_sec": 2.7070029579999755,
+      "seconds_per_path": 0.0013535014789999877
+    },
+    {
+      "name": "q1_s1.2",
+      "proposal": {
+        "dynamics_schema_version": 2,
+        "input": {
+          "kind": "same_as_target"
+        },
+        "noise_path_q": {
+          "distribution": "gaussian_drift",
+          "drift_schedule": [
+            {
+              "time": [
+                0.0,
+                0.25
+              ],
+              "channel_drifts": {
+                "w": 2.282269297522413
+              }
+            },
+            {
+              "time": [
+                0.25,
+                0.5
+              ],
+              "channel_drifts": {
+                "w": 2.9341818271555646
+              }
+            },
+            {
+              "time": [
+                0.5,
+                0.75
+              ],
+              "channel_drifts": {
+                "w": 3.772308116380564
+              }
+            },
+            {
+              "time": [
+                0.75,
+                null
+              ],
+              "channel_drifts": {
+                "w": 4.849838681846699
+              }
+            }
+          ]
+        }
+      },
+      "proposal_fingerprint": "sha256:0c31b68c6f25079f1c736c4a73e21f6024b2841a7453787e12941b74535a3885",
+      "final_status": "complete",
+      "estimate_is": 0.0013438556293695653,
+      "estimate_mc": 0.003,
+      "standard_error": 8.433855732391205e-05,
+      "relative_standard_error": 0.06275864421796357,
+      "diagnostic_interval_width": 0.000330601069725869,
+      "effective_sample_size": 6.634528614005971,
+      "max_log_importance_weight": 5.164451394075286,
+      "weight_bound": null,
+      "wall_time_sec": 2.720259659000476,
+      "seconds_per_path": 0.0013601298295002379
+    }
+  ],
+  "ranking": [
+    "q1_s1.0",
+    "q1_s1.2",
+    "q1_s0.8"
+  ]
+}

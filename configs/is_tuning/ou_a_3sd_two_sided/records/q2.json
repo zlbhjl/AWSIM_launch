@@ -1,0 +1,167 @@
+{
+  "created_at": "2026-10-23T13:49:06+09:00",
+  "base_plan": "configs/is_tuning/ou_a_3sd_two_sided/base.yaml",
+  "base_plan_fingerprint": "sha256:f36c8d0b353f06c765ce3a9bbeed028ab8a71ff2bbefafcd7a09bf56b8ae499d",
+  "candidates": "configs/is_tuning/ou_a_3sd_two_sided/q2.yaml",
+  "budget": 10,
+  "samples_per_trial": 1000,
+  "phase": "pilot",
+  "root_entropy": "20261023",
+  "ranking_rule": "complete trials with an observed event, by relative standard error of the IS estimate",
+  "trials": [
+    {
+      "name": "q2_var1.2",
+      "proposal": {
+        "dynamics_schema_version": 2,
+        "input": {
+          "kind": "same_as_target"
+        },
+        "noise": {
+          "kind": "gaussian",
+          "mean_rule": {
+            "kind": "piecewise",
+            "pieces": [
+              {
+                "time": [
+                  0.0,
+                  0.25
+                ],
+                "values": {
+                  "w": 0.19018910812686773
+                }
+              },
+              {
+                "time": [
+                  0.25,
+                  0.5
+                ],
+                "values": {
+                  "w": 0.24451515226296372
+                }
+              },
+              {
+                "time": [
+                  0.5,
+                  0.75
+                ],
+                "values": {
+                  "w": 0.31435900969838043
+                }
+              },
+              {
+                "time": [
+                  0.75,
+                  null
+                ],
+                "values": {
+                  "w": 0.40415322348722504
+                }
+              }
+            ]
+          },
+          "covariance": {
+            "channels": [
+              "w"
+            ],
+            "matrix": [
+              [
+                1.2
+              ]
+            ]
+          }
+        }
+      },
+      "proposal_fingerprint": "sha256:64b62a617b045092f4431184ca507e8c7db3cc8d27089f0bd8abc812b7c6b6ce",
+      "final_status": "complete",
+      "estimate_is": 0.0015235049840356036,
+      "estimate_mc": 0.004,
+      "standard_error": 0.00016420260580267567,
+      "relative_standard_error": 0.10777950024667482,
+      "diagnostic_interval_width": 0.000643662387081744,
+      "effective_sample_size": 22.170355214875222,
+      "max_log_importance_weight": 4.22036564842719,
+      "weight_bound": null,
+      "wall_time_sec": 3.6361231780001617,
+      "seconds_per_path": 0.0018180615890000809
+    },
+    {
+      "name": "q2_var1.5",
+      "proposal": {
+        "dynamics_schema_version": 2,
+        "input": {
+          "kind": "same_as_target"
+        },
+        "noise": {
+          "kind": "gaussian",
+          "mean_rule": {
+            "kind": "piecewise",
+            "pieces": [
+              {
+                "time": [
+                  0.0,
+                  0.25
+                ],
+                "values": {
+                  "w": 0.19018910812686773
+                }
+              },
+              {
+                "time": [
+                  0.25,
+                  0.5
+                ],
+                "values": {
+                  "w": 0.24451515226296372
+                }
+              },
+              {
+                "time": [
+                  0.5,
+                  0.75
+                ],
+                "values": {
+                  "w": 0.31435900969838043
+                }
+              },
+              {
+                "time": [
+                  0.75,
+                  null
+                ],
+                "values": {
+                  "w": 0.40415322348722504
+                }
+              }
+            ]
+          },
+          "covariance": {
+            "channels": [
+              "w"
+            ],
+            "matrix": [
+              [
+                1.5
+              ]
+            ]
+          }
+        }
+      },
+      "proposal_fingerprint": "sha256:c0ce4a86ca7d200badd7fbe3d3a14cc37974894ae657200fb84520e7447cd338",
+      "final_status": "complete",
+      "estimate_is": 0.0008030904281070267,
+      "estimate_mc": 0.004,
+      "standard_error": 0.0002294965261735016,
+      "relative_standard_error": 0.2857667307957466,
+      "diagnostic_interval_width": 0.0008996098517542339,
+      "effective_sample_size": 5.743872227738144,
+      "max_log_importance_weight": 4.8140666491354125,
+      "weight_bound": null,
+      "wall_time_sec": 3.5851644179992945,
+      "seconds_per_path": 0.0017925822089996473
+    }
+  ],
+  "ranking": [
+    "q2_var1.2",
+    "q2_var1.5"
+  ]
+}

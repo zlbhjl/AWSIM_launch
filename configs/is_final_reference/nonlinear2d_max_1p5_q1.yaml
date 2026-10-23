@@ -1,0 +1,48 @@
+schema_version: 1
+experiment_id: nonlinear2d_max_1p5__both_m0.25__final
+target: dynamics
+target_measure:
+  id: nonlinear2d_max_1p5_p
+  definition:
+    dynamics_schema_version: 2
+    model_id: nonlinear2d
+    model_params:
+      drift_coupling: 0.5
+      modulation: 0.25
+      diffusion_scale: 0.5
+      correlation: 0.5
+    initial_law:
+      kind: point_mass
+      value:
+      - 0.0
+      - 0.0
+    solver:
+      kind: sde
+      dt_sec: 0.01
+      horizon_sec: 1.0
+    event:
+      kind: max_exceedance
+      threshold: 1.5
+      side: upper
+proposal:
+  id: both_m0.25
+  mode: manual_proposal
+  definition:
+    dynamics_schema_version: 2
+    input:
+      kind: same_as_target
+    noise:
+      kind: gaussian
+      mean_rule:
+        kind: constant
+        values:
+          w1: 0.25
+          w2: 0.25
+tuning_provenance:
+  record: configs/is_tuning/nonlinear2d_max_1p5/records/candidates.json
+  trial: both_m0.25
+  proposal_fingerprint: sha256:c960512a040dd7ddee9511823fe7a916dbbc39a901c43e03ae727cf6a7ccddb9
+  pilot_root_entropy: '20261023'
+  pilot_samples: 1000
+  rank: 2
+  fixed_at: '2026-10-23T13:56:36+09:00'

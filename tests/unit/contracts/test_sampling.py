@@ -96,3 +96,56 @@ def test_adaptive_sampling_requires_proposal_version():
 
     with pytest.raises(SamplingMetadataValidationError, match="required for adaptive"):
         normalize_sampling_metadata(value)
+
+
+def _zero_weight() -> dict[str, object]:
+    value = _sampling()
+    value.update({"weight_kind": "zero", "log_p": None, "log_importance_weight": None})
+    return value
+
+
+def test_zero_weight_keeps_a_finite_log_q():
+    normalized = normalize_sampling_metadata(_zero_weight())
+
+    assert normalized["weight_kind"] == "zero"
+    assert normalized["log_p"] is None
+    assert normalized["log_q"] == -2.5
+
+
+def test_zero_weight_rejects_a_numeric_log_p():
+    value = _zero_weight()
+    value["log_p"] = -4.25
+
+    with pytest.raises(SamplingMetadataValidationError, match="weight_kind='zero'"):
+        normalize_sampling_metadata(value)
+
+
+def test_zero_weight_rejects_a_non_finite_log_q():
+    value = _zero_weight()
+    value["log_q"] = float("-inf")
+
+    with pytest.raises(SamplingMetadataValidationError, match="log_q must be a finite number"):
+        normalize_sampling_metadata(value)
+
+
+def test_zero_weight_requires_an_available_weight():
+    value = _zero_weight()
+    value["importance_weight_status"] = "unavailable"
+
+    with pytest.raises(SamplingMetadataValidationError, match="requires importance_weight_status"):
+        normalize_sampling_metadata(value)
+
+
+def test_unknown_weight_kind_is_rejected():
+    value = _sampling()
+    value["weight_kind"] = "negative"
+
+    with pytest.raises(SamplingMetadataValidationError, match="weight_kind must be one of"):
+        normalize_sampling_metadata(value)
+
+
+def test_positive_weight_kind_is_the_legacy_default():
+    value = _sampling()
+    value["weight_kind"] = "positive"
+
+    assert normalize_sampling_metadata(value)["log_importance_weight"] == -1.75

@@ -1,0 +1,24 @@
+# Model A of docs/sde_importance_sampling_plan.md §12 with Q = P.
+#
+# dX = -X dt + dW, X(0) = 0, Euler--Maruyama with h = 0.01 up to T = 1 (K = 100).
+# The event is X_K > 3 sd of the discrete terminal law, sd = sqrt(0.4351860930...),
+# so P(event) = 1.3498980316e-3 exactly (targets/dynamics/models/exact.py).
+# With Q = P every importance weight is 1; use this plan to check the pipeline.
+schema_version: 1
+experiment_id: ou_model_a_q_equals_p_v1
+target: dynamics
+target_measure:
+  id: ou_model_a_3sd_upper_v1
+  definition:
+    dynamics_schema_version: 2
+    model_id: ou_scalar
+    model_params: {theta: 1.0, sigma: 1.0}
+    initial_law: {kind: point_mass, value: [0.0]}
+    solver: {kind: sde, dt_sec: 0.01, horizon_sec: 1.0}
+    event: {kind: terminal_exceedance, threshold: 1.9790590787861273, side: upper}
+proposal:
+  id: ou_q_equals_p_v1
+  mode: manual_proposal
+  definition:
+    dynamics_schema_version: 2
+    input: {kind: same_as_target}

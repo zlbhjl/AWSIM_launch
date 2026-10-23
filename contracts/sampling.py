@@ -20,6 +20,12 @@ SUPPORTED_SAMPLING_MODES = frozenset({"uniform", "manual_proposal", "adaptive"})
 SUPPORTED_IMPORTANCE_WEIGHT_STATUSES = frozenset(
     {"available", "not_applicable", "unavailable"}
 )
+# ``positive``: finite log_p, log_q and log_importance_weight (the default and
+# the only kind before weight_kind existed).  ``zero``: Q produced a value
+# outside the support of P, so p = 0 exactly; log_p and log_importance_weight
+# are None and log_q stays finite.  A zero weight is a valid sample that counts
+# toward N, not a failed computation.
+SUPPORTED_WEIGHT_KINDS = frozenset({"positive", "zero"})
 
 
 class SamplingMetadataValidationError(ValueError):
@@ -106,7 +112,20 @@ def normalize_sampling_metadata(value: object) -> dict[str, object]:
             "sampling metadata log_p, log_q, and log_importance_weight "
             "must be supplied together"
         )
-    if len(present_weight_keys) == len(IMPORTANCE_WEIGHT_KEYS):
+    weight_kind = normalized.get("weight_kind", "positive")
+    if weight_kind not in SUPPORTED_WEIGHT_KINDS:
+        raise SamplingMetadataValidationError(
+            "sampling metadata weight_kind must be one of "
+            f"{sorted(SUPPORTED_WEIGHT_KINDS)}"
+        )
+    if weight_kind == "zero":
+        if weight_status != "available":
+            raise SamplingMetadataValidationError(
+                "sampling metadata weight_kind='zero' requires "
+                "importance_weight_status='available'"
+            )
+        _normalize_and_validate_zero_weight(normalized)
+    elif len(present_weight_keys) == len(IMPORTANCE_WEIGHT_KEYS):
         _normalize_and_validate_log_weights(normalized)
     return normalized
 
@@ -144,6 +163,24 @@ def _normalize_and_validate_log_weights(metadata: dict[str, object]) -> None:
         )
 
 
+def _normalize_and_validate_zero_weight(metadata: dict[str, object]) -> None:
+    if metadata["log_p"] is not None or metadata["log_importance_weight"] is not None:
+        raise SamplingMetadataValidationError(
+            "sampling metadata with weight_kind='zero' must have "
+            "log_p and log_importance_weight set to None"
+        )
+    raw_log_q = metadata["log_q"]
+    if (
+        isinstance(raw_log_q, bool)
+        or not isinstance(raw_log_q, (int, float))
+        or not isfinite(float(raw_log_q))
+    ):
+        raise SamplingMetadataValidationError(
+            "sampling metadata log_q must be a finite number"
+        )
+    metadata["log_q"] = float(raw_log_q)
+
+
 def sampling_metadata_from_meta(meta: Mapping[str, object]) -> dict[str, object] | None:
     """Return normalized sampling provenance if the record has it."""
 
@@ -173,6 +210,7 @@ __all__ = [
     "SamplingMetadataValidationError",
     "SUPPORTED_IMPORTANCE_WEIGHT_STATUSES",
     "SUPPORTED_SAMPLING_MODES",
+    "SUPPORTED_WEIGHT_KINDS",
     "copy_sampling_metadata",
     "normalize_sampling_metadata",
     "sampling_metadata_from_meta",

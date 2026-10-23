@@ -85,6 +85,65 @@ proposal:
 
 対象は**Euler--Maruyamaで離散化された現行シミュレータの確率法則**である。連続時間SDEそのものへの極限保証、拡散係数の変更、状態・未来の結果に応じて更新するadaptive controlは本実装の対象外とする。
 
+### 登録モデルと v2 プラン
+
+U ターン以外のモデル（現在はスカラー OU `ou_scalar`）は、`target_measure.definition.dynamics_schema_version: 2` のプランで指定する。モデル・パラメータ・初期法則（現在は `point_mass` のみ）・刻み幅と終端時刻・事象を target 側に書き、proposal 側はノイズ経路の `noise_path_q` だけを変える。例は `configs/dynamics_importance_ou_*.yaml`、計画と根拠は [SDE 重点サンプリング実装計画](sde_importance_sampling_plan.md) を参照。
+
+v2 プランは固定 N の厳格な経路で実行する。
+
+- 最初の標本の前に `<output-root>/manifest.json` を書く。P・数値写像・事象、Q、乱数の root と phase、予定の N を指紋として保存し、再開時に食い違えば停止する。
+- 乱数は記録した 128 bit の root から、phase・run kind・標本番号・用途（入力、混合成分の選択、innovation）ごとに導出する。通常標本と重点標本は既定で独立で、`--pairing paired` で共通乱数にできる。
+- 再開は標本 ID で行う。失敗した標本は `--retry-failed` で同じ入力・同じ乱数のまま再試行し、新しい乱数で置き換えない。
+- `comparison.json` に完了の監査 (`audit`) と `final_status: complete | incomplete` を書く。未解決の標本が残る場合、推定値は `diagnostic_only` である。
+
+v1 プラン（U ターンの入力 P/Q）は従来どおり件数で再開し、通常標本と重点標本で同じ seed を使う。
+
+登録モデルは `ou_scalar`（モデル A）、`ou_augmented`（モデル B）、`nonlinear2d`（モデル C）、`uturn`（モデル D）である。U ターンは v1 の入力では従来の経路、v2 の入力では登録モデルの経路で動く（Q = P なら両者の判定は一致する）。
+
+### 提案分布（innovation の法則）
+
+v2 プランでは、Q を `proposal.definition.noise` に書く。平均・位置・共分散・尺度は **innovation の単位**（標準化した Brownian 増分）である。既存の `noise_path_q`（`gaussian_drift`、SDE ドリフトの単位で innovation 平均は u√dt）も使えるが、両方は書けない。
+
+各ステップでは、生成の直前の context（時刻、実際の刻み、状態、モード、モードに入った時刻、有効なチャネル、初期入力）だけを使い、同じ context で P と Q の密度を評価する。
+
+| `kind` | 内容 |
+|---|---|
+| `gaussian` | `mean_rule` と `covariance`（チャネル名つきの行列、またはモード別）。Cholesky で検査し、正則化しない |
+| `student_t` | `dof`（既定 5）、`location_rule`、`scale`（尺度行列）。`covariance` を書くと尺度 = (ν−2)/ν × 共分散（ν > 2、全チャネルを含むこと） |
+| `laplace` | チャネルごとに独立。`location_rule` と `scale`（既定 1/√2 で分散 1） |
+| `mixture` | `components: [{weight, law}]`、`law: {kind: target}` で P 自身。任意の `defensive_weight`（β） |
+
+平均の規則（`mean_rule` / `location_rule`）は `constant`、`piecewise`（時刻・モードの区分。区分の中に別の規則を `rule` で入れられる）、`state_threshold`、`affine_state` である。行列や規則が名前を挙げないチャネルは平均 0・単位分散（独立）とし、モードで有効なチャネルが変わるときは、その部分行列（周辺分布）を使う。
+
+混合は経路ごとに成分を 1 回だけ選び、選ばれなかった成分も含めた経路密度で `q = β p + (1−β) Σ α_j r_j` を作る。β を書けばノイズ部分の重みは 1/β 以下で、これが保証用の区間の上限 B になる。
+
+```yaml
+proposal:
+  definition:
+    dynamics_schema_version: 2
+    input: {kind: same_as_target}
+    noise:
+      kind: mixture
+      defensive_weight: 0.2
+      components:
+        - weight: 0.5
+          law:
+            kind: gaussian
+            mean_rule:
+              kind: piecewise
+              pieces:
+                - {time: [0.0, 0.5], values: {w: 0.2}}
+                - time: [0.5, null]
+                  rule: {kind: affine_state, channels: [w], states: [x], offset: [0.5], matrix: [[-0.2]]}
+        - {weight: 0.5, law: {kind: student_t, dof: 5, location_rule: {kind: constant, values: {w: 0.3}}}}
+```
+
+新しい分布族は、`targets/dynamics/proposals/` に `sample` / `log_density` を持つクラスを置き、`LAW_PARSERS` に 1 行登録すれば使える（Laplace の追加はモジュール 63 行と登録 2 行だった）。
+
+### Q の調整と固定
+
+`tools/validation/is_tuning.py` が、候補ごとの pilot（phase `pilot`、最終実行とは別の乱数系列）を記録し、相対標準誤差で順位を付けて図にする。採否は利用者が決め、`fix` で選んだ試行を最終プランとして書き出す（調整の記録を来歴として含む）。モデル A・B の候補は `tools/validation/ou_proposal_designs.py` が線形 Gaussian モデルの指数ティルトから作り、pilot では倍率だけを選ぶ。
+
 ## 設定の正本
 
 実験ごとに `sampling_plan.yaml` を置く。必須なのは、人間が定義・確認する `P` と固定 `Q` だけである。設定ファイルは実験の意味を再現するための正本である。候補探索・更新条件は将来の拡張を使う場合だけ追加する。候補探索を使う場合も、人間が「変更してよい確率」「候補値」「安全制約」を先に定義する。システムは、その範囲外のモデル構造・遷移・確率を解釈または変更しない。
@@ -365,9 +424,12 @@ importance EvaluationRecord群
 
 比較結果は、次を含む。
 
-- 診断用：通常推定値とWilson区間、重点推定値と正規近似区間、ESS
-- 比較用：両側を固定時点Hoeffdingで算出した区間、区間幅比、目標幅への到達標本数
-- target・case kind・target measureが一致するか
+- 診断用 (`diagnostic`)：通常推定値とWilson区間、重点推定値と正規近似区間、ESS、除外した記録の件数と理由 (`excluded_records`)。Q候補の比較にはこの区間だけを使う。
+- 保証の確認用 (`guarantee`)：重み上限Bを持つQについて、固定時点のHoeffding区間と経験的Bernstein区間。区間が真値を含むかの確認だけに使い、幅でQを順位付けしない。`comparable` は互換のために残した `guarantee.hoeffding` と同じ内容である。
+- 目標幅への到達標本数（Hoeffding、`--target-width` 指定時）
+- target・case kind・target measureが一致するか。記録が `target_fingerprint` / `proposal_fingerprint` を持つ場合は、Pの一致と群内でQが1つであることも検査し、`identity_check` に `fingerprint` か `legacy_ids_only` を記録する。
+
+重みは対数領域で集計する。厳密なゼロ重み (`weight_kind: zero`) はNに含める。通常ISの点推定は1を超えても切り詰めない。事象を1件も観測しない場合、または標本が1件の場合は、正規近似区間を出さず `information: insufficient` とする（以前は幅0の区間 [0, 0] になっていた）。
 
 停止方法は、固定標本比較の後に必要性が生じた場合の拡張例である。今回の標準運用は `fixed_samples` とする。
 

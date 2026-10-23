@@ -1,0 +1,233 @@
+{
+  "created_at": "2026-10-23T13:49:07+09:00",
+  "base_plan": "configs/is_tuning/ou_a_4sd_two_sided/base.yaml",
+  "base_plan_fingerprint": "sha256:10390314d5dff9cdb739520af9468f686d985f122e4fcc23f702277d27661e80",
+  "candidates": "configs/is_tuning/ou_a_4sd_two_sided/q4.yaml",
+  "budget": 10,
+  "samples_per_trial": 1000,
+  "phase": "pilot",
+  "root_entropy": "20261023",
+  "ranking_rule": "complete trials with an observed event, by relative standard error of the IS estimate",
+  "trials": [
+    {
+      "name": "q4_t5_s0.8",
+      "proposal": {
+        "dynamics_schema_version": 2,
+        "input": {
+          "kind": "same_as_target"
+        },
+        "noise": {
+          "kind": "student_t",
+          "dof": 5,
+          "location_rule": {
+            "kind": "piecewise",
+            "pieces": [
+              {
+                "time": [
+                  0.0,
+                  0.25
+                ],
+                "rule": {
+                  "kind": "state_threshold",
+                  "state": "x",
+                  "threshold": 0.0,
+                  "below": {
+                    "w": -0.20286838200199228
+                  },
+                  "above": {
+                    "w": 0.20286838200199228
+                  }
+                }
+              },
+              {
+                "time": [
+                  0.25,
+                  0.5
+                ],
+                "rule": {
+                  "kind": "state_threshold",
+                  "state": "x",
+                  "threshold": 0.0,
+                  "below": {
+                    "w": -0.260816162413828
+                  },
+                  "above": {
+                    "w": 0.260816162413828
+                  }
+                }
+              },
+              {
+                "time": [
+                  0.5,
+                  0.75
+                ],
+                "rule": {
+                  "kind": "state_threshold",
+                  "state": "x",
+                  "threshold": 0.0,
+                  "below": {
+                    "w": -0.3353162770116058
+                  },
+                  "above": {
+                    "w": 0.3353162770116058
+                  }
+                }
+              },
+              {
+                "time": [
+                  0.75,
+                  null
+                ],
+                "rule": {
+                  "kind": "state_threshold",
+                  "state": "x",
+                  "threshold": 0.0,
+                  "below": {
+                    "w": -0.43109677171970673
+                  },
+                  "above": {
+                    "w": 0.43109677171970673
+                  }
+                }
+              }
+            ]
+          },
+          "covariance": {
+            "channels": [
+              "w"
+            ],
+            "matrix": [
+              [
+                1.0
+              ]
+            ]
+          }
+        }
+      },
+      "proposal_fingerprint": "sha256:f10123c7726e177b94e1bc666528e7f95c83491ccb08926131343e78b46ff2f5",
+      "final_status": "complete",
+      "estimate_is": 3.995976289388358e-05,
+      "estimate_mc": 0.0,
+      "standard_error": 1.3960970464413988e-05,
+      "relative_standard_error": 0.34937570829658043,
+      "diagnostic_interval_width": 5.472599859895769e-05,
+      "effective_sample_size": 2.3455465761217376,
+      "max_log_importance_weight": 5.469141322955153,
+      "weight_bound": null,
+      "wall_time_sec": 4.073502545000338,
+      "seconds_per_path": 0.002036751272500169
+    },
+    {
+      "name": "q4_t5_s1.0",
+      "proposal": {
+        "dynamics_schema_version": 2,
+        "input": {
+          "kind": "same_as_target"
+        },
+        "noise": {
+          "kind": "student_t",
+          "dof": 5,
+          "location_rule": {
+            "kind": "piecewise",
+            "pieces": [
+              {
+                "time": [
+                  0.0,
+                  0.25
+                ],
+                "rule": {
+                  "kind": "state_threshold",
+                  "state": "x",
+                  "threshold": 0.0,
+                  "below": {
+                    "w": -0.25358547750249033
+                  },
+                  "above": {
+                    "w": 0.25358547750249033
+                  }
+                }
+              },
+              {
+                "time": [
+                  0.25,
+                  0.5
+                ],
+                "rule": {
+                  "kind": "state_threshold",
+                  "state": "x",
+                  "threshold": 0.0,
+                  "below": {
+                    "w": -0.326020203017285
+                  },
+                  "above": {
+                    "w": 0.326020203017285
+                  }
+                }
+              },
+              {
+                "time": [
+                  0.5,
+                  0.75
+                ],
+                "rule": {
+                  "kind": "state_threshold",
+                  "state": "x",
+                  "threshold": 0.0,
+                  "below": {
+                    "w": -0.4191453462645072
+                  },
+                  "above": {
+                    "w": 0.4191453462645072
+                  }
+                }
+              },
+              {
+                "time": [
+                  0.75,
+                  null
+                ],
+                "rule": {
+                  "kind": "state_threshold",
+                  "state": "x",
+                  "threshold": 0.0,
+                  "below": {
+                    "w": -0.5388709646496334
+                  },
+                  "above": {
+                    "w": 0.5388709646496334
+                  }
+                }
+              }
+            ]
+          },
+          "covariance": {
+            "channels": [
+              "w"
+            ],
+            "matrix": [
+              [
+                1.0
+              ]
+            ]
+          }
+        }
+      },
+      "proposal_fingerprint": "sha256:adc1e08d81b0900a112cc0d91d723168739dd46fe4da8b335766fe7e5ded2da7",
+      "final_status": "complete",
+      "estimate_is": 4.2691496029398994e-05,
+      "estimate_mc": 0.0,
+      "standard_error": 2.047419279284533e-05,
+      "relative_standard_error": 0.4795848048694761,
+      "diagnostic_interval_width": 8.025736097301277e-05,
+      "effective_sample_size": 2.1325502137170465,
+      "max_log_importance_weight": 6.2894405411322225,
+      "weight_bound": null,
+      "wall_time_sec": 4.073100808999698,
+      "seconds_per_path": 0.002036550404499849
+    }
+  ],
+  "ranking": [
+    "q4_t5_s0.8",
+    "q4_t5_s1.0"
+  ]
+}

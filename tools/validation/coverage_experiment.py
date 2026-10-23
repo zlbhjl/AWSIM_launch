@@ -14,6 +14,12 @@ The experiments drive the production stopping logic, not a re-implementation:
   `--target dynamics` and `--target bernoulli`.
 - engine ``dkw_runner``: `orchestration.dkw_mode.DKWModeRunner`, as used by the
   AWSIM and PRISM `--mode dkw` / `dkw_fixed`.
+- engine ``importance_fixed``: the fixed-N importance-sampling comparison of
+  `apps/cli/dynamics_importance_main.py` for a v2 plan, on the scalar OU model
+  whose Euler--Maruyama terminal law is exact (`targets/dynamics/models/exact.py`).
+  Each run is judged separately for every interval it reports: ordinary MC
+  (Wilson), IS normal approximation, and the bounded Hoeffding and empirical
+  Bernstein intervals when Q has a weight bound.
 
 Only the dataset storage is replaced with an in-memory table, and each result is
 appended before the next decision. This is identical to running the CLI with
@@ -40,17 +46,23 @@ import json
 import math
 import random
 import tempfile
+import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from multiprocessing import Pool
 from pathlib import Path
 
 import pandas as pd
+import yaml
 from scipy.stats import beta as beta_distribution
 
 from contracts.execution import TestCase
 from evaluation.dkw import DKWService
 from orchestration.dkw_mode import DKWModeRunner, DKWModeState
+from orchestration.dynamics_importance_sampling import (
+    DynamicsImportanceSamplingRunConfig,
+    DynamicsImportanceSamplingRunner,
+)
 from orchestration.orchestrator import Orchestrator, OrchestratorConfig
 from orchestration.seeding import INPUT_STREAM, derive_seed
 from targets.bernoulli.backend import BernoulliBackend
@@ -62,8 +74,17 @@ from targets.bernoulli.model import (
     time_to_failure_quantile,
 )
 from targets.bernoulli.result_interpreter import BernoulliResultInterpreter
+from targets.dynamics.backend import DynamicsBackend, DynamicsBackendConfig
+from targets.dynamics.models.exact import (
+    ou_augmented_terminal_exceedance_probability,
+    ou_euler_terminal_variance,
+    ou_terminal_exceedance_probability,
+)
+from targets.dynamics.result_interpreter import DynamicsResultInterpreter
 
 DKW_QUANTILE = 0.05  # q used by every DKW request in the framework
+OU_MODEL_A = {"theta": 1.0, "sigma": 1.0, "dt_sec": 0.01, "horizon_sec": 1.0, "threshold_sd": 3.0, "side": "upper"}
+INTERVAL_TYPES = ("mc_wilson", "is_normal", "is_hoeffding", "is_bernstein")
 UNIFORM_INPUTS = {name: {"distribution": "uniform", "min": 0.0, "max": 1.0} for name in INPUT_NAMES}
 
 
@@ -78,6 +99,7 @@ class Scenario:
     parameters: Mapping[str, float] = field(default_factory=dict)
     config: Mapping[str, object] = field(default_factory=dict)
     nominal: float = 0.95  # the level the result should reach
+    truth_key: str | None = None  # key of TRUTHS; None for the bernoulli scenarios
 
 
 # The default set of scenarios. Sample sizes are kept moderate so that a few
@@ -249,6 +271,37 @@ SCENARIOS: tuple[Scenario, ...] = (
         {"score_alpha": 2.0, "score_beta": 5.0},
         {"ebstop_epsilon": 0.1, "ebstop_value_range": (0.0, 1.0), "ebstop_confidence": 0.95, "max_samples": 20000},
     ),
+    # Importance sampling on OU model A (docs/sde_importance_sampling_plan.md §12-13):
+    # dX = -X dt + dW, h = 0.01, T = 1, event X_K > 3 sd, P = 1.35e-3.
+    Scenario(
+        "is_ou_a_3sd_q_equals_p_n1000", "importance_fixed", "importance_probability",
+        "OU model A, Q = P (weights 1), n=1000 ordinary + 1000 importance paths",
+        OU_MODEL_A, {"max_samples": 1000, "noise_path_q": None}, truth_key="ou_terminal",
+    ),
+    Scenario(
+        "is_ou_a_3sd_gaussian_u3_n1000", "importance_fixed", "importance_probability",
+        "OU model A, direct Gaussian drift u=3 on dW (no weight bound), n=1000",
+        OU_MODEL_A,
+        {"max_samples": 1000, "noise_path_q": {"distribution": "gaussian_drift", "channel_drifts": {"w": 3.0}}},
+        truth_key="ou_terminal",
+    ),
+    Scenario(
+        "is_ou_a_3sd_defensive_u3_b0.2_n1000", "importance_fixed", "importance_probability",
+        "OU model A, defensive mixture 0.2 P + 0.8 Gaussian drift u=3 (weight bound 5), n=1000",
+        OU_MODEL_A,
+        {"max_samples": 1000, "noise_path_q": {"distribution": "defensive_gaussian_drift", "base_weight": 0.2,
+                                                "channel_drifts": {"w": 3.0}}},
+        truth_key="ou_terminal",
+    ),
+    *(
+        Scenario(
+            f"is_final_{plan.stem}_n{samples}", "importance_fixed", "importance_probability",
+            f"Fixed final plan {plan.name} (pilot-tuned Q), n={samples} ordinary + {samples} importance paths",
+            {"plan": str(plan)}, {"max_samples": samples}, truth_key="plan",
+        )
+        for samples in (1000, 10000)
+        for plan in sorted(Path(__file__).resolve().parents[2].joinpath("configs", "is_final").glob("*.yaml"))
+    ),
 )
 
 
@@ -373,14 +426,155 @@ def run_dkw_runner_once(scenario: Scenario, seed: int, workdir: Path) -> dict[st
     }
 
 
+def _ou_steps(parameters: Mapping[str, object]) -> int:
+    return round(float(parameters["horizon_sec"]) / float(parameters["dt_sec"]))
+
+
+def _ou_threshold(parameters: Mapping[str, object]) -> float:
+    variance = ou_euler_terminal_variance(
+        theta=float(parameters["theta"]), sigma=float(parameters["sigma"]),
+        h=float(parameters["dt_sec"]), steps=_ou_steps(parameters),
+    )
+    return float(parameters["threshold_sd"]) * math.sqrt(variance)
+
+
+def _ou_terminal_truth(parameters: Mapping[str, object]) -> float:
+    return ou_terminal_exceedance_probability(
+        theta=float(parameters["theta"]), sigma=float(parameters["sigma"]),
+        h=float(parameters["dt_sec"]), steps=_ou_steps(parameters),
+        threshold=_ou_threshold(parameters), side=str(parameters["side"]),
+    )
+
+
+def _plan_truth(parameters: Mapping[str, object]) -> float:
+    """Exact probability of the numerical model named by a fixed v2 plan (models A and B)."""
+    definition = yaml.safe_load(Path(str(parameters["plan"])).read_text(encoding="utf-8"))["target_measure"]["definition"]
+    solver, event, params = definition["solver"], definition["event"], definition["model_params"]
+    steps = round(float(solver["horizon_sec"]) / float(solver["dt_sec"]))
+    if definition["model_id"] == "ou_scalar":
+        return ou_terminal_exceedance_probability(
+            theta=params["theta"], sigma=params["sigma"], h=solver["dt_sec"], steps=steps,
+            threshold=event["threshold"], side=event.get("side", "upper"),
+            x0=float(definition["initial_law"]["value"][0]),
+        )
+    if definition["model_id"] == "ou_augmented":
+        c0, x0 = (float(value) for value in definition["initial_law"]["value"])
+        return ou_augmented_terminal_exceedance_probability(
+            **params, h=solver["dt_sec"], steps=steps, threshold=event["threshold"],
+            side=event.get("side", "upper"), state=event.get("state", "c"), c0=c0, x0=x0,
+        )
+    raise ValueError(f"no exact probability for model {definition['model_id']!r}")
+
+
+TRUTHS: dict[str, Callable[[Mapping[str, object]], float]] = {
+    "ou_terminal": _ou_terminal_truth,
+    "plan": _plan_truth,
+}
+
+
+def _ou_plan(scenario: Scenario) -> dict[str, object]:
+    parameters = scenario.parameters
+    proposal: dict[str, object] = {"dynamics_schema_version": 2, "input": {"kind": "same_as_target"}}
+    if scenario.config.get("noise_path_q") is not None:
+        proposal["noise_path_q"] = dict(scenario.config["noise_path_q"])
+    return {
+        "schema_version": 1,
+        "experiment_id": scenario.name,
+        "target": "dynamics",
+        "target_measure": {
+            "id": f"{scenario.name}_p",
+            "definition": {
+                "dynamics_schema_version": 2,
+                "model_id": "ou_scalar",
+                "model_params": {"theta": float(parameters["theta"]), "sigma": float(parameters["sigma"])},
+                "initial_law": {"kind": "point_mass", "value": [0.0]},
+                "solver": {"kind": "sde", "dt_sec": float(parameters["dt_sec"]),
+                           "horizon_sec": float(parameters["horizon_sec"])},
+                "event": {"kind": "terminal_exceedance", "threshold": _ou_threshold(parameters),
+                          "side": str(parameters["side"])},
+            },
+        },
+        "proposal": {"id": f"{scenario.name}_q", "mode": "manual_proposal", "definition": proposal},
+    }
+
+
+def _interval_of(block: object) -> list[float] | None:
+    if not isinstance(block, Mapping) or block.get("lower_bound") is None or block.get("upper_bound") is None:
+        return None
+    return [float(block["lower_bound"]), float(block["upper_bound"])]
+
+
+def run_importance_fixed_once(scenario: Scenario, seed: int, workdir: Path) -> dict[str, object]:
+    """Run one fixed-N ordinary vs importance comparison through the production runner."""
+    # A fresh directory per run: the runner resumes from (and checks) any
+    # manifest already in its output root.
+    workdir = Path(tempfile.mkdtemp(prefix=f"{scenario.name}-{seed}-", dir=workdir))
+    if "plan" in scenario.parameters:
+        plan_path = Path(str(scenario.parameters["plan"]))
+    else:
+        plan_path = workdir / "plan.yaml"
+        plan_path.write_text(yaml.safe_dump(_ou_plan(scenario), sort_keys=False), encoding="utf-8")
+    runner = DynamicsImportanceSamplingRunner(
+        backend=DynamicsBackend(DynamicsBackendConfig(output_root=workdir / "artifacts", artifact_policy="summary")),
+        result_interpreter=DynamicsResultInterpreter(),
+    )
+    started = time.perf_counter()
+    comparison = runner.run_fixed_samples(
+        DynamicsImportanceSamplingRunConfig(
+            sampling_plan_path=plan_path,
+            output_root=workdir / "run",
+            max_samples=int(scenario.config["max_samples"]),
+            root_entropy=int(seed),
+            phase="final",
+        )
+    )["comparison"]
+    elapsed = time.perf_counter() - started
+    diagnostic = comparison.get("diagnostic", {})
+    guarantee = comparison.get("guarantee", {})
+    ordinary = diagnostic.get("ordinary", {})
+    importance = diagnostic.get("importance", {})
+    intervals = {
+        "mc_wilson": _interval_of(ordinary),
+        "is_normal": _interval_of(importance),
+        "is_hoeffding": _interval_of(guarantee.get("hoeffding", {}).get("importance")),
+        "is_bernstein": _interval_of(guarantee.get("empirical_bernstein", {}).get("importance")),
+    }
+    return {
+        "sample_count": int(scenario.config["max_samples"]),
+        "stop_reason": comparison.get("final_status"),
+        "estimate": importance.get("estimate"),
+        "interval": intervals["is_normal"],
+        "verdict": None,
+        "next_action": None,
+        "estimate_mc": ordinary.get("estimate"),
+        "estimate_is": importance.get("estimate"),
+        "no_event_mc": ordinary.get("estimate") == 0.0,
+        "no_event_is": importance.get("estimate") == 0.0,
+        "ess_is": importance.get("effective_sample_size"),
+        "seconds_per_path": elapsed / (2 * int(scenario.config["max_samples"])),
+        **{f"interval_{name}": interval for name, interval in intervals.items()},
+    }
+
+
 ENGINES: dict[str, Callable[[Scenario, int, Path], dict[str, object]]] = {
     "iid": run_iid_once,
     "dkw_runner": run_dkw_runner_once,
+    "importance_fixed": run_importance_fixed_once,
 }
 
 
 def judge(scenario: Scenario, result: Mapping[str, object]) -> dict[str, object]:
     """Decide whether one experiment's result is correct for its scenario."""
+    if scenario.mode == "importance_probability":
+        truth = TRUTHS[str(scenario.truth_key)](scenario.parameters)
+        verdicts: dict[str, object] = {"truth": truth}
+        for name in INTERVAL_TYPES:
+            interval = result.get(f"interval_{name}")
+            verdicts[f"correct_{name}"] = None if interval is None else bool(interval[0] <= truth <= interval[1])
+        # The primary verdict is the IS normal interval; a missing interval
+        # (no observed event, overflow) does not count as correct.
+        verdicts["correct"] = bool(verdicts["correct_is_normal"])
+        return verdicts
     parameters = BernoulliParameters(**{key: float(value) for key, value in scenario.parameters.items()})
     interval = result.get("interval")
     if scenario.mode == "binomial_ci":
@@ -441,10 +635,59 @@ def summarize(scenarios: Sequence[Scenario], runs: Sequence[Mapping[str, object]
             "mean_sample_count": float(rows["sample_count"].mean()),
             "truth": float(rows["truth"].iloc[0]),
         }
+        if scenario.mode == "importance_probability":
+            entry.update(_importance_summary(rows, float(entry["truth"])))
         if scenario.mode == "sprt":
             entry["undecided_rate"] = float(rows["verdict"].isin(["continue"]).mean() + rows["verdict"].isna().mean())
         summary.append(entry)
     return summary
+
+
+def _importance_summary(rows: pd.DataFrame, truth: float) -> dict[str, object]:
+    """Coverage of every interval type, and the accuracy of both estimators.
+
+    ``coverage`` counts a run without that interval as not covering;
+    ``missing_rate`` reports how often the interval was absent. The bounded
+    (guarantee) intervals exist only when Q has a weight bound, so they are
+    left out when no run reported them.
+    """
+    coverage: dict[str, object] = {}
+    for name in INTERVAL_TYPES:
+        column = rows[f"correct_{name}"]
+        present = column.notna()
+        if not present.any() and name in {"is_hoeffding", "is_bernstein"}:
+            continue
+        covered = int(column[present].astype(bool).sum())
+        lower, upper = clopper_pearson(covered, len(rows))
+        widths = [interval[1] - interval[0] for interval in rows[f"interval_{name}"] if interval is not None]
+        coverage[name] = {
+            "coverage": covered / len(rows),
+            "coverage_ci95": [lower, upper],
+            "below_nominal": upper < 0.95,
+            "missing_rate": float(1.0 - present.mean()),
+            "mean_width": float(sum(widths) / len(widths)) if widths else None,
+        }
+    estimators: dict[str, object] = {}
+    for name in ("mc", "is"):
+        estimates = pd.to_numeric(rows[f"estimate_{name}"], errors="coerce").dropna()
+        if estimates.empty:
+            continue
+        errors = estimates - truth
+        estimators[name] = {
+            "mean": float(estimates.mean()),
+            "bias": float(errors.mean()),
+            "std": float(estimates.std(ddof=1)) if len(estimates) > 1 else None,
+            "rmse": float(math.sqrt((errors ** 2).mean())),
+            "relative_rmse": float(math.sqrt((errors ** 2).mean()) / truth) if truth else None,
+            "no_event_rate": float(rows[f"no_event_{name}"].astype(bool).mean()),
+            "missing_rate": float(1.0 - len(estimates) / len(rows)),
+        }
+    timing = pd.to_numeric(rows.get("seconds_per_path"), errors="coerce").dropna() if "seconds_per_path" in rows else []
+    return {
+        "intervals": coverage,
+        "estimators": estimators,
+        "mean_seconds_per_path": float(timing.mean()) if len(timing) else None,
+    }
 
 
 def build_parser() -> argparse.ArgumentParser:

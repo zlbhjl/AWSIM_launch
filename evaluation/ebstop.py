@@ -10,6 +10,7 @@ from contracts.evaluation import EvaluationRecord
 from contracts.statistics import StatisticalReport, StatisticalRequest
 from evaluation.alpha_spending import DEFAULT_SPENDING_EXPONENT
 from evaluation.dkw import records_to_data_frame
+from evaluation.empirical_bernstein import empirical_bernstein_radius
 import point_extractors
 
 
@@ -38,8 +39,7 @@ def ebstop_update(
     if std < 0.0:
         raise ValueError("std must be non-negative")
 
-    log_term = math.log(3.0 / delta_t)
-    c_t = std * math.sqrt(2.0 * log_term / samples) + 3.0 * value_range * log_term / samples
+    c_t = empirical_bernstein_radius(samples, std, value_range, delta_t)
     mean_abs = abs(mean)
     return {
         "c_t": c_t,
@@ -122,8 +122,7 @@ def calculate_ebstop_decision(
     running_std = np.sqrt(running_var)
 
     delta_t = _delta_t_sequence(n, delta)
-    log_term = np.log(3.0 / delta_t)
-    c_t = running_std * np.sqrt(2.0 * log_term / t) + 3.0 * resolved_range * log_term / t
+    c_t = empirical_bernstein_radius(t, running_std, resolved_range, delta_t)
     mean_abs = np.abs(running_mean)
 
     # LB/UB only start updating from t=2 onward (Algorithm 2: the first

@@ -1,0 +1,33 @@
+schema_version: 1
+experiment_id: nonlinear2d_max_1p5__q0__final
+target: dynamics
+target_measure:
+  id: nonlinear2d_max_1p5_p
+  definition:
+    dynamics_schema_version: 2
+    model_id: nonlinear2d
+    model_params:
+      drift_coupling: 0.5
+      modulation: 0.25
+      diffusion_scale: 0.5
+      correlation: 0.5
+    initial_law:
+      kind: point_mass
+      value:
+      - 0.0
+      - 0.0
+    solver:
+      kind: sde
+      dt_sec: 0.01
+      horizon_sec: 1.0
+    event:
+      kind: max_exceedance
+      threshold: 1.5
+      side: upper
+proposal:
+  id: q0_p
+  mode: manual_proposal
+  definition:
+    dynamics_schema_version: 2
+    input:
+      kind: same_as_target

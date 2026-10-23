@@ -202,3 +202,27 @@ def test_sde_direct_gaussian_p_q_schedules_evaluate_the_same_innovations() -> No
 
     assert trajectory.noise_log_p == pytest.approx(expected_p)
     assert trajectory.noise_log_q == pytest.approx(expected_q)
+
+
+def test_sde_mixture_seed_keeps_the_component_choice_off_the_innovation_stream() -> None:
+    system = DecayThenHold(x_switch=-10.0, sigma=0.3)
+    nominal = solve_hybrid_sde(
+        system, SDESolverSettings(horizon_sec=0.1, dt_sec=0.01, seed=23, ode_fallback=_ode())
+    )
+    proposal = DefensiveGaussianNoiseProposal(base_weight=0.5, channel_drifts={"w": 2.0})
+    by_component = {}
+    for mixture_seed in range(20):
+        path = solve_hybrid_sde(
+            system,
+            SDESolverSettings(
+                horizon_sec=0.1, dt_sec=0.01, seed=23, ode_fallback=_ode(),
+                noise_proposal=proposal, mixture_seed=mixture_seed,
+            ),
+        )
+        chose_p = bool(np.array_equal(path.states, nominal.states))
+        by_component.setdefault(chose_p, path)
+
+    # Both components occur, and choosing P reproduces the nominal innovations.
+    assert set(by_component) == {True, False}
+    tilted = by_component[False]
+    assert tilted.states[-1, 0] > nominal.states[-1, 0]

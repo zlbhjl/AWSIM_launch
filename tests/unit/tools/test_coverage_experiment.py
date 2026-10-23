@@ -11,6 +11,7 @@ from tools.validation.coverage_experiment import (
     judge,
     run_dkw_runner_once,
     run_iid_once,
+    run_importance_fixed_once,
     summarize,
 )
 
@@ -19,7 +20,7 @@ BY_NAME = {scenario.name: scenario for scenario in SCENARIOS}
 
 def test_scenario_names_are_unique_and_engines_known() -> None:
     assert len(BY_NAME) == len(SCENARIOS)
-    assert {scenario.engine for scenario in SCENARIOS} == {"iid", "dkw_runner"}
+    assert {scenario.engine for scenario in SCENARIOS} == {"iid", "dkw_runner", "importance_fixed"}
 
 
 def test_iid_engine_stops_at_the_fixed_sample_size(tmp_path) -> None:
@@ -119,3 +120,47 @@ def test_exploration_rows_are_prefilled_and_not_counted_as_new_samples(tmp_path)
 
     assert result["sample_count"] == 30
     assert result["interval"] is not None
+
+
+def test_importance_engine_reports_every_interval_and_judges_them(tmp_path) -> None:
+    scenario = replace(
+        BY_NAME["is_ou_a_3sd_defensive_u3_b0.2_n1000"],
+        config={**BY_NAME["is_ou_a_3sd_defensive_u3_b0.2_n1000"].config, "max_samples": 30},
+    )
+
+    result = run_importance_fixed_once(scenario, seed=5, workdir=tmp_path)
+    verdict = judge(scenario, result)
+
+    assert result["stop_reason"] == "complete"
+    assert result["interval_is_hoeffding"] is not None and result["interval_is_bernstein"] is not None
+    assert verdict["truth"] == pytest.approx(1.3498980316e-3, rel=1e-8)
+    assert verdict["correct_is_hoeffding"] is True
+    assert verdict["correct"] == verdict["correct_is_normal"]
+
+
+def test_importance_engine_is_reproducible_and_needs_no_bound_for_direct_q(tmp_path) -> None:
+    scenario = replace(
+        BY_NAME["is_ou_a_3sd_gaussian_u3_n1000"],
+        config={**BY_NAME["is_ou_a_3sd_gaussian_u3_n1000"].config, "max_samples": 20},
+    )
+
+    first = run_importance_fixed_once(scenario, seed=9, workdir=tmp_path)
+    second = run_importance_fixed_once(scenario, seed=9, workdir=tmp_path)
+
+    assert first["estimate_is"] == second["estimate_is"]
+    assert first["interval_is_hoeffding"] is None
+    assert judge(scenario, first)["correct_is_hoeffding"] is None
+
+
+def test_importance_summary_reports_coverage_per_interval(tmp_path) -> None:
+    scenario = replace(
+        BY_NAME["is_ou_a_3sd_q_equals_p_n1000"],
+        config={**BY_NAME["is_ou_a_3sd_q_equals_p_n1000"].config, "max_samples": 20},
+    )
+    runs = [_run_task((scenario, seed)) for seed in (1, 2)]
+
+    entry = summarize([scenario], runs)[0]
+
+    assert set(entry["intervals"]) == {"mc_wilson", "is_normal", "is_hoeffding", "is_bernstein"}
+    assert entry["estimators"]["is"]["no_event_rate"] >= 0.0
+    assert entry["intervals"]["is_hoeffding"]["missing_rate"] == 0.0

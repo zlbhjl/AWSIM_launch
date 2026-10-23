@@ -2,22 +2,30 @@
 
     x_{k+1} = P( x_k + f_q(t_k, x_k) dt + G_q(t_k, x_k) sqrt(dt) xi_k ),
 
-with xi_k ~ N(0, I_{m_q}) drawn from one seeded generator and ``P`` the
-model's projection onto admissible states.  Guards are checked on the grid.
-A system without noise is delegated to the ODE runner, so the zero-diffusion
-limit is the deterministic solution exactly rather than an Euler
-approximation of it.
+with the innovation xi_k drawn from one seeded generator and ``P`` the model's
+projection onto admissible states.  Guards are checked on the grid.  A system
+without noise is delegated to the ODE runner, so the zero-diffusion limit is
+the deterministic solution exactly rather than an Euler approximation of it.
+
+Under the target law the innovation is N(u^P sqrt(dt), I) (``noise_target``).
+A proposal Q (``noise_proposal``) is a path-level mixture of conditional
+innovation laws (``targets.dynamics.proposals``); the realised innovations
+are evaluated under P and every component on the same step context, and the
+path log densities are returned as ``noise_log_p`` / ``noise_log_q``.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from math import log, sqrt
+from math import sqrt
 from typing import Mapping
 
 import numpy as np
 
 from ..models.base import HybridSystem, HybridTrajectory
+from ..proposals.base import ProposalContext
+from ..proposals.gaussian import DriftPathLaw
+from ..proposals.path import TARGET, PathProposal
 from .ode import ODESolverSettings, solve_hybrid_ode
 
 
@@ -28,7 +36,12 @@ class SDESolverSettings:
     seed: int
     ode_fallback: ODESolverSettings
     noise_target: "GaussianDriftNoisePath" = field(default_factory=lambda: GaussianDriftNoisePath())
-    noise_proposal: "GaussianDriftNoisePath | DefensiveGaussianNoiseProposal | None" = None
+    noise_proposal: "GaussianDriftNoisePath | DefensiveGaussianNoiseProposal | PathProposal | None" = None
+    # Seed for the one per-path draw that picks a mixture component. None keeps
+    # the legacy behaviour: the draw comes first from the innovation stream.
+    mixture_seed: int | None = None
+    # Initial inputs of the case, passed to proposal rules through the context.
+    initial_inputs: Mapping[str, object] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -114,21 +127,25 @@ def solve_hybrid_sde(system: HybridSystem, settings: SDESolverSettings) -> Hybri
         return solve_hybrid_ode(system, settings.ode_fallback)
 
     target = settings.noise_target
-    proposal = settings.noise_proposal
     target.validate()
-    if proposal is not None:
-        proposal.validate()
+    if isinstance(settings.noise_proposal, (GaussianDriftNoisePath, DefensiveGaussianNoiseProposal)):
+        settings.noise_proposal.validate()
+    target_law = DriftPathLaw(target)
+    proposal = as_path_proposal(settings.noise_proposal)
     rng = np.random.default_rng(int(settings.seed))
-    # Do not consume a random draw for Q=P; this preserves the same-seed
+    choice_rng = rng if settings.mixture_seed is None else np.random.default_rng(int(settings.mixture_seed))
+    # One draw per path picks the mixture component. No draw is consumed for
+    # Q = P or a single direct component; this preserves the same-seed
     # regression invariant against the nominal SDE runner.
-    use_tilt = (
-        proposal is not None
-        and isinstance(proposal, DefensiveGaussianNoiseProposal)
-        and proposal.base_weight < 1.0
-        and rng.random() >= proposal.base_weight
-    )
+    if proposal is None:
+        chosen = TARGET
+    else:
+        chosen = proposal.choose(choice_rng.random() if proposal.needs_choice else None)
+    sampling_law = target_law if chosen is TARGET else chosen
+    components = () if proposal is None else proposal.components
+
     log_p = 0.0
-    log_r = 0.0
+    log_r = [0.0] * len(components)
     noise_sample_count = 0
     time_sec = 0.0
     mode = system.initial_mode()
@@ -138,6 +155,7 @@ def solve_hybrid_sde(system: HybridSystem, settings: SDESolverSettings) -> Hybri
     times = [time_sec]
     states = [state.copy()]
     modes = [mode]
+    state_names = tuple(system.state_names)
     while time_sec < settings.horizon_sec - 1e-12:
         dt = min(float(settings.dt_sec), settings.horizon_sec - time_sec)
         drift = system.drift(time_sec, state, mode, entry_times)
@@ -145,16 +163,23 @@ def solve_hybrid_sde(system: HybridSystem, settings: SDESolverSettings) -> Hybri
         increment = drift * dt
         if channels:
             diffusion = system.diffusion(time_sec, state, mode, entry_times)
-            p_mean = target.innovation_mean(
-                time_sec=time_sec, mode=mode, channels=channels, dt_sec=dt
+            context = ProposalContext(
+                time_sec=time_sec,
+                dt_sec=dt,
+                state=state.copy(),
+                mode=mode,
+                mode_entry_time_sec=entry_times.get(mode, 0.0),
+                channels=tuple(channels),
+                state_names=state_names,
+                initial_inputs=settings.initial_inputs,
             )
-            q_mean = (
-                proposal.innovation_mean(time_sec=time_sec, mode=mode, channels=channels, dt_sec=dt)
-                if proposal is not None else p_mean
-            )
-            innovation = rng.normal(size=len(channels)) + (q_mean if use_tilt or isinstance(proposal, GaussianDriftNoisePath) else p_mean)
-            log_p += _normal_log_density(innovation, p_mean)
-            log_r += _normal_log_density(innovation, q_mean)
+            innovation = np.asarray(sampling_law.sample(context, rng), dtype=float)
+            step_log_p = target_law.log_density(innovation, context)
+            log_p += step_log_p
+            for index, component in enumerate(components):
+                log_r[index] += (
+                    step_log_p if component is TARGET else component.log_density(innovation, context)
+                )
             noise_sample_count += len(channels)
             increment = increment + diffusion @ (sqrt(dt) * innovation)
         state = np.asarray(system.project(state + increment), dtype=float)
@@ -163,16 +188,7 @@ def solve_hybrid_sde(system: HybridSystem, settings: SDESolverSettings) -> Hybri
         times.append(time_sec)
         states.append(state.copy())
         modes.append(mode)
-    if proposal is None:
-        log_q = log_p
-    elif isinstance(proposal, DefensiveGaussianNoiseProposal):
-        # q(path)=b p(path)+(1-b) r(path), evaluated stably in log space.
-        log_q = _logaddexp(
-            log(proposal.base_weight) + log_p,
-            log(1.0 - proposal.base_weight) + log_r
-        ) if proposal.base_weight < 1.0 else log_p
-    else:
-        log_q = log_r
+    log_q = log_p if proposal is None else proposal.log_q(log_p, log_r)
     return HybridTrajectory(
         times_sec=np.asarray(times, dtype=float),
         states=np.asarray(states, dtype=float),
@@ -184,13 +200,16 @@ def solve_hybrid_sde(system: HybridSystem, settings: SDESolverSettings) -> Hybri
     )
 
 
-def _logaddexp(left: float, right: float) -> float:
-    maximum = max(left, right)
-    return maximum + log(np.exp(left - maximum) + np.exp(right - maximum))
-
-
-def _normal_log_density(value: np.ndarray, mean: np.ndarray) -> float:
-    return float(-0.5 * np.sum((value - mean) ** 2 + log(2.0 * np.pi)))
+def as_path_proposal(proposal: object) -> PathProposal | None:
+    """Express the legacy drift proposals as path proposals (same draws, same densities)."""
+    if proposal is None or isinstance(proposal, PathProposal):
+        return proposal
+    if isinstance(proposal, DefensiveGaussianNoiseProposal):
+        path = GaussianDriftNoisePath(channel_drifts=proposal.channel_drifts, drift_schedule=proposal.drift_schedule)
+        return PathProposal((DriftPathLaw(path),), (1.0,), defensive_weight=proposal.base_weight)
+    if isinstance(proposal, GaussianDriftNoisePath):
+        return PathProposal((DriftPathLaw(proposal),), (1.0,))
+    raise TypeError(f"unsupported SDE noise proposal {type(proposal).__name__}")
 
 
 def _apply_transitions(system, mode, state, time_sec, entry_times):

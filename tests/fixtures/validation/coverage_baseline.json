@@ -179,6 +179,63 @@
   "sample_count": 50,
   "verdict": null
  },
+ "is_ou_a_3sd_defensive_u3_b0.2_n1000:20261018": {
+  "correct": true,
+  "estimate": 0.001522909,
+  "estimate_mc": 0.0,
+  "interval": [
+   0.000213728,
+   0.00283209
+  ],
+  "interval_is_bernstein": [
+   0.0,
+   1.0
+  ],
+  "interval_is_hoeffding": [
+   0.0,
+   0.9618457
+  ],
+  "sample_count": 50,
+  "verdict": null
+ },
+ "is_ou_a_3sd_defensive_u3_b0.2_n1000:20261019": {
+  "correct": true,
+  "estimate": 0.000995558,
+  "estimate_mc": 0.0,
+  "interval": [
+   0.000332916,
+   0.001658199
+  ],
+  "interval_is_bernstein": [
+   0.0,
+   1.0
+  ],
+  "interval_is_hoeffding": [
+   0.0,
+   0.961318349
+  ],
+  "sample_count": 50,
+  "verdict": null
+ },
+ "is_ou_a_3sd_defensive_u3_b0.2_n1000:20261020": {
+  "correct": true,
+  "estimate": 0.000836054,
+  "estimate_mc": 0.0,
+  "interval": [
+   0.000316035,
+   0.001356074
+  ],
+  "interval_is_bernstein": [
+   0.0,
+   1.0
+  ],
+  "interval_is_hoeffding": [
+   0.0,
+   0.961158846
+  ],
+  "sample_count": 50,
+  "verdict": null
+ },
  "rule_binomial_fixed_strict_n100_p0.05:20261018": {
   "correct": true,
   "estimate": 0.03,

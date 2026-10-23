@@ -1,0 +1,29 @@
+# Model A (see dynamics_importance_ou_baseline.yaml) with a constant Gaussian
+# drift proposal Q1 on the Brownian channel w.
+#
+# A drift u on dW shifts the mean of X_K by about 0.634 u, so u = 3.0 moves it
+# near the threshold. The value is an example only: choose it in pilot runs
+# (--phase pilot) and fix it before the final run. This direct Q has no weight
+# bound, so comparison.json reports only the diagnostic interval; use
+# defensive_gaussian_drift with base_weight for a bounded (guarantee) interval.
+schema_version: 1
+experiment_id: ou_model_a_gaussian_q1_v1
+target: dynamics
+target_measure:
+  id: ou_model_a_3sd_upper_v1
+  definition:
+    dynamics_schema_version: 2
+    model_id: ou_scalar
+    model_params: {theta: 1.0, sigma: 1.0}
+    initial_law: {kind: point_mass, value: [0.0]}
+    solver: {kind: sde, dt_sec: 0.01, horizon_sec: 1.0}
+    event: {kind: terminal_exceedance, threshold: 1.9790590787861273, side: upper}
+proposal:
+  id: ou_gaussian_drift_q1_v1
+  mode: manual_proposal
+  definition:
+    dynamics_schema_version: 2
+    input: {kind: same_as_target}
+    noise_path_q:
+      distribution: gaussian_drift
+      channel_drifts: {w: 3.0}

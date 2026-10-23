@@ -1,0 +1,124 @@
+budget: 10
+trials:
+- name: q4_t5_s0.8
+  noise:
+    kind: student_t
+    dof: 5
+    location_rule:
+      kind: piecewise
+      pieces:
+      - time:
+        - 0.0
+        - 0.25
+        rule:
+          kind: affine_state
+          channels:
+          - w
+          states: &id001
+          - x
+          offset:
+          - 0.21609347075272517
+          matrix:
+          - - -0.034510244821333816
+      - time:
+        - 0.25
+        - 0.5
+        rule:
+          kind: affine_state
+          channels:
+          - w
+          states: *id001
+          offset:
+          - 0.32426131678737025
+          matrix:
+          - - -0.06670735579171372
+      - time:
+        - 0.5
+        - 0.75
+        rule:
+          kind: affine_state
+          channels:
+          - w
+          states: *id001
+          offset:
+          - 0.5805068899288957
+          matrix:
+          - - -0.1543345656315387
+      - time:
+        - 0.75
+        - null
+        rule:
+          kind: affine_state
+          channels:
+          - w
+          states: *id001
+          offset:
+          - 3.655174296891616
+          matrix:
+          - - -1.3096097094184902
+    covariance:
+      channels:
+      - w
+      matrix:
+      - - 1.0
+- name: q4_t5_s1.0
+  noise:
+    kind: student_t
+    dof: 5
+    location_rule:
+      kind: piecewise
+      pieces:
+      - time:
+        - 0.0
+        - 0.25
+        rule:
+          kind: affine_state
+          channels:
+          - w
+          states: &id002
+          - x
+          offset:
+          - 0.27011683844090645
+          matrix:
+          - - -0.043137806026667266
+      - time:
+        - 0.25
+        - 0.5
+        rule:
+          kind: affine_state
+          channels:
+          - w
+          states: *id002
+          offset:
+          - 0.40532664598421275
+          matrix:
+          - - -0.08338419473964215
+      - time:
+        - 0.5
+        - 0.75
+        rule:
+          kind: affine_state
+          channels:
+          - w
+          states: *id002
+          offset:
+          - 0.7256336124111196
+          matrix:
+          - - -0.19291820703942333
+      - time:
+        - 0.75
+        - null
+        rule:
+          kind: affine_state
+          channels:
+          - w
+          states: *id002
+          offset:
+          - 4.56896787111452
+          matrix:
+          - - -1.6370121367731127
+    covariance:
+      channels:
+      - w
+      matrix:
+      - - 1.0

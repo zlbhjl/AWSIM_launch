@@ -1,0 +1,309 @@
+{
+  "created_at": "2026-10-23T13:49:09+09:00",
+  "base_plan": "configs/is_tuning/ou_a_3sd_two_sided/base.yaml",
+  "base_plan_fingerprint": "sha256:f36c8d0b353f06c765ce3a9bbeed028ab8a71ff2bbefafcd7a09bf56b8ae499d",
+  "candidates": "configs/is_tuning/ou_a_3sd_two_sided/q3.yaml",
+  "budget": 10,
+  "samples_per_trial": 1000,
+  "phase": "pilot",
+  "root_entropy": "20261023",
+  "ranking_rule": "complete trials with an observed event, by relative standard error of the IS estimate",
+  "trials": [
+    {
+      "name": "q3_s0.8",
+      "proposal": {
+        "dynamics_schema_version": 2,
+        "input": {
+          "kind": "same_as_target"
+        },
+        "noise": {
+          "kind": "gaussian",
+          "mean_rule": {
+            "kind": "piecewise",
+            "pieces": [
+              {
+                "time": [
+                  0.0,
+                  0.25
+                ],
+                "rule": {
+                  "kind": "state_threshold",
+                  "state": "x",
+                  "threshold": 0.0,
+                  "below": {
+                    "w": -0.15215128650149418
+                  },
+                  "above": {
+                    "w": 0.15215128650149418
+                  }
+                }
+              },
+              {
+                "time": [
+                  0.25,
+                  0.5
+                ],
+                "rule": {
+                  "kind": "state_threshold",
+                  "state": "x",
+                  "threshold": 0.0,
+                  "below": {
+                    "w": -0.19561212181037096
+                  },
+                  "above": {
+                    "w": 0.19561212181037096
+                  }
+                }
+              },
+              {
+                "time": [
+                  0.5,
+                  0.75
+                ],
+                "rule": {
+                  "kind": "state_threshold",
+                  "state": "x",
+                  "threshold": 0.0,
+                  "below": {
+                    "w": -0.25148720775870437
+                  },
+                  "above": {
+                    "w": 0.25148720775870437
+                  }
+                }
+              },
+              {
+                "time": [
+                  0.75,
+                  null
+                ],
+                "rule": {
+                  "kind": "state_threshold",
+                  "state": "x",
+                  "threshold": 0.0,
+                  "below": {
+                    "w": -0.32332257878978005
+                  },
+                  "above": {
+                    "w": 0.32332257878978005
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "proposal_fingerprint": "sha256:d26f0f29364c77e5d40dcb0bdfaf996baad4a605f342fa719c2ef9ead79b021c",
+      "final_status": "complete",
+      "estimate_is": 0.002390213819105189,
+      "estimate_mc": 0.004,
+      "standard_error": 0.00018124361399178858,
+      "relative_standard_error": 0.07582736428979385,
+      "diagnostic_interval_width": 0.000710461911703571,
+      "effective_sample_size": 33.876687891031935,
+      "max_log_importance_weight": 4.3862848474946645,
+      "weight_bound": null,
+      "wall_time_sec": 3.2729189740002766,
+      "seconds_per_path": 0.0016364594870001384
+    },
+    {
+      "name": "q3_s1.0",
+      "proposal": {
+        "dynamics_schema_version": 2,
+        "input": {
+          "kind": "same_as_target"
+        },
+        "noise": {
+          "kind": "gaussian",
+          "mean_rule": {
+            "kind": "piecewise",
+            "pieces": [
+              {
+                "time": [
+                  0.0,
+                  0.25
+                ],
+                "rule": {
+                  "kind": "state_threshold",
+                  "state": "x",
+                  "threshold": 0.0,
+                  "below": {
+                    "w": -0.19018910812686773
+                  },
+                  "above": {
+                    "w": 0.19018910812686773
+                  }
+                }
+              },
+              {
+                "time": [
+                  0.25,
+                  0.5
+                ],
+                "rule": {
+                  "kind": "state_threshold",
+                  "state": "x",
+                  "threshold": 0.0,
+                  "below": {
+                    "w": -0.24451515226296372
+                  },
+                  "above": {
+                    "w": 0.24451515226296372
+                  }
+                }
+              },
+              {
+                "time": [
+                  0.5,
+                  0.75
+                ],
+                "rule": {
+                  "kind": "state_threshold",
+                  "state": "x",
+                  "threshold": 0.0,
+                  "below": {
+                    "w": -0.31435900969838043
+                  },
+                  "above": {
+                    "w": 0.31435900969838043
+                  }
+                }
+              },
+              {
+                "time": [
+                  0.75,
+                  null
+                ],
+                "rule": {
+                  "kind": "state_threshold",
+                  "state": "x",
+                  "threshold": 0.0,
+                  "below": {
+                    "w": -0.40415322348722504
+                  },
+                  "above": {
+                    "w": 0.40415322348722504
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "proposal_fingerprint": "sha256:355f4af546bdb52765294eb8283eb0fbe6ffe47a9f4b511dcfebb94b48534617",
+      "final_status": "complete",
+      "estimate_is": 0.0027286518634038618,
+      "estimate_mc": 0.004,
+      "standard_error": 0.00019110904207254265,
+      "relative_standard_error": 0.07003789843462967,
+      "diagnostic_interval_width": 0.0007491336791642673,
+      "effective_sample_size": 4.852360400343989,
+      "max_log_importance_weight": 5.558171304301197,
+      "weight_bound": null,
+      "wall_time_sec": 3.232381488000101,
+      "seconds_per_path": 0.0016161907440000506
+    },
+    {
+      "name": "q3_s1.2",
+      "proposal": {
+        "dynamics_schema_version": 2,
+        "input": {
+          "kind": "same_as_target"
+        },
+        "noise": {
+          "kind": "gaussian",
+          "mean_rule": {
+            "kind": "piecewise",
+            "pieces": [
+              {
+                "time": [
+                  0.0,
+                  0.25
+                ],
+                "rule": {
+                  "kind": "state_threshold",
+                  "state": "x",
+                  "threshold": 0.0,
+                  "below": {
+                    "w": -0.2282269297522413
+                  },
+                  "above": {
+                    "w": 0.2282269297522413
+                  }
+                }
+              },
+              {
+                "time": [
+                  0.25,
+                  0.5
+                ],
+                "rule": {
+                  "kind": "state_threshold",
+                  "state": "x",
+                  "threshold": 0.0,
+                  "below": {
+                    "w": -0.2934181827155565
+                  },
+                  "above": {
+                    "w": 0.2934181827155565
+                  }
+                }
+              },
+              {
+                "time": [
+                  0.5,
+                  0.75
+                ],
+                "rule": {
+                  "kind": "state_threshold",
+                  "state": "x",
+                  "threshold": 0.0,
+                  "below": {
+                    "w": -0.37723081163805644
+                  },
+                  "above": {
+                    "w": 0.37723081163805644
+                  }
+                }
+              },
+              {
+                "time": [
+                  0.75,
+                  null
+                ],
+                "rule": {
+                  "kind": "state_threshold",
+                  "state": "x",
+                  "threshold": 0.0,
+                  "below": {
+                    "w": -0.48498386818467
+                  },
+                  "above": {
+                    "w": 0.48498386818467
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "proposal_fingerprint": "sha256:088abaa98dcc8c4b09c066433c6013a1c206ade9e3354ab17d373b35291edf87",
+      "final_status": "complete",
+      "estimate_is": 0.0027507376417942844,
+      "estimate_mc": 0.004,
+      "standard_error": 0.0002710356912575318,
+      "relative_standard_error": 0.09853200361221558,
+      "diagnostic_interval_width": 0.0010624403867793598,
+      "effective_sample_size": 3.0828925547940385,
+      "max_log_importance_weight": 5.596528303285766,
+      "weight_bound": null,
+      "wall_time_sec": 3.168669427000168,
+      "seconds_per_path": 0.001584334713500084
+    }
+  ],
+  "ranking": [
+    "q3_s1.0",
+    "q3_s0.8",
+    "q3_s1.2"
+  ]
+}

@@ -1,0 +1,114 @@
+budget: 10
+trials:
+- name: q4_t5_s0.8
+  noise:
+    kind: student_t
+    dof: 5
+    location_rule:
+      kind: piecewise
+      pieces:
+      - time:
+        - 0.0
+        - 0.25
+        rule:
+          kind: state_threshold
+          state: x
+          threshold: 0.0
+          below:
+            w: -0.20286838200199228
+          above:
+            w: 0.20286838200199228
+      - time:
+        - 0.25
+        - 0.5
+        rule:
+          kind: state_threshold
+          state: x
+          threshold: 0.0
+          below:
+            w: -0.260816162413828
+          above:
+            w: 0.260816162413828
+      - time:
+        - 0.5
+        - 0.75
+        rule:
+          kind: state_threshold
+          state: x
+          threshold: 0.0
+          below:
+            w: -0.3353162770116058
+          above:
+            w: 0.3353162770116058
+      - time:
+        - 0.75
+        - null
+        rule:
+          kind: state_threshold
+          state: x
+          threshold: 0.0
+          below:
+            w: -0.43109677171970673
+          above:
+            w: 0.43109677171970673
+    covariance:
+      channels:
+      - w
+      matrix:
+      - - 1.0
+- name: q4_t5_s1.0
+  noise:
+    kind: student_t
+    dof: 5
+    location_rule:
+      kind: piecewise
+      pieces:
+      - time:
+        - 0.0
+        - 0.25
+        rule:
+          kind: state_threshold
+          state: x
+          threshold: 0.0
+          below:
+            w: -0.25358547750249033
+          above:
+            w: 0.25358547750249033
+      - time:
+        - 0.25
+        - 0.5
+        rule:
+          kind: state_threshold
+          state: x
+          threshold: 0.0
+          below:
+            w: -0.326020203017285
+          above:
+            w: 0.326020203017285
+      - time:
+        - 0.5
+        - 0.75
+        rule:
+          kind: state_threshold
+          state: x
+          threshold: 0.0
+          below:
+            w: -0.4191453462645072
+          above:
+            w: 0.4191453462645072
+      - time:
+        - 0.75
+        - null
+        rule:
+          kind: state_threshold
+          state: x
+          threshold: 0.0
+          below:
+            w: -0.5388709646496334
+          above:
+            w: 0.5388709646496334
+    covariance:
+      channels:
+      - w
+      matrix:
+      - - 1.0

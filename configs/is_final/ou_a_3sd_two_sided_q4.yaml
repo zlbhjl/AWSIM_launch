@@ -1,0 +1,93 @@
+schema_version: 1
+experiment_id: ou_a_3sd_two_sided__q4_t5_s0.8__final
+target: dynamics
+target_measure:
+  id: ou_a_3sd_two_sided_p
+  definition:
+    dynamics_schema_version: 2
+    model_id: ou_scalar
+    model_params:
+      theta: 1.0
+      sigma: 1.0
+    initial_law:
+      kind: point_mass
+      value:
+      - 0.0
+    solver:
+      kind: sde
+      dt_sec: 0.01
+      horizon_sec: 1.0
+    event:
+      kind: terminal_exceedance
+      threshold: 1.9790590787861273
+      side: two_sided
+proposal:
+  id: q4_t5_s0.8
+  mode: manual_proposal
+  definition:
+    dynamics_schema_version: 2
+    input:
+      kind: same_as_target
+    noise:
+      kind: student_t
+      dof: 5
+      location_rule:
+        kind: piecewise
+        pieces:
+        - time:
+          - 0.0
+          - 0.25
+          rule:
+            kind: state_threshold
+            state: x
+            threshold: 0.0
+            below:
+              w: -0.15215128650149418
+            above:
+              w: 0.15215128650149418
+        - time:
+          - 0.25
+          - 0.5
+          rule:
+            kind: state_threshold
+            state: x
+            threshold: 0.0
+            below:
+              w: -0.19561212181037096
+            above:
+              w: 0.19561212181037096
+        - time:
+          - 0.5
+          - 0.75
+          rule:
+            kind: state_threshold
+            state: x
+            threshold: 0.0
+            below:
+              w: -0.25148720775870437
+            above:
+              w: 0.25148720775870437
+        - time:
+          - 0.75
+          - null
+          rule:
+            kind: state_threshold
+            state: x
+            threshold: 0.0
+            below:
+              w: -0.32332257878978005
+            above:
+              w: 0.32332257878978005
+      covariance:
+        channels:
+        - w
+        matrix:
+        - - 1.0
+tuning_provenance:
+  record: configs/is_tuning/ou_a_3sd_two_sided/records/q4.json
+  trial: q4_t5_s0.8
+  proposal_fingerprint: sha256:fd4bfddb5f0625a7e00da4469f8db4011a676add7d939da3e9a01195d1911d56
+  pilot_root_entropy: '20261023'
+  pilot_samples: 1000
+  rank: 1
+  fixed_at: '2026-10-23T13:50:28+09:00'

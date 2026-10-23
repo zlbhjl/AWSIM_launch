@@ -1,0 +1,98 @@
+schema_version: 1
+experiment_id: ou_a_4sd_upper__q4_t5_s1.0__final
+target: dynamics
+target_measure:
+  id: ou_a_4sd_upper_p
+  definition:
+    dynamics_schema_version: 2
+    model_id: ou_scalar
+    model_params:
+      theta: 1.0
+      sigma: 1.0
+    initial_law:
+      kind: point_mass
+      value:
+      - 0.0
+    solver:
+      kind: sde
+      dt_sec: 0.01
+      horizon_sec: 1.0
+    event:
+      kind: terminal_exceedance
+      threshold: 2.638745438381503
+      side: upper
+proposal:
+  id: q4_t5_s1.0
+  mode: manual_proposal
+  definition:
+    dynamics_schema_version: 2
+    input:
+      kind: same_as_target
+    noise:
+      kind: student_t
+      dof: 5
+      location_rule:
+        kind: piecewise
+        pieces:
+        - time:
+          - 0.0
+          - 0.25
+          rule:
+            kind: affine_state
+            channels:
+            - w
+            states: &id001
+            - x
+            offset:
+            - 0.27011683844090645
+            matrix:
+            - - -0.043137806026667266
+        - time:
+          - 0.25
+          - 0.5
+          rule:
+            kind: affine_state
+            channels:
+            - w
+            states: *id001
+            offset:
+            - 0.40532664598421275
+            matrix:
+            - - -0.08338419473964215
+        - time:
+          - 0.5
+          - 0.75
+          rule:
+            kind: affine_state
+            channels:
+            - w
+            states: *id001
+            offset:
+            - 0.7256336124111196
+            matrix:
+            - - -0.19291820703942333
+        - time:
+          - 0.75
+          - null
+          rule:
+            kind: affine_state
+            channels:
+            - w
+            states: *id001
+            offset:
+            - 4.56896787111452
+            matrix:
+            - - -1.6370121367731127
+      covariance:
+        channels:
+        - w
+        matrix:
+        - - 1.0
+tuning_provenance:
+  record: configs/is_tuning/ou_a_4sd_upper/records/q4.json
+  trial: q4_t5_s1.0
+  proposal_fingerprint: sha256:07b9e41c867b6893f77cc1b09b5651389c1e0f35647d16f8e8d92368b46153e8
+  pilot_root_entropy: '20261023'
+  pilot_samples: 1000
+  rank: 1
+  fixed_at: '2026-10-23T13:50:28+09:00'

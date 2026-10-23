@@ -1,0 +1,101 @@
+schema_version: 1
+experiment_id: ou_b_3sd_upper__q3_s0.8__final
+target: dynamics
+target_measure:
+  id: ou_b_3sd_upper_p
+  definition:
+    dynamics_schema_version: 2
+    model_id: ou_augmented
+    model_params:
+      theta_c: 2.0
+      theta_x: 1.0
+      coupling: 1.0
+      sigma: 1.0
+    initial_law:
+      kind: point_mass
+      value:
+      - 0.0
+      - 0.0
+    solver:
+      kind: sde
+      dt_sec: 0.01
+      horizon_sec: 1.0
+    event:
+      kind: terminal_exceedance
+      threshold: 0.6343296308417505
+      side: upper
+      state: x
+proposal:
+  id: q3_s0.8
+  mode: manual_proposal
+  definition:
+    dynamics_schema_version: 2
+    input:
+      kind: same_as_target
+    noise:
+      kind: gaussian
+      mean_rule:
+        kind: piecewise
+        pieces:
+        - time:
+          - 0.0
+          - 0.25
+          rule:
+            kind: affine_state
+            channels:
+            - w
+            states: &id001
+            - c
+            - x
+            offset:
+            - 0.33495024827138536
+            matrix:
+            - - -0.12891254354253814
+              - -0.2214057736606857
+        - time:
+          - 0.25
+          - 0.5
+          rule:
+            kind: affine_state
+            channels:
+            - w
+            states: *id001
+            offset:
+            - 0.5869064299862786
+            matrix:
+            - - -0.2302184026329398
+              - -0.49856151313570485
+        - time:
+          - 0.5
+          - 0.75
+          rule:
+            kind: affine_state
+            channels:
+            - w
+            states: *id001
+            offset:
+            - 1.4164677157827317
+            matrix:
+            - - -0.4741752662643617
+              - -1.5458791770893743
+        - time:
+          - 0.75
+          - null
+          rule:
+            kind: affine_state
+            channels:
+            - w
+            states: *id001
+            offset:
+            - 7.891310298294437
+            matrix:
+            - - -1.3287027692057518
+              - -10.888819228740047
+tuning_provenance:
+  record: configs/is_tuning/ou_b_3sd_upper/records/q3.json
+  trial: q3_s0.8
+  proposal_fingerprint: sha256:9d76e47db718af0e728b1215a12affebfc2c38c8d5f2cb1e506983711a3d145f
+  pilot_root_entropy: '20261023'
+  pilot_samples: 1000
+  rank: 1
+  fixed_at: '2026-10-23T13:50:28+09:00'

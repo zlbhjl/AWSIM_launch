@@ -13,6 +13,7 @@ from math import isfinite, log, sqrt
 
 from contracts.evaluation import EvaluationRecord
 from contracts.statistics import StatisticalReport, StatisticalRequest
+from evaluation.empirical_bernstein import empirical_bernstein_radius
 from evaluation.importance_samples import collect_available_importance_samples
 
 
@@ -139,12 +140,86 @@ def calculate_bounded_hoeffding_interval(
     count = len(normalized)
     normalized_mean = sum(normalized) / count
     normalized_radius = sqrt(log(2.0 / error_probability) / (2.0 * count))
-    estimate = max(0.0, min(1.0, upper_bound * normalized_mean))
+    # The raw mean of the contributions; it can exceed 1 and is not clipped.
+    # Only the interval is intersected with [0, 1].
+    estimate = upper_bound * normalized_mean
     lower = max(0.0, upper_bound * (normalized_mean - normalized_radius))
     upper = min(1.0, upper_bound * (normalized_mean + normalized_radius))
     return {
         "sample_size": count,
         "estimate": estimate,
+        "lower_bound": lower,
+        "upper_bound": upper,
+        "interval_width": upper - lower,
+        "confidence": confidence,
+        "alpha": error_probability,
+    }
+
+
+def calculate_fixed_weighted_empirical_bernstein_interval(
+    records: Sequence[EvaluationRecord] | None,
+    *,
+    metric: str,
+    confidence: float,
+    max_importance_weight: float,
+) -> dict[str, object] | None:
+    """Fixed-sample empirical Bernstein interval for E_P[Y] from w*Y in [0, W].
+
+    Like the Hoeffding interval it needs a bound W fixed before sampling, and
+    it is valid only when N is fixed in advance. Unlike Hoeffding it adapts to
+    the observed variance of the contributions.
+    """
+
+    contributions = _weighted_contributions(
+        records,
+        metric=metric,
+        max_importance_weight=max_importance_weight,
+    )
+    if len(contributions) < 2:
+        return None
+    return {
+        "metric": metric,
+        "estimator": "fixed_weighted_empirical_bernstein",
+        "max_importance_weight": max_importance_weight,
+        **calculate_bounded_empirical_bernstein_interval(
+            contributions,
+            confidence=confidence,
+            upper_bound=max_importance_weight,
+        ),
+    }
+
+
+def calculate_bounded_empirical_bernstein_interval(
+    contributions: Sequence[float],
+    *,
+    confidence: float,
+    upper_bound: float,
+) -> dict[str, object]:
+    """Bound the mean of N >= 2 observations known to lie in ``[0, upper_bound]``.
+
+    Uses :func:`evaluation.empirical_bernstein.empirical_bernstein_radius`
+    with the empirical standard deviation (denominator N).
+    """
+
+    if len(contributions) < 2:
+        raise ValueError("empirical Bernstein interval requires at least two contributions")
+    if not 0.0 < confidence < 1.0:
+        raise ValueError("confidence must satisfy 0.0 < confidence < 1.0")
+    if not isfinite(upper_bound) or upper_bound <= 0.0:
+        raise ValueError("upper_bound must be a positive finite number")
+    for contribution in contributions:
+        if not isfinite(contribution) or not 0.0 <= contribution <= upper_bound:
+            raise ValueError("contributions must be finite values in [0, upper_bound]")
+    count = len(contributions)
+    mean = sum(contributions) / count
+    std = sqrt(max(0.0, sum((value - mean) ** 2 for value in contributions) / count))
+    error_probability = 1.0 - confidence
+    radius = empirical_bernstein_radius(count, std, upper_bound, error_probability)
+    lower = max(0.0, mean - radius)
+    upper = min(1.0, mean + radius)
+    return {
+        "sample_size": count,
+        "estimate": mean,
         "lower_bound": lower,
         "upper_bound": upper,
         "interval_width": upper - lower,
@@ -275,7 +350,9 @@ def evaluate_weighted_sequential_request(
 
 __all__ = [
     "WeightedSequentialService",
+    "calculate_bounded_empirical_bernstein_interval",
     "calculate_bounded_hoeffding_interval",
+    "calculate_fixed_weighted_empirical_bernstein_interval",
     "calculate_fixed_weighted_hoeffding_interval",
     "calculate_weighted_sequential_decision",
     "evaluate_weighted_sequential_request",

@@ -1,0 +1,90 @@
+{
+  "created_at": "2026-10-23T13:49:02+09:00",
+  "base_plan": "configs/is_tuning/ou_a_3sd_two_sided/base.yaml",
+  "base_plan_fingerprint": "sha256:f36c8d0b353f06c765ce3a9bbeed028ab8a71ff2bbefafcd7a09bf56b8ae499d",
+  "candidates": "configs/is_tuning/ou_a_3sd_two_sided/q1d.yaml",
+  "budget": 10,
+  "samples_per_trial": 1000,
+  "phase": "pilot",
+  "root_entropy": "20261023",
+  "ranking_rule": "complete trials with an observed event, by relative standard error of the IS estimate",
+  "trials": [
+    {
+      "name": "q1d_b0.2",
+      "proposal": {
+        "dynamics_schema_version": 2,
+        "input": {
+          "kind": "same_as_target"
+        },
+        "noise": {
+          "kind": "mixture",
+          "defensive_weight": 0.2,
+          "components": [
+            {
+              "weight": 1.0,
+              "law": {
+                "kind": "gaussian",
+                "mean_rule": {
+                  "kind": "piecewise",
+                  "pieces": [
+                    {
+                      "time": [
+                        0.0,
+                        0.25
+                      ],
+                      "values": {
+                        "w": 0.19018910812686773
+                      }
+                    },
+                    {
+                      "time": [
+                        0.25,
+                        0.5
+                      ],
+                      "values": {
+                        "w": 0.24451515226296372
+                      }
+                    },
+                    {
+                      "time": [
+                        0.5,
+                        0.75
+                      ],
+                      "values": {
+                        "w": 0.31435900969838043
+                      }
+                    },
+                    {
+                      "time": [
+                        0.75,
+                        null
+                      ],
+                      "values": {
+                        "w": 0.40415322348722504
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      },
+      "proposal_fingerprint": "sha256:24855c0ecbf31f4ef1e3d1e7c96c7bdbeaeb78ef20157e29495da20761bc9777",
+      "final_status": "complete",
+      "estimate_is": 0.0014810716883626336,
+      "estimate_mc": 0.004,
+      "standard_error": 9.72167610508994e-05,
+      "relative_standard_error": 0.06563947026654413,
+      "diagnostic_interval_width": 0.0003810827007067982,
+      "effective_sample_size": 242.01322563618564,
+      "max_log_importance_weight": 1.6094295022880658,
+      "weight_bound": 5.0,
+      "wall_time_sec": 2.9829881470004693,
+      "seconds_per_path": 0.0014914940735002347
+    }
+  ],
+  "ranking": [
+    "q1d_b0.2"
+  ]
+}

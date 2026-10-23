@@ -341,20 +341,53 @@ def _mapping(value: object | None, *, name: str) -> Mapping[str, object]:
     return value
 
 
-def _gaussian_noise_path(value: object | None) -> GaussianDriftNoisePath:
+UTURN_NOISE_CHANNELS = frozenset({"ego_brake_acceleration", "npc_acceleration", "npc_heading"})
+
+
+def parse_noise_path_p(
+    value: object | None,
+    *,
+    channels: frozenset[str] = UTURN_NOISE_CHANNELS,
+) -> GaussianDriftNoisePath:
+    """Parse the target Brownian path law P for a model with these noise channels."""
+    return _gaussian_noise_path(value, channels=channels)
+
+
+def parse_noise_path_q(
+    value: object | None,
+    *,
+    channels: frozenset[str] = UTURN_NOISE_CHANNELS,
+) -> GaussianDriftNoisePath | DefensiveGaussianNoiseProposal | None:
+    """Parse the proposal Brownian path law Q for a model with these noise channels."""
+    return _sde_noise_proposal(value, channels=channels)
+
+
+def noise_path_definition(
+    path: GaussianDriftNoisePath | DefensiveGaussianNoiseProposal,
+) -> dict[str, object]:
+    return _noise_path_definition(path)
+
+
+def _gaussian_noise_path(
+    value: object | None,
+    *,
+    channels: frozenset[str] = UTURN_NOISE_CHANNELS,
+) -> GaussianDriftNoisePath:
     if value is None:
         return GaussianDriftNoisePath()
     spec = _mapping(value, name="noise_path_p")
     if spec.get("distribution") != "gaussian_drift":
         raise ValueError("noise_path_p.distribution must be 'gaussian_drift'")
     return GaussianDriftNoisePath(
-        channel_drifts=_noise_channel_drifts(spec, name="noise_path_p"),
-        drift_schedule=_noise_drift_schedule(spec, name="noise_path_p"),
+        channel_drifts=_noise_channel_drifts(spec, name="noise_path_p", channels=channels),
+        drift_schedule=_noise_drift_schedule(spec, name="noise_path_p", channels=channels),
     )
 
 
 def _sde_noise_proposal(
     value: object | None,
+    *,
+    channels: frozenset[str] = UTURN_NOISE_CHANNELS,
 ) -> GaussianDriftNoisePath | DefensiveGaussianNoiseProposal | None:
     if value is None:
         return None
@@ -362,23 +395,27 @@ def _sde_noise_proposal(
     distribution = spec.get("distribution")
     if distribution == "gaussian_drift":
         return GaussianDriftNoisePath(
-            channel_drifts=_noise_channel_drifts(spec, name="noise_path_q"),
-            drift_schedule=_noise_drift_schedule(spec, name="noise_path_q"),
+            channel_drifts=_noise_channel_drifts(spec, name="noise_path_q", channels=channels),
+            drift_schedule=_noise_drift_schedule(spec, name="noise_path_q", channels=channels),
         )
     if distribution != "defensive_gaussian_drift":
         raise ValueError("noise_path_q.distribution must be 'gaussian_drift' or 'defensive_gaussian_drift'")
     base_weight = _optional_float(spec, "base_weight", default=float("nan"))
     return DefensiveGaussianNoiseProposal(
         base_weight=base_weight,
-        channel_drifts=_noise_channel_drifts(spec, name="noise_path_q"),
-        drift_schedule=_noise_drift_schedule(spec, name="noise_path_q"),
+        channel_drifts=_noise_channel_drifts(spec, name="noise_path_q", channels=channels),
+        drift_schedule=_noise_drift_schedule(spec, name="noise_path_q", channels=channels),
     )
 
 
-def _noise_channel_drifts(spec: Mapping[str, object], *, name: str) -> dict[str, float]:
+def _noise_channel_drifts(
+    spec: Mapping[str, object],
+    *,
+    name: str,
+    channels: frozenset[str] = UTURN_NOISE_CHANNELS,
+) -> dict[str, float]:
     drifts = _mapping(spec.get("channel_drifts", {}), name=f"{name}.channel_drifts")
-    allowed = {"ego_brake_acceleration", "npc_acceleration", "npc_heading"}
-    if not set(drifts) <= allowed:
+    if not set(drifts) <= channels:
         raise ValueError(f"{name} has an unsupported Brownian channel")
     return {
         str(channel): _optional_float(drifts, str(channel), default=float("nan"))
@@ -390,6 +427,7 @@ def _noise_drift_schedule(
     spec: Mapping[str, object],
     *,
     name: str,
+    channels: frozenset[str] = UTURN_NOISE_CHANNELS,
 ) -> tuple[GaussianDriftScheduleEntry, ...]:
     raw_schedule = spec.get("drift_schedule", [])
     if not isinstance(raw_schedule, list):
@@ -402,7 +440,11 @@ def _noise_drift_schedule(
             raise ValueError(f"{name}.drift_schedule[{index}].time must contain [start, end]")
         start = _number(raw_time[0], name=f"{name}.drift_schedule[{index}].time[0]")
         end_raw = raw_time[1]
-        end = float("inf") if end_raw in {None, "inf"} else _number(end_raw, name=f"{name}.drift_schedule[{index}].time[1]")
+        end = (
+            float("inf")
+            if end_raw is None or end_raw == "inf" or (isinstance(end_raw, float) and end_raw == float("inf"))
+            else _number(end_raw, name=f"{name}.drift_schedule[{index}].time[1]")
+        )
         mode = entry.get("mode")
         if mode is not None and not isinstance(mode, str):
             raise ValueError(f"{name}.drift_schedule[{index}].mode must be a string")
@@ -410,7 +452,9 @@ def _noise_drift_schedule(
             start_sec=start,
             end_sec=end,
             mode=mode,
-            channel_drifts=_noise_channel_drifts(entry, name=f"{name}.drift_schedule[{index}]"),
+            channel_drifts=_noise_channel_drifts(
+                entry, name=f"{name}.drift_schedule[{index}]", channels=channels
+            ),
         ))
     return tuple(entries)
 
@@ -427,7 +471,8 @@ def _noise_path_definition(
         "channel_drifts": dict(path.channel_drifts),
         "drift_schedule": [
             {
-                "time": [entry.start_sec, entry.end_sec],
+                # An open end is written as null, never as a non-finite number.
+                "time": [entry.start_sec, None if entry.end_sec == float("inf") else entry.end_sec],
                 **({"mode": entry.mode} if entry.mode is not None else {}),
                 "channel_drifts": dict(entry.channel_drifts),
             }
@@ -542,5 +587,9 @@ __all__ = [
     "AWSIM_UTURN_RADIUS_M",
     "AWSIM_VEHICLE_GEOMETRY_M",
     "DynamicsExecutionProfile",
+    "UTURN_NOISE_CHANNELS",
     "build_execution_profile",
+    "noise_path_definition",
+    "parse_noise_path_p",
+    "parse_noise_path_q",
 ]

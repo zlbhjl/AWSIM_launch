@@ -14,7 +14,9 @@ from evaluation.importance_sampling import (
     calculate_standard_importance_sampling_interval,
 )
 from evaluation.weighted_sequential import (
+    calculate_bounded_empirical_bernstein_interval,
     calculate_bounded_hoeffding_interval,
+    calculate_fixed_weighted_empirical_bernstein_interval,
     calculate_fixed_weighted_hoeffding_interval,
     resolve_recorded_importance_weight_bound,
 )
@@ -44,6 +46,14 @@ def compare_sampling_methods(
     target measure.  The estimator itself deliberately has no PRISM-specific
     knowledge: a target adapter is responsible for producing exact P/Q
     likelihood ratios when it selects the ordinary estimator.
+
+    The intervals have different roles (docs/sde_importance_sampling_plan.md
+    §6.3).  ``diagnostic`` (normal approximation) is for comparing proposal
+    candidates.  ``guarantee`` (Hoeffding and empirical Bernstein, which need a
+    weight bound fixed before sampling) is only for checking that the
+    interval contains the true value; its width is not used to rank proposals.
+    ``comparable`` is kept for existing readers and equals
+    ``guarantee.hoeffding``.
     """
 
     ordinary = _ordinary_interval(ordinary_records, metric=metric, confidence=confidence)
@@ -59,13 +69,6 @@ def compare_sampling_methods(
         raise ValueError("No valid importance-weighted samples are available")
     context = _comparison_context(ordinary_records, importance_records, metric=metric)
 
-    ordinary_diagnostic_interval = (
-        float(ordinary["lower_bound"]), float(ordinary["upper_bound"])
-    )
-    importance_diagnostic_interval = (
-        float(importance["lower_bound"]),
-        float(importance["upper_bound"]),
-    )
     result: dict[str, object] = {
         **context,
         "metric": metric,
@@ -74,11 +77,13 @@ def compare_sampling_methods(
             "ordinary": ordinary,
             "importance": importance,
             "importance_estimator": str(importance["estimator"]),
-            "intervals_overlap": _intervals_overlap(
-                ordinary_diagnostic_interval, importance_diagnostic_interval
-            ),
+            "intervals_overlap": _intervals_overlap(ordinary, importance),
         },
-        "estimate_difference": float(importance["estimate"]) - float(ordinary["estimate"]),
+        "estimate_difference": (
+            None
+            if importance["estimate"] is None
+            else float(importance["estimate"]) - float(ordinary["estimate"])
+        ),
     }
     if importance_estimator == "ordinary":
         comparable_ordinary = _fixed_ordinary_hoeffding_interval(
@@ -86,10 +91,12 @@ def compare_sampling_methods(
         )
         max_weight = _recorded_importance_weight_bound_or_none(importance_records)
         if max_weight is None:
-            result["comparable"] = {
+            unavailable = {
                 "status": "unavailable",
                 "reason": "proposal Q has no declared finite importance-weight bound",
             }
+            result["comparable"] = unavailable
+            result["guarantee"] = {**unavailable, "purpose": GUARANTEE_PURPOSE}
             return result
         comparable_importance = calculate_fixed_weighted_hoeffding_interval(
             importance_records,
@@ -99,19 +106,11 @@ def compare_sampling_methods(
         )
         if comparable_ordinary is None or comparable_importance is None:
             raise ValueError("No valid samples are available for comparable intervals")
-        ordinary_interval = (
-            float(comparable_ordinary["lower_bound"]),
-            float(comparable_ordinary["upper_bound"]),
-        )
-        importance_interval = (
-            float(comparable_importance["lower_bound"]),
-            float(comparable_importance["upper_bound"]),
-        )
         result["comparable"] = {
             "method": "fixed_weighted_hoeffding",
             "ordinary": comparable_ordinary,
             "importance": comparable_importance,
-            "intervals_overlap": _intervals_overlap(ordinary_interval, importance_interval),
+            "intervals_overlap": _intervals_overlap(comparable_ordinary, comparable_importance),
             "width_ratio_importance_over_ordinary": (
                 float(comparable_importance["interval_width"])
                 / float(comparable_ordinary["interval_width"])
@@ -119,11 +118,24 @@ def compare_sampling_methods(
                 else None
             ),
         }
+        result["guarantee"] = {
+            "purpose": GUARANTEE_PURPOSE,
+            "hoeffding": result["comparable"],
+            "empirical_bernstein": _empirical_bernstein_pair(
+                ordinary_records,
+                importance_records,
+                metric=metric,
+                confidence=confidence,
+                max_weight=max_weight,
+            ),
+        }
     else:
-        result["comparable"] = {
+        unavailable = {
             "status": "unavailable",
             "reason": "fixed_weighted_hoeffding requires ordinary importance sampling",
         }
+        result["comparable"] = unavailable
+        result["guarantee"] = {**unavailable, "purpose": GUARANTEE_PURPOSE}
     if target_width is not None:
         if target_width < 0.0:
             raise ValueError("target_width must be non-negative")
@@ -143,6 +155,49 @@ def compare_sampling_methods(
             target_width=target_width,
         )
     return result
+
+
+GUARANTEE_PURPOSE = (
+    "coverage_check_only: valid for a weight bound and N fixed before sampling; "
+    "do not rank proposals by its width"
+)
+
+
+def _empirical_bernstein_pair(
+    ordinary_records: Sequence[EvaluationRecord],
+    importance_records: Sequence[EvaluationRecord],
+    *,
+    metric: str,
+    confidence: float,
+    max_weight: float,
+) -> dict[str, object]:
+    ordinary_values = _ordinary_values(ordinary_records, metric=metric)
+    ordinary = (
+        {
+            "metric": metric,
+            "estimator": "fixed_weighted_empirical_bernstein",
+            "max_importance_weight": 1.0,
+            **calculate_bounded_empirical_bernstein_interval(
+                ordinary_values, confidence=confidence, upper_bound=1.0,
+            ),
+        }
+        if len(ordinary_values) >= 2
+        else None
+    )
+    importance = calculate_fixed_weighted_empirical_bernstein_interval(
+        importance_records,
+        metric=metric,
+        confidence=confidence,
+        max_importance_weight=max_weight,
+    )
+    if ordinary is None or importance is None:
+        return {"status": "unavailable", "reason": "empirical Bernstein needs at least two samples"}
+    return {
+        "method": "fixed_weighted_empirical_bernstein",
+        "ordinary": ordinary,
+        "importance": importance,
+        "intervals_overlap": _intervals_overlap(ordinary, importance),
+    }
 
 
 def _recorded_importance_weight_bound_or_none(
@@ -173,6 +228,10 @@ def _ordinary_interval(
     if not values:
         return None
     count = len(values)
+    excluded = {
+        "not_success": sum(1 for record in records if record.status is not RunStatus.SUCCESS),
+    }
+    excluded["metric_missing"] = len(records) - count - excluded["not_success"]
     estimate = sum(values) / count
     z_value = float(norm.ppf(1.0 - (1.0 - confidence) / 2.0))
     denominator = 1.0 + (z_value * z_value) / count
@@ -187,6 +246,7 @@ def _ordinary_interval(
     return {
         "estimator": "ordinary_monte_carlo_wilson",
         "sample_size": count,
+        "excluded_records": {reason: number for reason, number in excluded.items() if number},
         "estimate": estimate,
         "lower_bound": lower,
         "upper_bound": upper,
@@ -214,7 +274,7 @@ def _comparison_context(
     importance_records: Sequence[EvaluationRecord],
     *,
     metric: str,
-) -> dict[str, str]:
+) -> dict[str, object]:
     """Return and validate provenance shared by the two record collections."""
 
     ordinary_contexts = _record_contexts(ordinary_records, metric=metric, weighted=False)
@@ -232,7 +292,52 @@ def _comparison_context(
         "target": target,
         "case_kind": case_kind,
         "target_measure_id": target_measure_id,
+        **_fingerprint_context(ordinary_records, importance_records),
     }
+
+
+def _fingerprint_context(
+    ordinary_records: Sequence[EvaluationRecord],
+    importance_records: Sequence[EvaluationRecord],
+) -> dict[str, str]:
+    """Check P and the fixed Q by fingerprint when the records carry one.
+
+    A target_measure_id alone does not identify the numerical model: the step
+    size or horizon can differ under the same id.  Records written with an
+    experiment manifest carry ``target_fingerprint`` (P, numerical map, event)
+    and ``proposal_fingerprint`` (Q).  Older records have neither; for them only
+    the ids are compared, and the result says so.
+    """
+
+    ordinary_targets = _fingerprints(ordinary_records, "target_fingerprint")
+    importance_targets = _fingerprints(importance_records, "target_fingerprint")
+    proposals = _fingerprints(importance_records, "proposal_fingerprint")
+    if not any(value is not None for value in ordinary_targets | importance_targets | proposals):
+        return {"identity_check": "legacy_ids_only"}
+    if None in ordinary_targets or None in importance_targets or None in proposals:
+        raise ValueError(
+            "comparison records must all carry target_fingerprint (and importance "
+            "records proposal_fingerprint), or none of them"
+        )
+    if len(ordinary_targets | importance_targets) != 1:
+        raise ValueError("ordinary and importance records must use the same target fingerprint")
+    if len(proposals) != 1:
+        raise ValueError("importance records must use one fixed proposal Q (one proposal_fingerprint)")
+    return {
+        "identity_check": "fingerprint",
+        "target_fingerprint": next(iter(ordinary_targets)),
+        "proposal_fingerprint": next(iter(proposals)),
+    }
+
+
+def _fingerprints(records: Sequence[EvaluationRecord], key: str) -> set[str | None]:
+    found: set[str | None] = set()
+    for record in records:
+        sampling = record.meta.get("sampling")
+        if isinstance(sampling, dict):
+            value = sampling.get(key)
+            found.add(value if isinstance(value, str) and value else None)
+    return found
 
 
 def _record_contexts(
@@ -284,6 +389,8 @@ def _importance_samples_to_width(
     target_width: float,
 ) -> int | None:
     for count in range(1, len(records) + 1):
+        if not _has_available_weight(records[:count]):
+            continue
         max_weight = resolve_recorded_importance_weight_bound(records[:count])
         result = calculate_fixed_weighted_hoeffding_interval(
             records[:count],
@@ -294,6 +401,14 @@ def _importance_samples_to_width(
         if result is not None and float(result["interval_width"]) <= target_width:
             return int(result["sample_size"])
     return None
+
+
+def _has_available_weight(records: Sequence[EvaluationRecord]) -> bool:
+    return any(
+        isinstance(record.meta.get("sampling"), dict)
+        and record.meta["sampling"].get("importance_weight_status") == "available"
+        for record in records
+    )
 
 
 def _fixed_ordinary_hoeffding_interval(
@@ -327,8 +442,13 @@ def _importance_calculator(
     raise ValueError("importance_estimator must be 'ordinary' or 'self_normalized'")
 
 
-def _intervals_overlap(left: tuple[float, float], right: tuple[float, float]) -> bool:
-    return max(left[0], right[0]) <= min(left[1], right[1])
+def _intervals_overlap(left: dict[str, object], right: dict[str, object]) -> bool | None:
+    """Whether two interval results overlap; None if either has no interval."""
+    bounds = (left["lower_bound"], left["upper_bound"], right["lower_bound"], right["upper_bound"])
+    if any(bound is None for bound in bounds):
+        return None
+    left_lower, left_upper, right_lower, right_upper = (float(bound) for bound in bounds)
+    return max(left_lower, right_lower) <= min(left_upper, right_upper)
 
 
 __all__ = ["compare_sampling_methods"]

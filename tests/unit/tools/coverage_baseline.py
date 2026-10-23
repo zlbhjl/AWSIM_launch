@@ -24,8 +24,15 @@ SCENARIOS = (
     "dkw_runner_seq_kde_explore300",
     "rule_binomial_fixed_strict_n100_p0.05",
     "rule_sprt_wald_true_p0",
+    "is_ou_a_3sd_defensive_u3_b0.2_n1000",
 )
 SEEDS = (20261018, 20261019, 20261020)
+# Smaller settings for slow scenarios; the result keys keep the scenario name.
+CONFIG_OVERRIDES = {"is_ou_a_3sd_defensive_u3_b0.2_n1000": {"max_samples": 50}}
+PINNED_KEYS = {
+    "sample_count", "estimate", "interval", "verdict", "correct",
+    "estimate_mc", "interval_is_hoeffding", "interval_is_bernstein",
+}
 
 
 def _rounded(value: object) -> object:
@@ -37,18 +44,22 @@ def _rounded(value: object) -> object:
 
 
 def build_baseline(tmp: Path) -> dict[str, object]:
+    from dataclasses import replace
+
     from tools.validation.coverage_experiment import SCENARIOS as ALL, ENGINES, judge
 
     by_name = {scenario.name: scenario for scenario in ALL}
     baseline = {}
     for name in SCENARIOS:
         scenario = by_name[name]
+        if name in CONFIG_OVERRIDES:
+            scenario = replace(scenario, config={**scenario.config, **CONFIG_OVERRIDES[name]})
         for seed in SEEDS:
             result = ENGINES[scenario.engine](scenario, seed, tmp)
             baseline[f"{name}:{seed}"] = {
                 key: _rounded(value)
                 for key, value in {**result, **judge(scenario, result)}.items()
-                if key in {"sample_count", "estimate", "interval", "verdict", "correct"}
+                if key in PINNED_KEYS
             }
     return baseline
 

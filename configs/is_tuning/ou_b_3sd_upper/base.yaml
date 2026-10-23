@@ -1,0 +1,34 @@
+schema_version: 1
+experiment_id: ou_b_3sd_upper
+target: dynamics
+target_measure:
+  id: ou_b_3sd_upper_p
+  definition:
+    dynamics_schema_version: 2
+    model_id: ou_augmented
+    model_params:
+      theta_c: 2.0
+      theta_x: 1.0
+      coupling: 1.0
+      sigma: 1.0
+    initial_law:
+      kind: point_mass
+      value:
+      - 0.0
+      - 0.0
+    solver:
+      kind: sde
+      dt_sec: 0.01
+      horizon_sec: 1.0
+    event:
+      kind: terminal_exceedance
+      threshold: 0.6343296308417505
+      side: upper
+      state: x
+proposal:
+  id: q0_p
+  mode: manual_proposal
+  definition:
+    dynamics_schema_version: 2
+    input:
+      kind: same_as_target

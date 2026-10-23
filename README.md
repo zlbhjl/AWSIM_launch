@@ -184,7 +184,8 @@ python3 run_orchestrator_cluster_v2.py \
 
 稀な事象の確率推定には、統計モードとは別の CLI (`apps.cli.prism_importance_main`、`apps.cli.dynamics_importance_main`、
 `apps.cli.awsim_importance_main`) で、固定した Q による重み付き標本と通常の P 標本を比較できます。
-Q の自動更新や逐次停止は扱いません。使い方は [docs/importance_sampling.md](docs/importance_sampling.md) を参照してください。
+Q の自動更新や逐次停止は扱いません。`dynamics_schema_version: 2` のプランでは、真の確率が式で分かるスカラー OU モデルも
+同じ CLI で実行でき、manifest による再開と完了の確認を行います。使い方は [docs/importance_sampling.md](docs/importance_sampling.md) を参照してください。
 
 ```bash
 # ODE: 人手で設定した Q4 と通常の P を、それぞれ 1000 標本で比較する
@@ -246,6 +247,7 @@ ROS・AWSIM・GPU は不要です。AW-CheckerPy や AW-Runtime-Monitor が必�
 | [docs/statistical_method_selection.md](docs/statistical_method_selection.md) | 統計手法の選び方 |
 | [docs/importance_sampling.md](docs/importance_sampling.md) | 重点サンプリング (固定P・固定Q) の使い方 |
 | [docs/importance_sampling_design.md](docs/importance_sampling_design.md)、[docs/awsim_importance_sampling_design.md](docs/awsim_importance_sampling_design.md) | 重点サンプリングの設計 (日本語のみ) |
+| [docs/sde_importance_sampling_plan.md](docs/sde_importance_sampling_plan.md) | SDE 重点サンプリングの実装計画と進捗 (日本語のみ) |
 | [docs/experiments/autoware_version_replay.md](docs/experiments/autoware_version_replay.md) | Autoware 1.7.1 / 1.8.0 / 1.9.0 の比較実験の記録 (日本語のみ) |
 | [docs/network_storm_control_guide.md](docs/network_storm_control_guide.md) | DDS と storm-control の対策 |
 | [docs/legacy.md](docs/legacy.md) | 旧フレームのコマンド (通常は使わない、日本語のみ) |
@@ -484,7 +486,9 @@ Notes on statistical guarantees:
 
 To estimate the probability of rare events, separate CLIs (`apps.cli.prism_importance_main`, `apps.cli.dynamics_importance_main`,
 `apps.cli.awsim_importance_main`) compare weighted samples from a fixed Q with ordinary P samples. Automatic updates of Q and
-sequential stopping are not supported. See [docs/importance_sampling.md](docs/importance_sampling.md) for usage.
+sequential stopping are not supported. Plans with `dynamics_schema_version: 2` also run a scalar OU model, whose true probability is
+known in closed form, through the same CLI, with a manifest for resuming and a completion check. See
+[docs/importance_sampling.md](docs/importance_sampling.md) for usage.
 
 ```bash
 # ODE: compare a hand-written Q4 with ordinary P, 1000 samples each
@@ -548,6 +552,7 @@ ROS, AWSIM, and a GPU are not needed. Tests that need AW-CheckerPy or AW-Runtime
 | [docs/statistical_method_selection.md](docs/statistical_method_selection.md) | Choosing a statistical method |
 | [docs/importance_sampling.md](docs/importance_sampling.md) | Using importance sampling (fixed P, fixed Q) |
 | [docs/importance_sampling_design.md](docs/importance_sampling_design.md), [docs/awsim_importance_sampling_design.md](docs/awsim_importance_sampling_design.md) | Importance sampling design (Japanese only) |
+| [docs/sde_importance_sampling_plan.md](docs/sde_importance_sampling_plan.md) | Implementation plan and progress of SDE importance sampling (Japanese only) |
 | [docs/experiments/autoware_version_replay.md](docs/experiments/autoware_version_replay.md) | Record of the Autoware 1.7.1 / 1.8.0 / 1.9.0 comparison (Japanese only) |
 | [docs/network_storm_control_guide.md](docs/network_storm_control_guide.md) | DDS and storm-control countermeasures |
 | [docs/legacy.md](docs/legacy.md) | Commands of the legacy framework (not normally used, Japanese only) |

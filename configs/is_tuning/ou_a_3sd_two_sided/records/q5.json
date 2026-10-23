@@ -1,0 +1,378 @@
+{
+  "created_at": "2026-10-23T13:49:09+09:00",
+  "base_plan": "configs/is_tuning/ou_a_3sd_two_sided/base.yaml",
+  "base_plan_fingerprint": "sha256:f36c8d0b353f06c765ce3a9bbeed028ab8a71ff2bbefafcd7a09bf56b8ae499d",
+  "candidates": "configs/is_tuning/ou_a_3sd_two_sided/q5.yaml",
+  "budget": 10,
+  "samples_per_trial": 1000,
+  "phase": "pilot",
+  "root_entropy": "20261023",
+  "ranking_rule": "complete trials with an observed event, by relative standard error of the IS estimate",
+  "trials": [
+    {
+      "name": "q5_pm_s0.8",
+      "proposal": {
+        "dynamics_schema_version": 2,
+        "input": {
+          "kind": "same_as_target"
+        },
+        "noise": {
+          "kind": "mixture",
+          "components": [
+            {
+              "weight": 0.5,
+              "law": {
+                "kind": "gaussian",
+                "mean_rule": {
+                  "kind": "piecewise",
+                  "pieces": [
+                    {
+                      "time": [
+                        0.0,
+                        0.25
+                      ],
+                      "values": {
+                        "w": 0.15215128650149418
+                      }
+                    },
+                    {
+                      "time": [
+                        0.25,
+                        0.5
+                      ],
+                      "values": {
+                        "w": 0.19561212181037096
+                      }
+                    },
+                    {
+                      "time": [
+                        0.5,
+                        0.75
+                      ],
+                      "values": {
+                        "w": 0.25148720775870437
+                      }
+                    },
+                    {
+                      "time": [
+                        0.75,
+                        null
+                      ],
+                      "values": {
+                        "w": 0.32332257878978005
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "weight": 0.5,
+              "law": {
+                "kind": "gaussian",
+                "mean_rule": {
+                  "kind": "piecewise",
+                  "pieces": [
+                    {
+                      "time": [
+                        0.0,
+                        0.25
+                      ],
+                      "values": {
+                        "w": -0.15215128650149418
+                      }
+                    },
+                    {
+                      "time": [
+                        0.25,
+                        0.5
+                      ],
+                      "values": {
+                        "w": -0.19561212181037096
+                      }
+                    },
+                    {
+                      "time": [
+                        0.5,
+                        0.75
+                      ],
+                      "values": {
+                        "w": -0.25148720775870437
+                      }
+                    },
+                    {
+                      "time": [
+                        0.75,
+                        null
+                      ],
+                      "values": {
+                        "w": -0.32332257878978005
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      },
+      "proposal_fingerprint": "sha256:02c58fccd886db63205018a9996fc73d861c67fece206c5d99517347783972ea",
+      "final_status": "complete",
+      "estimate_is": 0.0023917314871223193,
+      "estimate_mc": 0.004,
+      "standard_error": 0.0001781306615125831,
+      "relative_standard_error": 0.07447770055781058,
+      "diagnostic_interval_width": 0.0006982593622139165,
+      "effective_sample_size": 131.15410851956275,
+      "max_log_importance_weight": 2.8649674701098036,
+      "weight_bound": null,
+      "wall_time_sec": 3.524297961999764,
+      "seconds_per_path": 0.001762148980999882
+    },
+    {
+      "name": "q5_pm_s1.0",
+      "proposal": {
+        "dynamics_schema_version": 2,
+        "input": {
+          "kind": "same_as_target"
+        },
+        "noise": {
+          "kind": "mixture",
+          "components": [
+            {
+              "weight": 0.5,
+              "law": {
+                "kind": "gaussian",
+                "mean_rule": {
+                  "kind": "piecewise",
+                  "pieces": [
+                    {
+                      "time": [
+                        0.0,
+                        0.25
+                      ],
+                      "values": {
+                        "w": 0.19018910812686773
+                      }
+                    },
+                    {
+                      "time": [
+                        0.25,
+                        0.5
+                      ],
+                      "values": {
+                        "w": 0.24451515226296372
+                      }
+                    },
+                    {
+                      "time": [
+                        0.5,
+                        0.75
+                      ],
+                      "values": {
+                        "w": 0.31435900969838043
+                      }
+                    },
+                    {
+                      "time": [
+                        0.75,
+                        null
+                      ],
+                      "values": {
+                        "w": 0.40415322348722504
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "weight": 0.5,
+              "law": {
+                "kind": "gaussian",
+                "mean_rule": {
+                  "kind": "piecewise",
+                  "pieces": [
+                    {
+                      "time": [
+                        0.0,
+                        0.25
+                      ],
+                      "values": {
+                        "w": -0.19018910812686773
+                      }
+                    },
+                    {
+                      "time": [
+                        0.25,
+                        0.5
+                      ],
+                      "values": {
+                        "w": -0.24451515226296372
+                      }
+                    },
+                    {
+                      "time": [
+                        0.5,
+                        0.75
+                      ],
+                      "values": {
+                        "w": -0.31435900969838043
+                      }
+                    },
+                    {
+                      "time": [
+                        0.75,
+                        null
+                      ],
+                      "values": {
+                        "w": -0.40415322348722504
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      },
+      "proposal_fingerprint": "sha256:b76ad4fad78e4955add0a406519d4c13b996317f0288a18abf22e61f0837bec0",
+      "final_status": "complete",
+      "estimate_is": 0.002907877373871697,
+      "estimate_mc": 0.004,
+      "standard_error": 0.00017110806308662612,
+      "relative_standard_error": 0.0588429431805111,
+      "diagnostic_interval_width": 0.000670731282228389,
+      "effective_sample_size": 31.94339487058448,
+      "max_log_importance_weight": 4.473704930079293,
+      "weight_bound": null,
+      "wall_time_sec": 3.392911730999913,
+      "seconds_per_path": 0.0016964558654999564
+    },
+    {
+      "name": "q5_pm_s1.2",
+      "proposal": {
+        "dynamics_schema_version": 2,
+        "input": {
+          "kind": "same_as_target"
+        },
+        "noise": {
+          "kind": "mixture",
+          "components": [
+            {
+              "weight": 0.5,
+              "law": {
+                "kind": "gaussian",
+                "mean_rule": {
+                  "kind": "piecewise",
+                  "pieces": [
+                    {
+                      "time": [
+                        0.0,
+                        0.25
+                      ],
+                      "values": {
+                        "w": 0.2282269297522413
+                      }
+                    },
+                    {
+                      "time": [
+                        0.25,
+                        0.5
+                      ],
+                      "values": {
+                        "w": 0.2934181827155565
+                      }
+                    },
+                    {
+                      "time": [
+                        0.5,
+                        0.75
+                      ],
+                      "values": {
+                        "w": 0.37723081163805644
+                      }
+                    },
+                    {
+                      "time": [
+                        0.75,
+                        null
+                      ],
+                      "values": {
+                        "w": 0.48498386818467
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "weight": 0.5,
+              "law": {
+                "kind": "gaussian",
+                "mean_rule": {
+                  "kind": "piecewise",
+                  "pieces": [
+                    {
+                      "time": [
+                        0.0,
+                        0.25
+                      ],
+                      "values": {
+                        "w": -0.2282269297522413
+                      }
+                    },
+                    {
+                      "time": [
+                        0.25,
+                        0.5
+                      ],
+                      "values": {
+                        "w": -0.2934181827155565
+                      }
+                    },
+                    {
+                      "time": [
+                        0.5,
+                        0.75
+                      ],
+                      "values": {
+                        "w": -0.37723081163805644
+                      }
+                    },
+                    {
+                      "time": [
+                        0.75,
+                        null
+                      ],
+                      "values": {
+                        "w": -0.48498386818467
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      },
+      "proposal_fingerprint": "sha256:87467875b6145949f1eb5dc7d0fe07864a0513c68c3d779ea9ecf65d140d56e5",
+      "final_status": "complete",
+      "estimate_is": 0.0027240286528992697,
+      "estimate_mc": 0.004,
+      "standard_error": 0.000168283143248806,
+      "relative_standard_error": 0.061777302918490574,
+      "diagnostic_interval_width": 0.0006596577999457088,
+      "effective_sample_size": 11.00309927628419,
+      "max_log_importance_weight": 4.889342151258262,
+      "weight_bound": null,
+      "wall_time_sec": 3.3891139530005603,
+      "seconds_per_path": 0.0016945569765002802
+    }
+  ],
+  "ranking": [
+    "q5_pm_s1.0",
+    "q5_pm_s1.2",
+    "q5_pm_s0.8"
+  ]
+}

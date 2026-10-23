@@ -1,0 +1,68 @@
+schema_version: 1
+experiment_id: ou_a_4sd_two_sided__q1d_b0.2__final
+target: dynamics
+target_measure:
+  id: ou_a_4sd_two_sided_p
+  definition:
+    dynamics_schema_version: 2
+    model_id: ou_scalar
+    model_params:
+      theta: 1.0
+      sigma: 1.0
+    initial_law:
+      kind: point_mass
+      value:
+      - 0.0
+    solver:
+      kind: sde
+      dt_sec: 0.01
+      horizon_sec: 1.0
+    event:
+      kind: terminal_exceedance
+      threshold: 2.638745438381503
+      side: two_sided
+proposal:
+  id: q1d_b0.2
+  mode: manual_proposal
+  definition:
+    dynamics_schema_version: 2
+    input:
+      kind: same_as_target
+    noise:
+      kind: mixture
+      defensive_weight: 0.2
+      components:
+      - weight: 1.0
+        law:
+          kind: gaussian
+          mean_rule:
+            kind: piecewise
+            pieces:
+            - time:
+              - 0.0
+              - 0.25
+              values:
+                w: 0.25358547750249033
+            - time:
+              - 0.25
+              - 0.5
+              values:
+                w: 0.326020203017285
+            - time:
+              - 0.5
+              - 0.75
+              values:
+                w: 0.4191453462645072
+            - time:
+              - 0.75
+              - null
+              values:
+                w: 0.5388709646496334
+tuning_provenance:
+  record: configs/is_tuning/ou_a_4sd_two_sided/records/q1d.json
+  trial: q1d_b0.2
+  proposal_fingerprint: sha256:13176569295088e418034cf3feff7fcc4083a17f7f5de461f7fc414b81069c2f
+  pilot_root_entropy: '20261023'
+  pilot_samples: 1000
+  rank: 1
+  fixed_at: '2026-10-23T13:50:28+09:00'

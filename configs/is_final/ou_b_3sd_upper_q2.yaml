@@ -1,0 +1,72 @@
+schema_version: 1
+experiment_id: ou_b_3sd_upper__q2_var1.2__final
+target: dynamics
+target_measure:
+  id: ou_b_3sd_upper_p
+  definition:
+    dynamics_schema_version: 2
+    model_id: ou_augmented
+    model_params:
+      theta_c: 2.0
+      theta_x: 1.0
+      coupling: 1.0
+      sigma: 1.0
+    initial_law:
+      kind: point_mass
+      value:
+      - 0.0
+      - 0.0
+    solver:
+      kind: sde
+      dt_sec: 0.01
+      horizon_sec: 1.0
+    event:
+      kind: terminal_exceedance
+      threshold: 0.6343296308417505
+      side: upper
+      state: x
+proposal:
+  id: q2_var1.2
+  mode: manual_proposal
+  definition:
+    dynamics_schema_version: 2
+    input:
+      kind: same_as_target
+    noise:
+      kind: gaussian
+      mean_rule:
+        kind: piecewise
+        pieces:
+        - time:
+          - 0.0
+          - 0.25
+          values:
+            w: 0.3460917910874759
+        - time:
+          - 0.25
+          - 0.5
+          values:
+            w: 0.353095457940618
+        - time:
+          - 0.5
+          - 0.75
+          values:
+            w: 0.30174211228726766
+        - time:
+          - 0.75
+          - null
+          values:
+            w: 0.13570171655210087
+      covariance:
+        channels:
+        - w
+        matrix:
+        - - 1.2
+tuning_provenance:
+  record: configs/is_tuning/ou_b_3sd_upper/records/q2.json
+  trial: q2_var1.2
+  proposal_fingerprint: sha256:f2f01070d28667113efbac356e6ab79bc7b5563136f0b530383f5551a3c1ec4c
+  pilot_root_entropy: '20261023'
+  pilot_samples: 1000
+  rank: 1
+  fixed_at: '2026-10-23T13:50:28+09:00'

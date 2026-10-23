@@ -69,10 +69,10 @@ python3 -m apps.cli.dynamics_importance_main \
 
 比較器は `target`、`case_kind`、`target_measure_id` の一致を検査するため、異なる対象やPを誤って比較しません。`comparison.json` には二つの目的の区間を分けて保存します。
 
-- `diagnostic`: Q候補の効率比較用。重点推定の正規近似区間幅、ESS、複数seedでの推定値のばらつきを見る。
-- `comparable`: 重み上限を用いた固定時点Hoeffding区間。採用後の固定Qについて、保証を確認するために使う。
+- `diagnostic`: Q候補の効率比較用。重点推定の正規近似区間幅、ESS、複数seedでの推定値のばらつきを見る。事象を1件も観測しない場合は区間を出さず `information: insufficient` とする。
+- `guarantee`: 重み上限を用いた固定時点のHoeffding区間と経験的Bernstein区間。採用後の固定Qについて、区間が真値を含むかを確認するためだけに使う。`comparable` は互換のために残した `guarantee.hoeffding` と同じ内容。
 
-重み上限が大きいQはHoeffding区間だけでは不利に見えるため、**Q候補の順位付けに `comparable` の区間幅は使いません**。
+重み上限が大きいQは保証用の区間では不利に見え、稀な事象では現実的なNで区間幅が対象確率より桁違いに広くなるため、**Q候補の順位付けに `guarantee` / `comparable` の区間幅は使いません**。
 
 ### 3. 複数の人手候補を同じ条件で比べる
 
@@ -91,6 +91,55 @@ done
 ```
 
 実行例では、Q2・Q3・Q4を20 seed × 各100標本で比較しました。診断用区間幅の平均はQ4が `0.02125`、Q3が `0.02476`、Q2が `0.02677` でした。一方で平均ESSはQ4が約`82.5`、Q3が約`83.7`、Q2が約`87.2` です。この結果はQ4を**次に人間が検討する候補**とする根拠であり、自動承認・自動適用を意味しません。
+
+### 4. U ターン以外の SDE モデル（スカラー OU）
+
+`dynamics_schema_version: 2` のプランでは、登録されたモデル（現在は `ou_scalar`）を同じ CLI で実行できます。target 側にモデル・初期値・刻み幅・事象を書き、Q はノイズ経路だけを変えます。真の確率が式で分かるので、推定と区間の検証に使えます。
+
+```bash
+python3 -m apps.cli.dynamics_importance_main \
+  --sampling-plan configs/dynamics_importance_ou_gaussian_q1.yaml \
+  --output-root artifacts/ou_q1 \
+  --max-samples 1000 \
+  --phase final
+```
+
+v2 プランは `manifest.json` に P・Q・乱数の root・予定の N を記録し、同じコマンドで中断した標本から再開します（設定が違えば停止します）。失敗した標本は `--retry-failed` で同じ乱数のまま再試行し、未解決の標本が残る場合 `comparison.json` は `final_status: incomplete` になります。設計と検証結果は [SDE 重点サンプリング実装計画](sde_importance_sampling_plan.md) を参照してください。
+
+### 5. 提案分布の種類と混合
+
+v2 プランでは、Q を `proposal.definition.noise` に書けます。平均・共分散などは innovation（標準化した Brownian 増分）の単位です。既存の `noise_path_q`（SDE ドリフトの単位）も引き続き使えます。
+
+| `kind` | 内容 |
+|---|---|
+| `gaussian` | 平均の規則と、チャネル名つきの共分散（モード別も可）。正定値でない行列は拒否し、勝手に補正しない |
+| `student_t` | 自由度 `dof`（既定 5）、位置の規則、尺度行列 `scale`。`covariance` を書くと、その共分散になるよう尺度を決める |
+| `laplace` | チャネルごとに独立な Laplace |
+| `mixture` | 経路ごとに成分を 1 回選ぶ混合。`{kind: target}` で P 自身を成分にでき、`defensive_weight`（β）を書くと重みは 1/β 以下になり、保証用の区間が使える |
+
+平均の規則は `constant`、`piecewise`（時刻・モードの区分。区分ごとに別の規則も置ける）、`state_threshold`、`affine_state` です。書き方の例は [重点サンプリング設計](importance_sampling_design.md#提案分布innovation-の法則) を参照してください。
+
+### 6. Q の調整と固定
+
+候補の Q を pilot で比べて記録し、選んだものを最終プランとして固定します。pilot は最終実行と別の乱数系列を使います。
+
+```bash
+python3 -m tools.validation.is_tuning run \
+  --base-plan configs/is_tuning/ou_a_3sd_upper/base.yaml \
+  --candidates configs/is_tuning/ou_a_3sd_upper/q1.yaml \
+  --output-dir artifacts/is_tuning/ou_a_3sd_upper/q1 --samples 1000 --root-entropy 1
+python3 -m tools.validation.is_tuning fix \
+  --output-dir artifacts/is_tuning/ou_a_3sd_upper/q1 --trial q1_s1.0 \
+  --plan-out configs/my_final_q1.yaml
+```
+
+`configs/is_tuning/` にモデル A・B の候補と pilot の記録、`configs/is_final/` に固定した最終プランがあります。
+
+### 7. そのほかのモデルと保存の方式
+
+- 登録モデルは `ou_scalar`（スカラー OU）、`ou_augmented`（状態を拡大した OU、ノイズは 1 本）、`nonlinear2d`（非線形のドリフトと状態依存の拡散）、`uturn` です。U ターンも v2 プランなら同じ Q を使えます（Q = P なら従来の判定と一致します）。
+- `--artifacts summary` は、軌道をファイルに書かずにメモリ内で判定し、判定した記録だけを保存します。
+- 真の値が分からないモデルは、`tools.validation.compare_to_reference` で、独立な参照推定と比べます。
 
 ---
 
@@ -186,11 +235,13 @@ The comparator checks that `target`, `case_kind`, and `target_measure_id` match,
 compared by mistake. `comparison.json` stores intervals for two purposes separately.
 
 - `diagnostic`: for comparing the efficiency of candidate Qs. Look at the normal-approximation interval width of the importance
-  estimate, the ESS, and the spread of estimates over several seeds.
-- `comparable`: a fixed-time Hoeffding interval using the weight bound. Used to check the guarantee for a fixed Q once it is adopted.
+  estimate, the ESS, and the spread of estimates over several seeds. If no event is observed, no interval is reported and
+  `information` is `insufficient`.
+- `guarantee`: fixed-time Hoeffding and empirical Bernstein intervals using the weight bound. Used for a fixed Q once it is adopted,
+  only to check that the interval contains the true value. `comparable` is kept for compatibility and equals `guarantee.hoeffding`.
 
-A Q with a large weight bound looks worse on the Hoeffding interval alone, so **the width of the `comparable` interval is not used to
-rank candidate Qs**.
+A Q with a large weight bound looks worse on these intervals, and for rare events they are orders of magnitude wider than the target
+probability at a realistic N, so **the width of the `guarantee` / `comparable` intervals is not used to rank candidate Qs**.
 
 ### 3. Compare several hand-written candidates under the same conditions
 
@@ -212,3 +263,62 @@ done
 In this example, Q2, Q3, and Q4 were compared with 20 seeds × 100 samples each. The mean diagnostic interval width was `0.02125` for
 Q4, `0.02476` for Q3, and `0.02677` for Q2. The mean ESS, on the other hand, was about `82.5` for Q4, `83.7` for Q3, and `87.2` for Q2.
 This result supports Q4 as **the next candidate for a human to consider**; it does not mean automatic approval or adoption.
+
+### 4. SDE models other than the U-turn (scalar OU)
+
+A plan with `dynamics_schema_version: 2` runs a registered model (currently `ou_scalar`) through the same CLI. The target side names
+the model, the initial value, the step size and the event; Q changes only the Brownian path. The true probability is known in closed
+form, so the model is useful for checking estimates and intervals.
+
+```bash
+python3 -m apps.cli.dynamics_importance_main \
+  --sampling-plan configs/dynamics_importance_ou_gaussian_q1.yaml \
+  --output-root artifacts/ou_q1 \
+  --max-samples 1000 \
+  --phase final
+```
+
+A v2 plan records P, Q, the random-number root and the planned N in `manifest.json`, and the same command resumes from the samples
+that are missing (it stops if the settings differ). `--retry-failed` retries failed samples with the same random numbers; while any
+sample is unresolved, `comparison.json` has `final_status: incomplete`. The design and the validation results are in the
+[SDE importance-sampling implementation plan](sde_importance_sampling_plan.md) (Japanese only).
+
+### 5. Proposal families and mixtures
+
+In a v2 plan, Q can be written as `proposal.definition.noise`. Means and covariances are in innovation units (the standardised
+Brownian increment). The existing `noise_path_q` (SDE drift units) keeps working.
+
+| `kind` | Contents |
+|---|---|
+| `gaussian` | a mean rule and a covariance over named channels (optionally per mode). A matrix that is not positive definite is rejected, never adjusted |
+| `student_t` | degrees of freedom `dof` (default 5), a location rule, and a scale matrix `scale`. With `covariance`, the scale is set so that the law has that covariance |
+| `laplace` | independent Laplace per channel |
+| `mixture` | a component chosen once per path. `{kind: target}` makes P itself a component; with `defensive_weight` (beta) the weight is at most 1/beta and the guarantee intervals are available |
+
+Mean rules are `constant`, `piecewise` (time/mode windows; a window may hold another rule), `state_threshold` and `affine_state`.
+See the [importance sampling design](importance_sampling_design.md) (Japanese only) for examples.
+
+### 6. Tuning and fixing Q
+
+Compare candidate Qs in pilot runs, record them, and fix the chosen one as the final plan. Pilot runs use random streams separate
+from the final runs.
+
+```bash
+python3 -m tools.validation.is_tuning run \
+  --base-plan configs/is_tuning/ou_a_3sd_upper/base.yaml \
+  --candidates configs/is_tuning/ou_a_3sd_upper/q1.yaml \
+  --output-dir artifacts/is_tuning/ou_a_3sd_upper/q1 --samples 1000 --root-entropy 1
+python3 -m tools.validation.is_tuning fix \
+  --output-dir artifacts/is_tuning/ou_a_3sd_upper/q1 --trial q1_s1.0 \
+  --plan-out configs/my_final_q1.yaml
+```
+
+`configs/is_tuning/` holds the candidates and pilot records for models A and B, and `configs/is_final/` the fixed final plans.
+
+### 7. Other models and storage
+
+- The registered models are `ou_scalar` (scalar OU), `ou_augmented` (augmented-state OU with one noise channel), `nonlinear2d`
+  (nonlinear drift and state-dependent diffusion) and `uturn`. With a v2 plan the U-turn takes the same proposals (with Q = P it
+  reproduces the existing result).
+- `--artifacts summary` judges trajectories in memory without writing them and stores only the judged records.
+- Models without a known truth are compared with an independent reference by `tools.validation.compare_to_reference`.

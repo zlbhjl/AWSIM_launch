@@ -1,0 +1,74 @@
+budget: 10
+trials:
+- name: q1_s0.8
+  noise_path_q:
+    distribution: gaussian_drift
+    drift_schedule:
+    - time:
+      - 0.0
+      - 0.25
+      channel_drifts:
+        w: 2.7687343286998067
+    - time:
+      - 0.25
+      - 0.5
+      channel_drifts:
+        w: 2.8247636635249433
+    - time:
+      - 0.5
+      - 0.75
+      channel_drifts:
+        w: 2.4139368982981404
+    - time:
+      - 0.75
+      - null
+      channel_drifts:
+        w: 1.085613732416807
+- name: q1_s1.0
+  noise_path_q:
+    distribution: gaussian_drift
+    drift_schedule:
+    - time:
+      - 0.0
+      - 0.25
+      channel_drifts:
+        w: 3.460917910874759
+    - time:
+      - 0.25
+      - 0.5
+      channel_drifts:
+        w: 3.5309545794061794
+    - time:
+      - 0.5
+      - 0.75
+      channel_drifts:
+        w: 3.0174211228726766
+    - time:
+      - 0.75
+      - null
+      channel_drifts:
+        w: 1.3570171655210086
+- name: q1_s1.2
+  noise_path_q:
+    distribution: gaussian_drift
+    drift_schedule:
+    - time:
+      - 0.0
+      - 0.25
+      channel_drifts:
+        w: 4.153101493049711
+    - time:
+      - 0.25
+      - 0.5
+      channel_drifts:
+        w: 4.2371454952874155
+    - time:
+      - 0.5
+      - 0.75
+      channel_drifts:
+        w: 3.620905347447211
+    - time:
+      - 0.75
+      - null
+      channel_drifts:
+        w: 1.6284205986252103

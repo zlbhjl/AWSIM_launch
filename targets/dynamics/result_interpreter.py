@@ -15,6 +15,8 @@ import numpy as np
 from contracts.evaluation import EvaluationRecord, ensure_evaluation_meta
 from contracts.execution import RawRunResult, RunStatus
 from contracts.sampling import copy_sampling_metadata
+from targets.dynamics.backend import INLINE_RESULT_KEY
+from targets.dynamics.models.registry import get_model_adapter
 from scenario_specs.uturn import JAMA_PROFILES
 from theoretical_calculator import TheoreticalSafetyCalculator
 
@@ -31,6 +33,13 @@ class DynamicsResultInterpreter:
         self.context = context or InterpretationContext()
 
     def interpret_raw_run_result(self, raw_run_result: RawRunResult) -> EvaluationRecord:
+        inline = raw_run_result.meta.pop(INLINE_RESULT_KEY, None)
+        if inline is not None and raw_run_result.status is RunStatus.SUCCESS:
+            # artifact_policy "summary": the trajectory never touched the disk.
+            try:
+                return self._interpret_generic_payload(raw_run_result, inline["payload"], inline["trace"])
+            except (TypeError, ValueError, KeyError) as exc:
+                return self._error_record(raw_run_result, status=RunStatus.ANALYSIS_ERROR, message=str(exc))
         raw_path = raw_run_result.evidence.get("raw_result_json")
         if raw_run_result.status is not RunStatus.SUCCESS or not raw_path:
             status = (
@@ -58,6 +67,8 @@ class DynamicsResultInterpreter:
         raw_run_result: RawRunResult,
         payload: Mapping[str, object],
     ) -> EvaluationRecord:
+        if payload.get("schema_version") == 2:
+            return self._interpret_generic_payload(raw_run_result, payload)
         if str(payload.get("model_id")) != "uturn":
             raise ValueError("unsupported dynamics model_id")
         inputs = payload.get("input")
@@ -73,28 +84,10 @@ class DynamicsResultInterpreter:
         collision_distance_m = float(execution["collision_distance_m"])
         collision_model = str(execution.get("collision_model", "center_distance"))
         vehicle_geometry = execution.get("vehicle_geometry_m")
-        metrics = _safety_metrics(
-            trace,
-            collision_distance_m=collision_distance_m,
-            collision_model=collision_model,
-            vehicle_geometry_m=vehicle_geometry,
-        )
-        if "min_clearance" in metrics and "screening_clearance_margin_m" in execution:
-            # Two decision modes share one trajectory:
-            #   judgment  -> c_collision (bodies overlap; AWSIM-substitute use)
-            #   screening -> c_screening_candidate (clearance below a margin
-            #                calibrated so no development AWSIM collision is
-            #                missed; candidates are re-validated in AWSIM)
-            margin = float(execution["screening_clearance_margin_m"])
-            metrics["c_screening_candidate"] = int(float(metrics["min_clearance"]) < margin)
-        metrics.update(_jama_metrics(inputs))
         events = payload.get("events")
         if not isinstance(events, Mapping):
             raise ValueError("dynamics raw result has invalid events")
-        metrics["c_npc_stuck"] = int(events.get("npc_start_time_sec") is None)
-        metrics["c_ego_stuck"] = int(float(np.max(trace["ego_speed_mps"])) < 0.1)
-        metrics["uturn_started"] = int(events.get("uturn_start_time_sec") is not None)
-        metrics["uturn_completed"] = int(events.get("uturn_end_time_sec") is not None)
+        metrics = uturn_metrics(trace, execution=execution, inputs=inputs, events=events)
 
         evidence = dict(raw_run_result.evidence)
         evidence["trace_csv"] = str(trace_path)
@@ -128,6 +121,56 @@ class DynamicsResultInterpreter:
             ),
         )
 
+    def _interpret_generic_payload(
+        self,
+        raw_run_result: RawRunResult,
+        payload: Mapping[str, object],
+        inline_trace: Mapping[str, np.ndarray] | None = None,
+    ) -> EvaluationRecord:
+        """Judge a registered model's trajectory (raw result schema 2)."""
+        model_id = str(payload.get("model_id"))
+        adapter = get_model_adapter(model_id)
+        inputs = payload.get("input")
+        execution = payload.get("execution")
+        state_names = payload.get("state_names")
+        trace_value = payload.get("trace_csv")
+        if not isinstance(inputs, Mapping) or not isinstance(execution, Mapping):
+            raise ValueError("dynamics raw result has invalid input or execution")
+        if not isinstance(state_names, list):
+            raise ValueError("dynamics raw result is missing state_names")
+        evidence = dict(raw_run_result.evidence)
+        if inline_trace is not None:
+            trace = inline_trace
+        else:
+            if not isinstance(trace_value, str) or not trace_value:
+                raise ValueError("dynamics raw result is missing trace_csv")
+            trace_path = Path(trace_value).expanduser().resolve()
+            trace = _load_generic_trace(trace_path, [str(name) for name in state_names])
+            evidence["trace_csv"] = str(trace_path)
+        metrics = adapter.interpret(payload, trace)
+        return EvaluationRecord(
+            case_id=raw_run_result.case_id,
+            target=raw_run_result.target,
+            case_kind=raw_run_result.case_kind,
+            status=RunStatus.SUCCESS,
+            input={str(key): value for key, value in inputs.items()},
+            output=metrics,
+            evidence=evidence,
+            meta=ensure_evaluation_meta(
+                copy_sampling_metadata(raw_run_result.meta, {
+                    "model_id": model_id,
+                    "solver_kind": execution.get("solver_kind"),
+                    "execution": dict(execution),
+                    "events": dict(payload.get("events") or {}),
+                    "raw_run_status": raw_run_result.status.value,
+                    "raw_run_meta": dict(raw_run_result.meta),
+                }),
+                source_module=self.context.source_module,
+                schema_version=self.context.schema_version,
+                created_at=datetime.now().astimezone().isoformat(timespec="seconds"),
+            ),
+        )
+
     def _error_record(
         self,
         raw_run_result: RawRunResult,
@@ -151,6 +194,47 @@ class DynamicsResultInterpreter:
                 schema_version=self.context.schema_version,
             ),
         )
+
+
+def uturn_metrics(
+    trace: Mapping[str, np.ndarray],
+    *,
+    execution: Mapping[str, object],
+    inputs: Mapping[str, object],
+    events: Mapping[str, object],
+) -> dict[str, object]:
+    """All U-turn outputs from a vehicle-centre trace (shared by schema 1 and 2)."""
+    metrics = _safety_metrics(
+        trace,
+        collision_distance_m=float(execution["collision_distance_m"]),
+        collision_model=str(execution.get("collision_model", "center_distance")),
+        vehicle_geometry_m=execution.get("vehicle_geometry_m"),
+    )
+    if "min_clearance" in metrics and "screening_clearance_margin_m" in execution:
+        # Two decision modes share one trajectory:
+        #   judgment  -> c_collision (bodies overlap; AWSIM-substitute use)
+        #   screening -> c_screening_candidate (clearance below a margin
+        #                calibrated so no development AWSIM collision is
+        #                missed; candidates are re-validated in AWSIM)
+        margin = float(execution["screening_clearance_margin_m"])
+        metrics["c_screening_candidate"] = int(float(metrics["min_clearance"]) < margin)
+    metrics.update(_jama_metrics(inputs))
+    metrics["c_npc_stuck"] = int(events.get("npc_start_time_sec") is None)
+    metrics["c_ego_stuck"] = int(float(np.max(trace["ego_speed_mps"])) < 0.1)
+    metrics["uturn_started"] = int(events.get("uturn_start_time_sec") is not None)
+    metrics["uturn_completed"] = int(events.get("uturn_end_time_sec") is not None)
+    return metrics
+
+
+def _load_generic_trace(path: Path, state_names: list[str]) -> dict[str, np.ndarray]:
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    missing = {"time_sec", "mode", *state_names} - set(rows[0] if rows else {})
+    if not rows or missing:
+        raise ValueError(f"dynamics trace is empty or missing columns: {sorted(missing)}")
+    trace = {name: np.asarray([float(row[name]) for row in rows]) for name in ["time_sec", *state_names]}
+    trace["mode"] = np.asarray([row["mode"] for row in rows])
+    return trace
 
 
 def _load_trace(path: Path) -> dict[str, np.ndarray]:

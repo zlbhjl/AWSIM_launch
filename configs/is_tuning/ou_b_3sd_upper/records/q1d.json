@@ -1,0 +1,90 @@
+{
+  "created_at": "2026-10-23T13:49:12+09:00",
+  "base_plan": "configs/is_tuning/ou_b_3sd_upper/base.yaml",
+  "base_plan_fingerprint": "sha256:8d24083f8a6f772058cdc74b53765705caac3a22b186b7437dd5bafe4d6a495b",
+  "candidates": "configs/is_tuning/ou_b_3sd_upper/q1d.yaml",
+  "budget": 10,
+  "samples_per_trial": 1000,
+  "phase": "pilot",
+  "root_entropy": "20261023",
+  "ranking_rule": "complete trials with an observed event, by relative standard error of the IS estimate",
+  "trials": [
+    {
+      "name": "q1d_b0.2",
+      "proposal": {
+        "dynamics_schema_version": 2,
+        "input": {
+          "kind": "same_as_target"
+        },
+        "noise": {
+          "kind": "mixture",
+          "defensive_weight": 0.2,
+          "components": [
+            {
+              "weight": 1.0,
+              "law": {
+                "kind": "gaussian",
+                "mean_rule": {
+                  "kind": "piecewise",
+                  "pieces": [
+                    {
+                      "time": [
+                        0.0,
+                        0.25
+                      ],
+                      "values": {
+                        "w": 0.3460917910874759
+                      }
+                    },
+                    {
+                      "time": [
+                        0.25,
+                        0.5
+                      ],
+                      "values": {
+                        "w": 0.353095457940618
+                      }
+                    },
+                    {
+                      "time": [
+                        0.5,
+                        0.75
+                      ],
+                      "values": {
+                        "w": 0.30174211228726766
+                      }
+                    },
+                    {
+                      "time": [
+                        0.75,
+                        null
+                      ],
+                      "values": {
+                        "w": 0.13570171655210087
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      },
+      "proposal_fingerprint": "sha256:838329e162653fc13d2d67ab692ff745d39ac9d54a438df5433eb64f68cb8827",
+      "final_status": "complete",
+      "estimate_is": 0.0012994634148747262,
+      "estimate_mc": 0.001,
+      "standard_error": 9.250635382441567e-05,
+      "relative_standard_error": 0.07118811716090805,
+      "diagnostic_interval_width": 0.00036261824367394765,
+      "effective_sample_size": 246.28583490258455,
+      "max_log_importance_weight": 1.6094311444066989,
+      "weight_bound": 5.0,
+      "wall_time_sec": 2.961704228000599,
+      "seconds_per_path": 0.0014808521140002994
+    }
+  ],
+  "ranking": [
+    "q1d_b0.2"
+  ]
+}

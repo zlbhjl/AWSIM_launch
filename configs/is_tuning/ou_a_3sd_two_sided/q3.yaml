@@ -1,0 +1,152 @@
+budget: 10
+trials:
+- name: q3_s0.8
+  noise:
+    kind: gaussian
+    mean_rule:
+      kind: piecewise
+      pieces:
+      - time:
+        - 0.0
+        - 0.25
+        rule:
+          kind: state_threshold
+          state: x
+          threshold: 0.0
+          below:
+            w: -0.15215128650149418
+          above:
+            w: 0.15215128650149418
+      - time:
+        - 0.25
+        - 0.5
+        rule:
+          kind: state_threshold
+          state: x
+          threshold: 0.0
+          below:
+            w: -0.19561212181037096
+          above:
+            w: 0.19561212181037096
+      - time:
+        - 0.5
+        - 0.75
+        rule:
+          kind: state_threshold
+          state: x
+          threshold: 0.0
+          below:
+            w: -0.25148720775870437
+          above:
+            w: 0.25148720775870437
+      - time:
+        - 0.75
+        - null
+        rule:
+          kind: state_threshold
+          state: x
+          threshold: 0.0
+          below:
+            w: -0.32332257878978005
+          above:
+            w: 0.32332257878978005
+- name: q3_s1.0
+  noise:
+    kind: gaussian
+    mean_rule:
+      kind: piecewise
+      pieces:
+      - time:
+        - 0.0
+        - 0.25
+        rule:
+          kind: state_threshold
+          state: x
+          threshold: 0.0
+          below:
+            w: -0.19018910812686773
+          above:
+            w: 0.19018910812686773
+      - time:
+        - 0.25
+        - 0.5
+        rule:
+          kind: state_threshold
+          state: x
+          threshold: 0.0
+          below:
+            w: -0.24451515226296372
+          above:
+            w: 0.24451515226296372
+      - time:
+        - 0.5
+        - 0.75
+        rule:
+          kind: state_threshold
+          state: x
+          threshold: 0.0
+          below:
+            w: -0.31435900969838043
+          above:
+            w: 0.31435900969838043
+      - time:
+        - 0.75
+        - null
+        rule:
+          kind: state_threshold
+          state: x
+          threshold: 0.0
+          below:
+            w: -0.40415322348722504
+          above:
+            w: 0.40415322348722504
+- name: q3_s1.2
+  noise:
+    kind: gaussian
+    mean_rule:
+      kind: piecewise
+      pieces:
+      - time:
+        - 0.0
+        - 0.25
+        rule:
+          kind: state_threshold
+          state: x
+          threshold: 0.0
+          below:
+            w: -0.2282269297522413
+          above:
+            w: 0.2282269297522413
+      - time:
+        - 0.25
+        - 0.5
+        rule:
+          kind: state_threshold
+          state: x
+          threshold: 0.0
+          below:
+            w: -0.2934181827155565
+          above:
+            w: 0.2934181827155565
+      - time:
+        - 0.5
+        - 0.75
+        rule:
+          kind: state_threshold
+          state: x
+          threshold: 0.0
+          below:
+            w: -0.37723081163805644
+          above:
+            w: 0.37723081163805644
+      - time:
+        - 0.75
+        - null
+        rule:
+          kind: state_threshold
+          state: x
+          threshold: 0.0
+          below:
+            w: -0.48498386818467
+          above:
+            w: 0.48498386818467
