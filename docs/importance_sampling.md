@@ -11,6 +11,8 @@ Using importance sampling with fixed P and fixed Q. **[English version below ↓
 - P/Q の定義、標本の追跡、比較の考え方は [importance_sampling_design.md](importance_sampling_design.md)、
   AWSIM の入力重点サンプリングは [awsim_importance_sampling_design.md](awsim_importance_sampling_design.md) を参照してください。
 
+入口は `python3 -m apps.cli.importance_main` です。サンプリングプランの `target:` が対象を決め、対象専用のオプション（PRISM の `--stop-mode`、dynamics の `--phase` など）はその対象の plugin が加えます（`--sampling-plan` と一緒に `--help` を付けると一覧が出ます）。以下の例の `apps.cli.prism_importance_main` などの対象ごとの入口も、同じオプションのまま使えます。新しい対象を重点サンプリングに対応させる方法は [拡張の手順](extending.md) を参照してください。
+
 ## PRISM重点サンプリング（固定P・固定Q）
 
 PRISM の `simple_reliability_dtmc` では、元のモデル遷移確率を **P** として固定したまま、人間が設定した提案遷移確率 **Q** で経路を生成できます。各経路に `log_p`、`log_q`、`log_importance_weight = log(P/Q)` を記録し、通常重要度推定でP上の故障確率を推定します。
@@ -156,6 +158,11 @@ The targets are PRISM, continuous dynamics (ODE/SDE), and AWSIM.
 - See [importance_sampling_design.md](importance_sampling_design.md) for the definition of P/Q, sample tracking, and how comparisons
   work, and [awsim_importance_sampling_design.md](awsim_importance_sampling_design.md) for input importance sampling on AWSIM
   (both Japanese only).
+
+The entry point is `python3 -m apps.cli.importance_main`. The plan's `target:` selects the target, and the target's plugin adds its
+own options (PRISM `--stop-mode`, dynamics `--phase`, ...; add `--help` together with `--sampling-plan` to list them). The per-target
+entry points in the examples below, such as `apps.cli.prism_importance_main`, keep working with the same options. See
+[Extending the framework](extending.md) to add importance sampling to a new target.
 
 ## PRISM importance sampling (fixed P, fixed Q)
 

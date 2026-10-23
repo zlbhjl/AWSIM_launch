@@ -36,7 +36,7 @@ AWSIM と PRISM は「デフォルトの指標が違う」という程度の差�
 ![PRISM statistical method selection tree](diagrams/prism_tree.png)
 
 **`2026-09-18`更新**: `DKW`(`--mode dkw`/`dkw_fixed --target prism`)は
-`orchestration/prism_dkw_sampling.py::PrismDkwSamplingStrategy`としてライブ実行に対応した。
+`orchestration/fixed_parameter_dkw.py::FixedParameterDkwStrategy`（旧 `orchestration/prism_dkw_sampling.py::PrismDkwSamplingStrategy`）としてライブ実行に対応した。
 既存の`DKWModeRunner`(AWSIMの`--mode dkw`/`dkw_fixed`と共通のステージ制alpha-spendingエンジン)
 を、常に同じ固定パラメータ点を返す`get_random_point`で駆動することで、DKWの数式やステージ制御
 ロジックを一切書き直さずに再利用している。ただし、コールドスタート(標本0件)から始まる点はAWSIM
@@ -174,7 +174,7 @@ all**.
 ![PRISM statistical method selection tree](diagrams/prism_tree.png)
 
 **Update 2026-09-18**: DKW (`--mode dkw` / `dkw_fixed --target prism`) now runs live as
-`orchestration/prism_dkw_sampling.py::PrismDkwSamplingStrategy`. It drives the existing `DKWModeRunner` (the same stage-based
+`orchestration/fixed_parameter_dkw.py::FixedParameterDkwStrategy` (formerly `orchestration/prism_dkw_sampling.py::PrismDkwSamplingStrategy`). It drives the existing `DKWModeRunner` (the same stage-based
 alpha-spending engine as AWSIM's `--mode dkw` / `dkw_fixed`) with a `get_random_point` that always returns the same fixed parameter
 point, so neither the DKW formulas nor the stage control had to be rewritten. Starting cold (from zero samples), unlike normal AWSIM
 use, needed special handling. Initially, a single sample produced an interval width of exactly 0 and was wrongly judged as converged;

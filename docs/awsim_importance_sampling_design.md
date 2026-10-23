@@ -121,7 +121,7 @@ proposal:
 | 区分 | 配置 | 責務 |
 |---|---|---|
 | AWSIM固有の追加 | `targets/awsim/sampling.py` | P/Qの解釈、速度入力の標本化、support検証、`log_p` / `log_q` の計算 |
-| AWSIM固有の追加 | `orchestration/awsim_importance_sampling.py` | AWSIM用の`TestCase`を発行し、固定標本実験を接続 |
+| AWSIM固有の追加 | `targets/awsim/importance_sampling.py` | AWSIM用の`TestCase`を発行し、固定標本実験を接続（plugin の `importance_sampling` から呼ばれる） |
 | 共通として再利用 | `orchestration/sampling_plan.py` | 設定外枠の読込。AWSIM固有definitionは解釈しない |
 | 共通として再利用 | `contracts/sampling.py` | `meta.sampling`の条件付き必須項目の検証 |
 | 共通として再利用 | `targets/awsim/backend.py` / `result_interpreter.py` | AWSIM実行、trace判定、sampling metadataの引継ぎ |

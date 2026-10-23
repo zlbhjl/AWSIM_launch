@@ -185,7 +185,7 @@ python3 run_orchestrator_cluster_v2.py \
 稀な事象の確率推定には、統計モードとは別の CLI (`apps.cli.prism_importance_main`、`apps.cli.dynamics_importance_main`、
 `apps.cli.awsim_importance_main`) で、固定した Q による重み付き標本と通常の P 標本を比較できます。
 Q の自動更新や逐次停止は扱いません。`dynamics_schema_version: 2` のプランでは、真の確率が式で分かるスカラー OU モデルも
-同じ CLI で実行でき、manifest による再開と完了の確認を行います。使い方は [docs/importance_sampling.md](docs/importance_sampling.md) を参照してください。
+同じ CLI で実行でき、manifest による再開と完了の確認を行います。入口は対象によらず `python3 -m apps.cli.importance_main` で、プランの `target:` が対象を決めます。使い方は [docs/importance_sampling.md](docs/importance_sampling.md) を参照してください。
 
 ```bash
 # ODE: 人手で設定した Q4 と通常の P を、それぞれ 1000 標本で比較する
@@ -487,7 +487,8 @@ Notes on statistical guarantees:
 To estimate the probability of rare events, separate CLIs (`apps.cli.prism_importance_main`, `apps.cli.dynamics_importance_main`,
 `apps.cli.awsim_importance_main`) compare weighted samples from a fixed Q with ordinary P samples. Automatic updates of Q and
 sequential stopping are not supported. Plans with `dynamics_schema_version: 2` also run a scalar OU model, whose true probability is
-known in closed form, through the same CLI, with a manifest for resuming and a completion check. See
+known in closed form, through the same CLI, with a manifest for resuming and a completion check. The entry point for every
+target is `python3 -m apps.cli.importance_main`; the plan's `target:` selects the target. See
 [docs/importance_sampling.md](docs/importance_sampling.md) for usage.
 
 ```bash

@@ -13,6 +13,7 @@ from orchestration.fixed_importance_sampling import run_fixed_importance_samplin
 from evaluation.weighted_sequential import evaluate_weighted_sequential_request
 from orchestration.proposal_updates import ProposalUpdateManager
 from orchestration.sampling_plan import SamplingPlan, load_sampling_plan
+from orchestration.seeding import legacy_sample_seed
 from orchestration.worker_loop import WorkerLoop
 from runtime.repository.importance_sampling_results import ImportanceSamplingResultsRepository
 from runtime.repository.proposal_history import ProposalHistoryRepository
@@ -316,7 +317,7 @@ class PrismImportanceSamplingRunner:
             ), target="prism",
             case_kind="simple_reliability_dtmc", input=input_payload,
             reason=f"PRISM_IMPORTANCE_{run_kind.upper()}: {plan.experiment_id} sample={index}",
-            meta={"sampling": sampling_meta, "source_module": "orchestration.prism_importance_sampling"},
+            meta={"sampling": sampling_meta, "source_module": "targets.prism.importance_sampling"},
         )
 
     @staticmethod
@@ -377,14 +378,55 @@ def _weight_status_counts(records) -> dict[str, int]:
 
 
 def _sample_seed(experiment_seed: int, sample_index: int) -> int:
-    """Give each replicate a disjoint deterministic seed block.
-
-    The same ``experiment_seed`` still gives ordinary and proposal runs common
-    random numbers, but distinct outer seeds cannot share sample-index seeds.
-    """
-    if sample_index < 1:
-        raise ValueError("sample_index must be positive")
-    return experiment_seed * 1_000_000 + sample_index
+    return legacy_sample_seed(experiment_seed, sample_index)
 
 
-__all__ = ["PrismImportanceSamplingRunConfig", "PrismImportanceSamplingRunner"]
+class PrismImportanceSamplingSupport:
+    """Importance-sampling hook of the PRISM plugin (fixed Q, stop modes, suggest pilot)."""
+
+    def add_arguments(self, parser) -> None:
+        parser.add_argument("--proposal-mode", choices=("fixed_samples", "suggest"), default="fixed_samples")
+        parser.add_argument(
+            "--stop-mode",
+            choices=("fixed_samples", "importance_width", "weighted_sequential"),
+            default="fixed_samples",
+        )
+        parser.add_argument("--steps", type=int, default=20)
+        parser.add_argument("--target-width", type=float, default=None)
+        parser.add_argument("--null-upper", type=float, default=None)
+        parser.add_argument("--alternative-lower", type=float, default=None)
+        parser.add_argument("--prism-executable", default="prism")
+
+    def run(self, args) -> dict[str, object]:
+        from targets.prism.backend import PrismBackend, PrismBackendConfig
+        from targets.prism.result_interpreter import PrismResultInterpreter
+
+        if args.proposal_mode == "fixed_samples" and args.max_samples is None:
+            raise ValueError("--max-samples is required when --proposal-mode=fixed_samples")
+        if args.proposal_mode == "suggest" and args.stop_mode != "fixed_samples":
+            raise ValueError("--stop-mode is available only for fixed-Q experiments")
+        if args.stop_mode == "importance_width" and args.target_width is None:
+            raise ValueError("--target-width is required when --stop-mode=importance_width")
+        backend = PrismBackend(PrismBackendConfig(
+            output_root=Path(args.output_root) / "artifacts", prism_executable=args.prism_executable,
+        ))
+        runner = PrismImportanceSamplingRunner(backend=backend, result_interpreter=PrismResultInterpreter())
+        config = PrismImportanceSamplingRunConfig(
+            sampling_plan_path=args.sampling_plan, output_root=args.output_root,
+            max_samples=args.max_samples, metric=args.metric or "c_failure", confidence=args.confidence,
+            target_width=args.target_width, stop_mode=args.stop_mode,
+            sequential_options={
+                key: value
+                for key, value in {"null_upper": args.null_upper, "alternative_lower": args.alternative_lower}.items()
+                if value is not None
+            },
+            seed=args.sampling_seed, params={"model": "simple_reliability_dtmc", "steps": args.steps},
+        )
+        return runner.run_suggest_pilot(config) if args.proposal_mode == "suggest" else runner.run(config)
+
+
+__all__ = [
+    "PrismImportanceSamplingRunConfig",
+    "PrismImportanceSamplingRunner",
+    "PrismImportanceSamplingSupport",
+]

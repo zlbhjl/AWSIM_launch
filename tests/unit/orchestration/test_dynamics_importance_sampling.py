@@ -8,7 +8,7 @@ import pytest
 
 from contracts.evaluation import EvaluationRecord
 from contracts.execution import RawRunResult, RunStatus
-from orchestration.dynamics_importance_sampling import (
+from targets.dynamics.importance_sampling import (
     DynamicsImportanceSamplingRunConfig,
     DynamicsImportanceSamplingRunner,
     _sample_seed,

@@ -4,7 +4,7 @@ from pathlib import Path
 
 from contracts.evaluation import EvaluationRecord
 from contracts.execution import RawRunResult, RunStatus
-from orchestration.awsim_importance_sampling import (
+from targets.awsim.importance_sampling import (
     AWSIMImportanceSamplingRunConfig,
     AWSIMImportanceSamplingRunner,
 )

@@ -12,13 +12,12 @@ from contracts.execution import TestCase
 from contracts.statistics import StatisticalReport, StatisticalRequest
 from evaluation.binomial_ci import BinomialCIService
 
-# exact_model_check only ever reports failure *probabilities*
+# The exact model check reports failure *probabilities*
 # (eventual_failure_probability / bounded_failure_probability). Comparing those
 # against a report for any other metric (e.g. EBStop/DKW tracking a step count
 # like steps_to_failure_capped) mixes units and produces a meaningless
-# "error". Only the metric whose semantics match a failure probability is
-# eligible for the comparison.
-_EXACT_PROBABILITY_METRIC = "c_failure"
+# "error". Only the target's failure-probability metric
+# (``exact_probability_metric``) is eligible for the comparison.
 
 
 @dataclass(frozen=True)
@@ -32,6 +31,12 @@ class FixedParameterSamplingStrategyConfig:
     reason_prefix: str = "FIXED_PARAMETER_SAMPLING"
     tags: tuple[str, ...] = field(default_factory=tuple)
     run_model_check_once: bool = False
+    # The exact model check of a target (plugin attributes of the same names):
+    # output key -> dataset column of each exact probability, the metric that
+    # is comparable to them, and the stop reason when the check fails.
+    exact_probability_columns: Mapping[str, str] = field(default_factory=dict)
+    exact_probability_metric: str | None = None
+    exact_model_check_failure_reason: str = "exact model check failed"
 
     def __post_init__(self) -> None:
         if not self.target.strip():
@@ -49,6 +54,9 @@ class FixedParameterSamplingStrategy:
     other than PRISM. When configured, only rows carrying this strategy's
     experiment id and sampling signature are passed to the evaluator.
     """
+
+    # The orchestrator keeps queueing cases for one parameter set (statistical sampling).
+    issues_many_cases = True
 
     def __init__(
         self,
@@ -90,7 +98,7 @@ class FixedParameterSamplingStrategy:
                 self.waiting_for_result = True
                 return None
             if not self._capture_exact_model_check(model_check):
-                self.stop_reason = "PRISM exact model check failed"
+                self.stop_reason = self.config.exact_model_check_failure_reason
                 return None
 
         completed = self._load_matching_records("sample")
@@ -223,14 +231,11 @@ class FixedParameterSamplingStrategy:
         if successful.empty:
             return False
         row = successful.iloc[-1]
+        if not self.config.exact_probability_columns:
+            return False
         try:
             self.exact_model_check = {
-                "eventual_failure_probability": float(
-                    row["prism_eventual_failure_probability"]
-                ),
-                "bounded_failure_probability": float(
-                    row["prism_bounded_failure_probability"]
-                ),
+                key: float(row[column]) for key, column in self.config.exact_probability_columns.items()
             }
         except (KeyError, TypeError, ValueError):
             return False
@@ -246,7 +251,7 @@ class FixedParameterSamplingStrategy:
             **self.exact_model_check,
             "comparison_metric": report.metric,
         }
-        if report.metric != _EXACT_PROBABILITY_METRIC:
+        if report.metric != self.config.exact_probability_metric:
             payload["ci_contains_bounded_probability"] = None
             payload["absolute_estimation_error"] = None
             payload["comparison_skipped_reason"] = (

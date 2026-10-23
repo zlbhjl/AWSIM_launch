@@ -4,7 +4,7 @@ from pathlib import Path
 
 from contracts.evaluation import EvaluationRecord
 from contracts.execution import RawRunResult, RunStatus
-from orchestration.prism_importance_sampling import (
+from targets.prism.importance_sampling import (
     PrismImportanceSamplingRunConfig,
     PrismImportanceSamplingRunner,
     _sample_seed,

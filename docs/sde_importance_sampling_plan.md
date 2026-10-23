@@ -771,11 +771,11 @@ G  = 0.5 * [[a1, 0], [0.5*a2, sqrt(0.75)*a2]]
 | E09 | 通常の IS 推定と正規近似区間 | `evaluation/importance_sampling.py` L69 |
 | E10 | 有界重みの区間と、点推定の切り詰め | `evaluation/weighted_sequential.py` L112 |
 | E11 | 比較時に使う対象の識別情報 | `evaluation/importance_sampling_comparison.py` L212 |
-| E12 | ケースの作成と、明示 seed の注入 | `orchestration/dynamics_importance_sampling.py` L62 |
+| E12 | ケースの作成と、明示 seed の注入 | `orchestration/dynamics_importance_sampling.py` L62（2026-10-24 に `targets/dynamics/importance_sampling.py` へ移動） |
 | E13 | 保存件数に基づく再開 | `orchestration/fixed_importance_sampling.py` L56 |
 | E14 | JSONL への記録の保存 | `runtime/repository/importance_sampling_results.py` L19 |
 | E15 | 既存の 32 bit seed の導出 | `orchestration/seeding.py` L19 |
-| E16 | CLI の seed の既定値と実行の入口 | `apps/cli/dynamics_importance_main.py` L25 |
+| E16 | CLI の seed の既定値と実行の入口 | `apps/cli/dynamics_importance_main.py` L25（2026-10-24 から共通 CLI `apps/cli/importance_main.py` の互換の入口） |
 | E17 | 外側の `SamplingPlan` のスキーマ | `orchestration/sampling_plan.py` L17 |
 | E18 | 既存の数値計算ライブラリへの依存 | 公開版 `pyproject.toml` L15（ローカルには無い。`AWSIM_launch_release/overlay/pyproject.toml`） |
 | E19 | EBStop の経験的 Bernstein 半径（§6.4 で共通化する） | `evaluation/ebstop.py` L30–L42 |

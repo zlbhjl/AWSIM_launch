@@ -21,7 +21,14 @@ from orchestration.fixed_importance_sampling import (
     run_strict_fixed_importance_sampling_comparison,
 )
 from orchestration.sampling_plan import SamplingPlan, load_sampling_plan
-from orchestration.seeding import PAIRINGS, PHASES, RNG_POLICY_VERSION, new_root_entropy, stream_seed
+from orchestration.seeding import (
+    PAIRINGS,
+    PHASES,
+    RNG_POLICY_VERSION,
+    legacy_sample_seed,
+    new_root_entropy,
+    stream_seed,
+)
 from runtime.repository.importance_experiment_manifest import (
     ExperimentManifest,
     load_manifest,
@@ -180,7 +187,7 @@ class DynamicsImportanceSamplingRunner:
             reason=f"DYNAMICS_IMPORTANCE_{run_kind.upper()}: {sampler.plan.experiment_id} sample={index}",
             meta={
                 "sampling": sampler.proposal_metadata() if importance else sampler.target_metadata(),
-                "source_module": "orchestration.dynamics_importance_sampling",
+                "source_module": "targets.dynamics.importance_sampling",
             },
         )
 
@@ -227,24 +234,68 @@ class DynamicsImportanceSamplingRunner:
             reason=f"DYNAMICS_IMPORTANCE_{run_kind.upper()}: {sampler.plan.experiment_id} sample={index}",
             meta={
                 "sampling": sampled.sampling_metadata,
-                "source_module": "orchestration.dynamics_importance_sampling",
+                "source_module": "targets.dynamics.importance_sampling",
             },
         )
 
 
 def _sample_seed(seed: int | None, index: int) -> int | None:
-    """Give each outer replicate a disjoint deterministic seed block.
-
-    Ordinary and proposal runs still use common random numbers for one outer
-    seed, while different outer seeds do not silently reuse 99 of 100 samples.
-    This matches the PRISM importance-sampling runner's seed contract.
-    """
-
-    if seed is None:
-        return None
-    if index < 1:
-        raise ValueError("sample index must be positive")
-    return int(seed) * 1_000_000 + int(index)
+    return legacy_sample_seed(seed, index)
 
 
-__all__ = ["DynamicsImportanceSamplingRunConfig", "DynamicsImportanceSamplingRunner"]
+class DynamicsImportanceSamplingSupport:
+    """Importance-sampling hook of the dynamics plugin (v1 U-turn inputs, v2 registered models)."""
+
+    def add_arguments(self, parser) -> None:
+        parser.add_argument(
+            "--phase", choices=sorted(PHASES), default="final",
+            help="v2: random-stream phase; pilot runs never share streams with final runs",
+        )
+        parser.add_argument(
+            "--root-entropy", type=int, default=None,
+            help="v2: 128-bit root of all random streams; default: reuse the manifest's, or draw a new one",
+        )
+        parser.add_argument(
+            "--pairing", choices=list(PAIRINGS), default="independent",
+            help="v2: 'paired' uses the same streams for the ordinary and importance runs",
+        )
+        parser.add_argument(
+            "--artifacts", choices=["files", "summary"], default="files",
+            help="registered models: 'summary' keeps trajectories in memory and stores only the judged records",
+        )
+        parser.add_argument(
+            "--retry-failed", action="store_true",
+            help="v2: retry samples whose latest attempt failed, with the same inputs and streams",
+        )
+
+    def run(self, args) -> dict[str, object]:
+        from targets.dynamics.backend import DynamicsBackend, DynamicsBackendConfig
+        from targets.dynamics.result_interpreter import DynamicsResultInterpreter
+
+        if args.max_samples is None:
+            raise ValueError("--max-samples is required")
+        backend = DynamicsBackend(DynamicsBackendConfig(
+            output_root=Path(args.output_root) / "artifacts", artifact_policy=args.artifacts,
+        ))
+        runner = DynamicsImportanceSamplingRunner(backend=backend, result_interpreter=DynamicsResultInterpreter())
+        return runner.run_fixed_samples(
+            DynamicsImportanceSamplingRunConfig(
+                sampling_plan_path=args.sampling_plan,
+                output_root=args.output_root,
+                max_samples=args.max_samples,
+                metric=args.metric,
+                confidence=args.confidence,
+                seed=args.sampling_seed,
+                phase=args.phase,
+                root_entropy=args.root_entropy,
+                pairing=args.pairing,
+                retry_failed=args.retry_failed,
+            )
+        )
+
+
+__all__ = [
+    "DynamicsImportanceSamplingRunConfig",
+    "DynamicsImportanceSamplingRunner",
+    "DynamicsImportanceSamplingSupport",
+]

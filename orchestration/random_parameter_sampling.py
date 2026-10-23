@@ -27,7 +27,11 @@ class RandomParameterSamplingStrategy(FixedParameterSamplingStrategy):
 
     def __init__(self, config: RandomParameterSamplingConfig, **kwargs: object) -> None:
         super().__init__(config, **kwargs)
-        self.input_distribution = normalize_input_distribution(config.input_distribution)
+        self.input_distribution = normalize_input_distribution(
+            config.input_distribution,
+            # Noise-only runs: every sample differs by its SDE seed.
+            allow_empty=str(self.params.get("solver_kind", "ode")) == "sde",
+        )
         self.seed = int(config.seed)
         self.sampling_signature = build_sampling_signature(
             target=config.target,
@@ -84,8 +88,19 @@ class RandomParameterSamplingStrategy(FixedParameterSamplingStrategy):
         return _json_safe(payload)
 
 
-def normalize_input_distribution(raw: Mapping[str, Mapping[str, object]] | None) -> dict[str, dict[str, float | str]]:
+def normalize_input_distribution(
+    raw: Mapping[str, Mapping[str, object]] | None,
+    *,
+    allow_empty: bool = False,
+) -> dict[str, dict[str, float | str]]:
+    """Validate a uniform input distribution.
+
+    An empty distribution is allowed only when another source makes the
+    samples differ (an SDE run with a per-sample noise seed).
+    """
     if not raw:
+        if allow_empty:
+            return {}
         raise ValueError("dynamics input distribution must not be empty")
     normalized: dict[str, dict[str, float | str]] = {}
     for name, value in raw.items():

@@ -10,7 +10,6 @@ from contracts.execution import RunStatus
 from runtime.cluster.ray_client import RayActorLocator, RayConnectionConfig
 from runtime.repository.dataset_csv import DatasetCsvRepository
 from runtime.repository.shared_store import SharedStore
-from targets.awsim.theory import build_theory_metrics
 
 
 class JsonlResultSink:
@@ -291,15 +290,14 @@ def _build_theoretical_metrics(
     record: EvaluationRecord,
     input_row: dict[str, object],
 ) -> dict[str, object]:
-    if record.target != "awsim":
+    """Columns a target derives from the inputs (plugin ``derived_input_columns``, e.g. AWSIM theory)."""
+    from targets.registry import get_target_plugin
+
+    try:
+        hook = getattr(get_target_plugin(record.target), "derived_input_columns", None)
+    except ValueError:
         return {}
-    return build_theory_metrics(
-        case_kind=record.case_kind,
-        values=input_row,
-        config_module_name=record.meta.get("config_module")
-        if isinstance(record.meta.get("config_module"), str)
-        else None,
-    )
+    return dict(hook(record, input_row)) if callable(hook) else {}
 
 
 def serialize_evaluation_record(

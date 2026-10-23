@@ -20,6 +20,8 @@ from runtime.cluster.ray_client import is_ray_control_plane_error
 from runtime.cluster.task_queue_gateway import TaskQueueGateway
 from runtime.cluster.worker_watchdog import StaleWorkerRestarter, WorkerRestartPolicy
 from runtime.container.profile import resolve_container_launch_profile
+from runtime.container.profile_registry import list_container_profiles
+from targets.registry import get_target_plugin
 
 
 STALE_WORKER_STATUS_SEC = 600.0
@@ -82,10 +84,9 @@ def run_cluster_orchestrator(argv: Sequence[str] | None = None) -> int:
             f"--container-profile {launch_profile.name} is for target="
             f"{launch_profile.target}, not target={target}"
         )
-    if target == "prism" and launch_profile is None:
-        raise ValueError(
-            "Cluster target=prism requires --container-profile prism_maude"
-        )
+    if launch_profile is None and getattr(get_target_plugin(target), "requires_container_profile", False):
+        names = " or ".join(list_container_profiles(target)) or "<none defined>"
+        raise ValueError(f"Cluster target={target} requires --container-profile {names}")
     requires_gpu = launch_profile.requires_gpu if launch_profile is not None else True
     gpu_recovery_enabled = bool(
         getattr(args, "auto_restart_gpu_workers", False)

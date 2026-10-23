@@ -1,8 +1,9 @@
 from contracts.experiment import Guarantee, SampleKind, Strategy, StoppingRuleSpec, combined_guarantee
 from orchestration.fixed_parameter_sampling import FixedParameterSamplingStrategy
 from orchestration.random_parameter_sampling import RandomParameterSamplingStrategy
-from orchestration.replay import ReplayCsvStrategy
-from orchestration.strategy import ActiveLearningStrategist, FixedCaseStrategy, ParameterCaseStrategy
+from targets.awsim.strategies.replay import ReplayCsvStrategy
+from orchestration.strategy import FixedCaseStrategy, ParameterCaseStrategy
+from targets.awsim.strategies.active_learning import ActiveLearningStrategist
 
 
 def test_existing_strategies_follow_the_strategy_protocol() -> None:

@@ -381,14 +381,16 @@ runtime/repository/
 CLIは設定ファイルの場所と実行条件だけを受け取る。
 
 ```text
-apps/cli
-  --sampling-plan sampling_plan.yaml
+apps/cli/importance_main.py          (prism_importance_main.py も同じ)
+  --sampling-plan sampling_plan.yaml   ← target: prism で PRISM の plugin を選ぶ
   --sampling-seed 17
   --stop-mode fixed_samples | importance_width | weighted_sequential
   --max-samples N
         ↓
-orchestration/prism_importance_sampling.py
+targets/prism/importance_sampling.py (PrismImportanceSamplingSupport → Runner)
 ```
+
+対象ごとの実験の組み立ては、各対象の plugin の `importance_sampling`（`contracts/importance_sampling_plugin.py`）が受け持つ。新しい対象は `targets/<name>/` に `add_arguments` と `run` を持つクラスを置けば、共通の CLI から使える。
 
 `sampling_plan.yaml` はPとQの正本である。更新方針は拡張を使う場合だけ追加する。orchestrationは共通項目だけを読み、`proposal.definition` のPRISM固有の意味は `targets/prism/sampling.py` が実行直前に検証する。
 

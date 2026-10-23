@@ -19,6 +19,16 @@ class FrameRepository:
         return self.frame
 
 
+def _prism_exact_settings() -> dict[str, object]:
+    from targets.prism.plugin import PLUGIN
+
+    return {
+        "exact_probability_columns": PLUGIN.exact_probability_columns,
+        "exact_probability_metric": PLUGIN.exact_probability_metric,
+        "exact_model_check_failure_reason": PLUGIN.exact_model_check_failure_reason,
+    }
+
+
 def _config(**overrides: object) -> FixedParameterSamplingStrategyConfig:
     values: dict[str, object] = {
         "target": "prism",
@@ -26,6 +36,8 @@ def _config(**overrides: object) -> FixedParameterSamplingStrategyConfig:
         "params": {"model": "simple_reliability_dtmc", "steps": 20},
         "max_samples": 3,
         "experiment_id": "batch-a",
+        # The exact model check of PRISM, as the orchestrator passes it from the plugin.
+        **_prism_exact_settings(),
     }
     values.update(overrides)
     return FixedParameterSamplingStrategyConfig(**values)

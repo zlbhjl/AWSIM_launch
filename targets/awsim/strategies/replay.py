@@ -179,5 +179,18 @@ class ReplayCsvStrategy:
                 f"replay CSV row {row_number} has invalid {column}: {raw_value!r}"
             ) from exc
 
+    def describe_source(self) -> dict[str, object]:
+        """The source CSV and how many of its rows will be replayed."""
+        return {
+            "source_csv": str(self.source_csv),
+            "eligible_count": self.eligible_count,
+            "skipped_completed_count": self.skipped_completed_count,
+        }
+
+    def summary_payload(self, *, scheduled_count: int) -> dict[str, object]:
+        """Added to the orchestrator's run summary."""
+        return {"replay": {**self.describe_source(), "scheduled_count": scheduled_count}}
+
+
 
 __all__ = ["ReplayCsvStrategy", "ReplayCsvStrategyConfig"]

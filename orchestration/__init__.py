@@ -12,7 +12,6 @@ from .statistical_region import (
 )
 from .resume import ResumeConfig, ResumeService, ResumeState
 from .strategy import (
-    ActiveLearningStrategist,
     FixedCaseStrategy,
     FixedCaseStrategyConfig,
     ParameterCaseStrategy,
@@ -32,7 +31,6 @@ __all__ = [
     "build_sampling_signature",
     "FixedCaseStrategy",
     "FixedCaseStrategyConfig",
-    "ActiveLearningStrategist",
     "ParameterCaseStrategy",
     "ParameterCaseStrategyConfig",
     "Orchestrator",

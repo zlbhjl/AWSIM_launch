@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import importlib
 import math
 import time
 from dataclasses import dataclass, field
@@ -15,32 +14,28 @@ from evaluation.sprt import SPRTService
 from evaluation.ebstop import EBStopService
 from evaluation.dkw import DKWService
 from evaluation.stopping_rules import DKWFixedStrict, DKWSequentialStagewise
-from orchestration.cache_policy import resolve_strategy_cache_size
 from orchestration.dkw_mode import DKWModeRunner
-from orchestration.prism_dkw_sampling import (
-    PrismDkwSamplingStrategy,
+from orchestration.fixed_parameter_dkw import (
+    FixedParameterDkwStrategy,
     _RecordingDKWService,
 )
 from runtime.cluster.host_worker import HostWorkerConfig, HostWorkerManager
 from runtime.cluster.ray_queue import TaskQueue
 from runtime.cluster.task_queue_gateway import TaskQueueGateway
-from runtime.repository.statistical_history import StatisticalHistoryRepository
 from runtime.repository.strategy_dataset import StrategyDatasetRepository
 from targets.registry import get_target_plugin
 from targets.statistical import (
-    build_statistical_region_policy,
     load_statistical_target_profile,
 )
 from orchestration.strategy_registry import (
-    SELF_TERMINATING_STRATEGIES,
+    is_self_terminating,
+    plugin_strategy_spec,
     check_strategy,
     select_strategy_name,
     strategy_builder,
 )
 from .resume import ResumeConfig, ResumeService
-from .replay import ReplayCsvStrategy, ReplayCsvStrategyConfig
 from .strategy import (
-    ActiveLearningStrategist,
     FixedCaseStrategy,
     FixedCaseStrategyConfig,
     ParameterCaseStrategy,
@@ -69,6 +64,17 @@ def _fixed_parameter_reason_prefix(target: str) -> str:
 
 def _runs_model_check_once(target: str) -> bool:
     return bool(getattr(_target_plugin(target), "run_model_check_once", False))
+
+
+def _exact_model_check_settings(target: str) -> dict[str, object]:
+    """The target's exact model check (plugin attributes), for fixed-parameter strategies."""
+    plugin = _target_plugin(target)
+    settings: dict[str, object] = {}
+    for name in ("exact_probability_columns", "exact_probability_metric", "exact_model_check_failure_reason"):
+        value = getattr(plugin, name, None)
+        if value is not None:
+            settings[name] = value
+    return settings
 
 
 def _fixed_parameter_minimum_dkw_value(target: str) -> float | None:
@@ -194,13 +200,13 @@ def build_task_payload(test_case: TestCase) -> dict[str, object]:
     container_profile = test_case.meta.get("container_profile")
     if isinstance(container_profile, str) and container_profile:
         payload["container_profile"] = container_profile
-    for key in (
-        "replay_source_loop_num",
-        "replay_source_case_id",
-        "replay_source_collision",
-        "replay_source_reason",
-        "replay_source_csv",
-    ):
+    # Meta keys a target carries from its cases into the queue payload (plugin
+    # task_payload_meta_keys, e.g. the AWSIM replay source of a case).
+    try:
+        carried = getattr(get_target_plugin(test_case.target), "task_payload_meta_keys", ())
+    except ValueError:
+        carried = ()
+    for key in carried:
         if key in test_case.meta:
             payload[key] = test_case.meta[key]
     return payload
@@ -516,13 +522,9 @@ class Orchestrator:
             "final_report": self._extract_final_report_payload(strategy),
             "statistical_report": self._extract_statistical_report_payload(strategy),
         }
-        if isinstance(strategy, ReplayCsvStrategy):
-            summary["replay"] = {
-                "source_csv": str(strategy.source_csv),
-                "eligible_count": strategy.eligible_count,
-                "skipped_completed_count": strategy.skipped_completed_count,
-                "scheduled_count": enqueued,
-            }
+        summary_payload = getattr(strategy, "summary_payload", None)
+        if callable(summary_payload):
+            summary.update(summary_payload(scheduled_count=enqueued))
         if enqueued == 0:
             summary["worker_exit_code"] = 0
         return summary
@@ -530,16 +532,10 @@ class Orchestrator:
     def _build_strategy(
         self,
         config: OrchestratorConfig,
-    ) -> (
-        FixedCaseStrategy
-        | ParameterCaseStrategy
-        | ReplayCsvStrategy
-        | ActiveLearningStrategist
-        | FixedParameterSamplingStrategy
-    ):
+    ) -> object:
         if config.fixture is None:
             check_strategy(config)
-        return strategy_builder(select_strategy_name(config))(self, config)
+        return strategy_builder(select_strategy_name(config), config.target)(self, config)
 
     def _build_fixture_strategy(self, config: OrchestratorConfig) -> FixedCaseStrategy:
         return FixedCaseStrategy(
@@ -576,6 +572,7 @@ class Orchestrator:
                     reason_prefix=_fixed_parameter_reason_prefix(config.target),
                     tags=tuple(config.tags),
                     run_model_check_once=_runs_model_check_once(config.target),
+                    **_exact_model_check_settings(config.target),
                 ),
                 dataset_repository=dataset_repository,
                 statistical_service=BinomialCIService(),
@@ -613,6 +610,7 @@ class Orchestrator:
                     reason_prefix=_fixed_parameter_reason_prefix(config.target),
                     tags=tuple(config.tags),
                     run_model_check_once=_runs_model_check_once(config.target),
+                    **_exact_model_check_settings(config.target),
                 ),
                 dataset_repository=dataset_repository,
                 statistical_service=SPRTService(),
@@ -645,6 +643,7 @@ class Orchestrator:
                     reason_prefix=_fixed_parameter_reason_prefix(config.target),
                     tags=tuple(config.tags),
                     run_model_check_once=_runs_model_check_once(config.target),
+                    **_exact_model_check_settings(config.target),
                 ),
                 dataset_repository=dataset_repository,
                 statistical_service=EBStopService(),
@@ -662,7 +661,7 @@ class Orchestrator:
             )
         raise ValueError(f"fixed parameter sampling does not support --mode {config.run_mode!r}")
 
-    def _build_fixed_parameter_dkw_strategy(self, config: OrchestratorConfig) -> PrismDkwSamplingStrategy:
+    def _build_fixed_parameter_dkw_strategy(self, config: OrchestratorConfig) -> FixedParameterDkwStrategy:
         if config.max_samples is None:
             raise ValueError(f"{config.target.upper()} fixed sampling requires max_samples")
         dataset_repository = self._build_dataset_repository(config)
@@ -682,7 +681,7 @@ class Orchestrator:
             case_kind=config.case_kind,
             minimum_value=_fixed_parameter_minimum_dkw_value(config.target),
         )
-        return PrismDkwSamplingStrategy(
+        return FixedParameterDkwStrategy(
             FixedParameterSamplingStrategyConfig(
                 target=config.target,
                 case_kind=config.case_kind,
@@ -693,6 +692,7 @@ class Orchestrator:
                 reason_prefix=_fixed_parameter_reason_prefix(config.target),
                 tags=tuple(config.tags),
                 run_model_check_once=_runs_model_check_once(config.target),
+                **_exact_model_check_settings(config.target),
             ),
             dataset_repository=dataset_repository,
             dkw_mode_runner=dkw_mode_runner,
@@ -713,92 +713,6 @@ class Orchestrator:
                 expected_trace_path=config.expected_trace_path,
                 local_loop_num=config.local_loop_num,
             )
-        )
-
-    def _build_replay_strategy(self, config: OrchestratorConfig) -> ReplayCsvStrategy:
-        strategy_config = importlib.import_module(config.config_module)
-        case_definition = self._load_replay_case_definition(
-            strategy_config,
-            config.case_kind,
-        )
-        input_types = dict(case_definition.get("fixed_params", {}))
-        for name, bounds in dict(case_definition.get("param_ranges", {})).items():
-            if name in input_types:
-                continue
-            try:
-                input_types[name] = float(bounds[0])
-            except (KeyError, TypeError, IndexError, ValueError):
-                input_types[name] = ""
-        return ReplayCsvStrategy(
-            ReplayCsvStrategyConfig(
-                source_csv=config.replay_csv,
-                input_types=input_types,
-                case_kind=config.case_kind,
-                scenario_type=str(
-                    case_definition.get("scenario_type", config.case_kind)
-                ),
-                target=config.target,
-                reason_pattern=config.replay_reason_pattern,
-                expected_count=config.replay_expected_count,
-                completed_source_loop_nums=frozenset(
-                    self._load_completed_replay_source_loops(config)
-                ),
-            )
-        )
-
-    def _build_active_learning_strategy(self, config: OrchestratorConfig) -> ActiveLearningStrategist:
-        strategy_config = importlib.import_module(config.config_module)
-        dataset_repository = self._build_dataset_repository(config)
-        statistical_profile = load_statistical_target_profile(config.target)
-        return ActiveLearningStrategist(
-            scenario_name=config.case_kind,
-            config=strategy_config,
-            focus_points=(
-                [dict(point) for point in config.focus_points]
-                if config.focus_points is not None
-                else None
-            ),
-            run_mode=config.run_mode,
-            dataset_repository=dataset_repository,
-            statistical_history_repository=StatisticalHistoryRepository(
-                scenario_name=config.case_kind,
-                traces_dir=dataset_repository.paths.traces_dir,
-            ),
-            dkw_bounds=config.dkw_bounds,
-            dkw_region=config.dkw_region,
-            dkw_pure_smc=config.dkw_pure_smc,
-            dkw_simultaneous=config.dkw_simultaneous,
-            max_samples=config.max_samples,
-            binomial_target=config.binomial_target,
-            binomial_method=config.binomial_method,
-            binomial_confidence=config.binomial_confidence,
-            binomial_target_width=config.binomial_target_width,
-            binomial_min_samples=config.binomial_min_samples,
-            binomial_anytime_valid=config.binomial_anytime_valid,
-            sprt_target=config.sprt_target,
-            sprt_p0=config.sprt_p0,
-            sprt_p1=config.sprt_p1,
-            sprt_beta=config.sprt_beta,
-            sprt_confidence=config.sprt_confidence,
-            sprt_min_samples=config.sprt_min_samples,
-            ebstop_target=config.ebstop_target,
-            ebstop_epsilon=config.ebstop_epsilon,
-            ebstop_value_range=config.ebstop_value_range,
-            ebstop_confidence=config.ebstop_confidence,
-            ebstop_max_samples=config.ebstop_max_samples,
-            cache_size=resolve_strategy_cache_size(
-                worker_count=self._resolve_worker_count(config),
-                run_mode=config.run_mode,
-                resume_from=config.resume_from,
-                max_samples=config.max_samples,
-                explicit_cache_size=config.cache_size,
-            ),
-            statistical_region_policy=build_statistical_region_policy(
-                config.target,
-                case_kind=config.case_kind,
-                config_module_name=config.config_module,
-            ),
-            dkw_minimum_value=statistical_profile.minimum_dkw_value,
         )
 
     def _build_dynamics_sampling_strategy(
@@ -879,13 +793,10 @@ class Orchestrator:
         if config.replay_csv is None:
             return None
         strategy = self._build_strategy(config)
-        if not isinstance(strategy, ReplayCsvStrategy):
-            raise TypeError("replay configuration did not create ReplayCsvStrategy")
-        return {
-            "source_csv": str(strategy.source_csv),
-            "eligible_count": strategy.eligible_count,
-            "skipped_completed_count": strategy.skipped_completed_count,
-        }
+        describe_source = getattr(strategy, "describe_source", None)
+        if not callable(describe_source):
+            raise TypeError("replay configuration did not create a strategy that reads a source")
+        return describe_source()
 
     def _build_resume_config(self, config: OrchestratorConfig) -> ResumeConfig:
         traces_dir = (
@@ -975,13 +886,7 @@ class Orchestrator:
     def _refill_queue(
         self,
         *,
-        strategy: (
-            FixedCaseStrategy
-            | ParameterCaseStrategy
-            | ReplayCsvStrategy
-            | ActiveLearningStrategist
-            | FixedParameterSamplingStrategy
-        ),
+        strategy: object,
         config: OrchestratorConfig,
         snapshot: dict[str, object],
         enqueued: int,
@@ -1015,64 +920,32 @@ class Orchestrator:
                 config.fixture is not None
                 or (
                     config.params
-                    and not isinstance(strategy, FixedParameterSamplingStrategy)
+                    # Strategies that issue many cases for one parameter set
+                    # (statistical sampling) keep filling the queue.
+                    and not getattr(strategy, "issues_many_cases", False)
                 )
             ):
                 break
         return enqueued, stop_reason
 
-    @staticmethod
-    def _load_replay_case_definition(
-        config_module: object,
-        case_kind: str,
-    ) -> dict[str, object]:
-        loader = getattr(config_module, "get_case_definition", None)
-        if callable(loader):
-            return dict(loader())
-        return {
-            "scenario_type": getattr(config_module, "SCENARIO_TYPE", case_kind),
-            "fixed_params": dict(getattr(config_module, "FIXED_PARAMS", {})),
-            "param_ranges": dict(getattr(config_module, "PARAM_RANGES", {})),
-        }
-
-    def _load_completed_replay_source_loops(
-        self,
-        config: OrchestratorConfig,
-    ) -> set[int]:
-        dataset = self._build_dataset_repository(config).load_dataset()
-        if dataset is None or "meta_replay_source_loop_num" not in dataset.columns:
-            return set()
-        completed: set[int] = set()
-        for value in dataset["meta_replay_source_loop_num"].dropna().tolist():
-            try:
-                completed.add(int(float(value)))
-            except (TypeError, ValueError):
-                continue
-        return completed
-
     def _resolve_target_total(self, config: OrchestratorConfig, last_loop_num: int) -> int | None:
-        if select_strategy_name(config, include_fixture=False) in SELF_TERMINATING_STRATEGIES:
+        try:
+            name = select_strategy_name(config, include_fixture=False)
+        except ValueError:
+            # A fixture run needs no strategy of the target.
+            if config.fixture is None:
+                raise
+            name = None
+        if name is not None and is_self_terminating(name, config.target):
             return None
         if config.fixture is not None or config.params:
             return last_loop_num + 1
-        if config.run_mode in {"boundary_gap", "dkw", "verify_consistency", "replay"}:
-            return None
-        if config.run_mode == "binomial_ci":
-            return (
-                last_loop_num + int(config.max_samples)
-                if config.max_samples is not None
-                else None
-            )
+        spec = plugin_strategy_spec(name, config.target)
+        if spec is not None and spec.target_total is not None:
+            return spec.target_total(config, last_loop_num)
         if config.max_samples is not None:
             return last_loop_num + int(config.max_samples)
-        try:
-            strategy_config = importlib.import_module(config.config_module)
-        except ImportError:
-            return None
-        repeat_count = getattr(strategy_config, "REPEAT_COUNT", None)
-        if repeat_count is None:
-            return None
-        return last_loop_num + int(repeat_count)
+        return None
 
     def _should_finish_external_loop(
         self,

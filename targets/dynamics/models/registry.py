@@ -215,6 +215,22 @@ class UTurnAdapter:
             trace_transform=trace_transform,
         )
 
+    def statistical_defaults(self) -> dict[str, object]:
+        """Defaults of the statistical modes; unchanged from before models were registered."""
+        from scenario_specs.uturn import PARAM_RANGES
+
+        return {
+            "default_input_distribution": {
+                key: {"distribution": "uniform", "min": lower, "max": upper}
+                for key, (lower, upper) in PARAM_RANGES.items()
+            },
+            "binary_metric": self.default_binary_metric,
+            "continuous_metric": self.default_continuous_metric,
+            "minimum_dkw_value": 0.0,
+            "continuous_metric_bounded": True,
+            "noise_only": False,
+        }
+
     def interpret(self, payload: Mapping[str, object], trace: Mapping[str, np.ndarray]) -> dict[str, object]:
         from ..result_interpreter import uturn_metrics
 
@@ -253,6 +269,47 @@ def resolve_noise_proposal(
     return legacy, noise_path_definition(legacy)
 
 
+def statistical_defaults(adapter: DynamicsModelAdapter) -> dict[str, object]:
+    """Statistical-mode defaults of a model.
+
+    A model may define ``statistical_defaults()``; otherwise the defaults are:
+    no sampled inputs (only the Brownian path varies, ``noise_only``), the
+    model's binary and continuous metrics, and an unbounded continuous metric
+    (no DKW lower support; EBStop needs an explicit value range).
+    """
+    custom = getattr(adapter, "statistical_defaults", None)
+    if callable(custom):
+        return dict(custom())
+    return {
+        "default_input_distribution": {},
+        "binary_metric": adapter.default_binary_metric,
+        "continuous_metric": adapter.default_continuous_metric,
+        "minimum_dkw_value": None,
+        "continuous_metric_bounded": False,
+        "noise_only": True,
+    }
+
+
+def resolve_dynamics_model(
+    params: Mapping[str, object],
+    case_kind: str | None,
+    *,
+    case_kind_explicit: bool = True,
+) -> tuple[str, DynamicsModelAdapter]:
+    """The model of a run: ``model_id`` in the params, otherwise the case kind.
+
+    When both are given explicitly they must agree. The case kind is only a
+    label otherwise, so a defaulted case kind never conflicts.
+    """
+    param_model = params.get("model_id")
+    if param_model is not None and not isinstance(param_model, str):
+        raise ValueError("--param model_id must be a model name")
+    if param_model is not None and case_kind_explicit and case_kind not in (None, param_model):
+        raise ValueError(f"--case-kind {case_kind} does not match --param model_id={param_model}")
+    model_id = param_model or case_kind or "uturn"
+    return model_id, get_model_adapter(model_id)
+
+
 def _adapters() -> dict[str, DynamicsModelAdapter]:
     from .nonlinear2d import Nonlinear2DAdapter
     from .ou import OUScalarAdapter
@@ -284,5 +341,7 @@ __all__ = [
     "UTurnAdapter",
     "get_model_adapter",
     "model_ids",
+    "resolve_dynamics_model",
     "resolve_noise_proposal",
+    "statistical_defaults",
 ]

@@ -8,11 +8,16 @@ from pathlib import Path
 from typing import Any, Sequence
 
 from contracts.evaluation import EvaluationRecord
-from targets.awsim.result_interpreter import (
-    InterpretationContext as AWSIMInterpretationContext,
-)
-from targets.awsim.result_interpreter import ResultInterpreter as AWSIMResultInterpreter
-from targets.bbsl.result_interpreter import ResultInterpreter as BBSLResultInterpreter
+from targets.registry import default_case_kind, get_target_plugin, list_target_names
+
+
+def interpretable_targets() -> list[str]:
+    """Targets whose plugin interprets a saved result file (``build_result_interpreter``)."""
+    return [
+        name
+        for name in list_target_names()
+        if callable(getattr(get_target_plugin(name), "build_result_interpreter", None))
+    ]
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -30,7 +35,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--target",
         default="awsim",
-        choices=["awsim", "bbsl"],
+        choices=interpretable_targets(),
         help="Target name used to choose the appropriate interpreter.",
     )
     parser.add_argument(
@@ -45,8 +50,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--config-module",
-        default="targets.awsim.case_kinds.uturn",
-        help="AWSIM rule-spec module used by the AWSIM result interpreter.",
+        default=None,
+        help=(
+            "Rule-spec module used by the interpreter. Defaults to the target's own "
+            "(AWSIM: targets.awsim.case_kinds.uturn)."
+        ),
     )
     parser.add_argument(
         "--output-json",
@@ -57,17 +65,13 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def build_interpreter(args: argparse.Namespace):
-    if args.target == "awsim":
-        return AWSIMResultInterpreter(
-            context=AWSIMInterpretationContext(
-                target="awsim",
-                case_kind=args.case_kind or "uturn",
-                config_module=args.config_module,
-            )
-        )
-    if args.target == "bbsl":
-        return BBSLResultInterpreter()
-    raise ValueError(f"Unsupported target: {args.target}")
+    builder = getattr(get_target_plugin(args.target), "build_result_interpreter", None)
+    if not callable(builder):
+        raise ValueError(f"Unsupported target: {args.target}")
+    return builder(
+        case_kind=args.case_kind or default_case_kind(args.target),
+        config_module=args.config_module,
+    )
 
 
 def serialize_evaluation_record(record: EvaluationRecord) -> dict[str, object]:

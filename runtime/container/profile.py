@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import importlib
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -25,15 +24,6 @@ DISABLE_RVIZ_ARG = "rviz:=false"
 DEFAULT_CLUSTER_WORKER_ENV = (
     ("DISPLAY", ":99"),
     ("VK_ICD_FILENAMES", "/usr/share/vulkan/icd.d/nvidia_icd.json"),
-)
-SUPPORTED_CONTAINER_PROFILES = (
-    "legacy",
-    "autoware171",
-    "autoware180",
-    "autoware180_ekfdiagfix",
-    "autoware190",
-    "autoware190_ekfdiagfix",
-    "prism_maude",
 )
 
 
@@ -193,12 +183,17 @@ def resolve_container_launch_profile(
 ) -> ContainerLaunchProfile | None:
     if profile_name is None:
         return None
-    if profile_name not in SUPPORTED_CONTAINER_PROFILES:
-        raise ValueError(f"Unsupported container profile: {profile_name}")
-    module = importlib.import_module(f"runtime.container.profiles.{profile_name}")
-    profile = getattr(module, "CONTAINER_LAUNCH_PROFILE", None)
-    if not isinstance(profile, ContainerLaunchProfile):
-        raise TypeError(
-            f"runtime.container.profiles.{profile_name} must export CONTAINER_LAUNCH_PROFILE"
-        )
-    return profile
+    from runtime.container.profile_registry import get_container_profile
+
+    return get_container_profile(profile_name)
+
+
+def __getattr__(name: str):
+    # SUPPORTED_CONTAINER_PROFILES is discovered from targets/*/container_profiles/
+    # (runtime/container/profile_registry.py); it is computed on access because
+    # the profile modules import this module.
+    if name == "SUPPORTED_CONTAINER_PROFILES":
+        from runtime.container.profile_registry import list_container_profiles
+
+        return list_container_profiles()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

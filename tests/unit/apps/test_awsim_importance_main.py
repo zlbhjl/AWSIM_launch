@@ -3,6 +3,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import apps.cli.awsim_importance_main as awsim_importance_main
+import targets.awsim.importance_sampling as awsim_importance_sampling
 from apps.cli.awsim_importance_main import build_parser
 
 
@@ -60,11 +61,11 @@ def test_cli_passes_fresh_infrastructure_default_to_component_assembly(
         return SimpleNamespace(backend=FakeBackend(), result_interpreter=object())
 
     monkeypatch.setattr(
-        awsim_importance_main,
+        awsim_importance_sampling,
         "build_target_components",
         fake_build_target_components,
     )
-    monkeypatch.setattr(awsim_importance_main, "AWSIMImportanceSamplingRunner", FakeRunner)
+    monkeypatch.setattr(awsim_importance_sampling, "AWSIMImportanceSamplingRunner", FakeRunner)
 
     exit_code = awsim_importance_main.main(
         [
@@ -101,11 +102,11 @@ def test_cli_can_pass_reuse_opt_in_to_component_assembly(monkeypatch) -> None:
         return SimpleNamespace(backend=FakeBackend(), result_interpreter=object())
 
     monkeypatch.setattr(
-        awsim_importance_main,
+        awsim_importance_sampling,
         "build_target_components",
         fake_build_target_components,
     )
-    monkeypatch.setattr(awsim_importance_main, "AWSIMImportanceSamplingRunner", FakeRunner)
+    monkeypatch.setattr(awsim_importance_sampling, "AWSIMImportanceSamplingRunner", FakeRunner)
 
     awsim_importance_main.main(
         [

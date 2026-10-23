@@ -7,17 +7,20 @@ import sys
 from pathlib import Path
 from typing import Sequence
 
+from apps.cli.target_hooks import (
+    config_module_for,
+    normalize_for_target,
+    reject_foreign_options,
+    scenario_profile_choices,
+    statistical_summary_extras,
+    validate_orchestrator_for_target,
+)
 from apps.cli.worker_main import LEGACY_MODES, parse_param_assignments
 from orchestration.orchestrator import Orchestrator, OrchestratorConfig, build_task_payload
-from runtime.container.profile import SUPPORTED_CONTAINER_PROFILES
+from runtime.container.profile_registry import list_container_profiles
 from runtime.cluster.ray_queue import TaskQueue
-from targets.awsim.case_kinds import (
-    SUPPORTED_SCENARIO_PROFILES,
-    build_default_case_kind_module_name,
-    load_focus_points,
-)
 from evaluation.stopping_rules import STOPPING_RULE_NAMES
-from targets.registry import apply_target_defaults, default_config_module, list_target_names
+from targets.registry import apply_target_defaults, default_config_module, get_target_plugin, list_target_names
 from targets.statistical import load_statistical_target_profile, supports_iid_sampling
 
 
@@ -293,13 +296,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--container-profile",
-        choices=SUPPORTED_CONTAINER_PROFILES,
+        choices=list_container_profiles(),
         default=None,
         help="Optional named container runtime profile (for example: legacy, autoware171, autoware180, autoware190).",
     )
     parser.add_argument(
         "--scenario-profile",
-        choices=SUPPORTED_SCENARIO_PROFILES,
+        choices=scenario_profile_choices(),
         default=None,
         help="Optional named scenario spec profile (for example: legacy, autoware171).",
     )
@@ -697,27 +700,14 @@ def validate_args(args: argparse.Namespace) -> None:
         raise ValueError(
             "Specify only one input source: --fixture, --param key=value, or --replay-csv"
         )
-    if replay_mode and getattr(args, "mode", None) != "replay":
-        raise ValueError("--replay-csv requires --mode replay")
-    if getattr(args, "mode", None) == "replay" and not replay_mode:
-        raise ValueError("--mode replay requires --replay-csv")
-    if replay_mode and not getattr(args, "run_id", None):
-        raise ValueError("--run-id is required in replay mode")
+    reject_foreign_options(args)
     run_id = getattr(args, "run_id", None)
     if run_id and re.fullmatch(r"[A-Za-z0-9_.-]+", str(run_id)) is None:
         raise ValueError("--run-id may contain only letters, numbers, '.', '_' and '-'")
     replay_expected_count = getattr(args, "replay_expected_count", None)
     if replay_expected_count is not None and replay_expected_count <= 0:
         raise ValueError("--replay-expected-count must be a positive integer")
-    if replay_mode and not str(getattr(args, "replay_reason_pattern", "")).strip():
-        raise ValueError("--replay-reason-pattern must not be empty")
-    if replay_mode and getattr(args, "target", "awsim") != "awsim":
-        raise ValueError("--replay-csv is only supported for target=awsim")
-    if replay_mode and getattr(args, "dataset_csv", None):
-        source = Path(str(args.replay_csv)).expanduser().resolve()
-        destination = Path(str(args.dataset_csv)).expanduser().resolve()
-        if source == destination:
-            raise ValueError("--replay-csv and --dataset-csv must be different files")
+    validate_orchestrator_for_target(args)
     dynamics_statistical_mode = (
         supports_iid_sampling(getattr(args, "target", "awsim"))
         and getattr(args, "mode", "explore")
@@ -725,70 +715,16 @@ def validate_args(args: argparse.Namespace) -> None:
     )
     if (
         strategy_mode
-        and getattr(args, "target", "awsim") != "awsim"
         and not dynamics_statistical_mode
+        and not _target_has_strategies(getattr(args, "target", "awsim"))
     ):
-        raise ValueError("Strategy mode without --fixture/--param is only supported for target=awsim")
-    if getattr(args, "target", "awsim") == "dynamics" and getattr(args, "case_kind", "uturn") != "uturn":
-        raise ValueError("target=dynamics currently supports only --case-kind uturn")
+        raise ValueError(
+            f"Strategy mode without --fixture/--param is not supported for target={args.target}"
+        )
     if dynamics_statistical_mode and getattr(args, "max_samples", None) is None:
         raise ValueError(f"{args.target} statistical sampling requires --max-samples")
     if dynamics_statistical_mode and getattr(args, "dataset_csv", None) is None:
         raise ValueError(f"{args.target} statistical sampling requires --dataset-csv")
-    prism_sampling_mode = (
-        getattr(args, "target", "awsim") == "prism"
-        and simulation_mode
-        and getattr(args, "mode", "explore")
-        in {"binomial_ci", "sprt", "ebstop", "dkw", "dkw_fixed"}
-    )
-    if prism_sampling_mode and getattr(args, "max_samples", None) is None:
-        raise ValueError("PRISM binomial sampling requires --max-samples")
-    if prism_sampling_mode and getattr(args, "dataset_csv", None) is None:
-        raise ValueError("PRISM binomial sampling requires --dataset-csv")
-    prism_supported_modes = {
-        "explore",
-        "binomial_ci",
-        "sprt",
-        "ebstop",
-        "dkw",
-        "dkw_fixed",
-    }
-    if (
-        getattr(args, "target", "awsim") == "prism"
-        and simulation_mode
-        and getattr(args, "mode", "explore") not in prism_supported_modes
-    ):
-        raise ValueError(
-            "target=prism with --param only supports "
-            f"--mode {'/'.join(sorted(prism_supported_modes))}; "
-            f"'{args.mode}' has no live PRISM execution path yet "
-            "(orchestration/orchestrator.py::_build_strategy has no branch for it, "
-            "so it would silently fall through to a single one-off case)"
-        )
-    if (strategy_mode or replay_mode) and getattr(args, "dataset_csv", None) is None:
-        raise ValueError("--dataset-csv is required for AWSIM strategy mode")
-    if strategy_mode and getattr(args, "mode", "explore") not in {
-        "explore",
-        "focus",
-        "margin",
-        "jama_edge",
-        "ttc_edge",
-        "worst_ttc",
-        "dkw",
-        "dkw_fixed",
-        "verify_consistency",
-        "binomial_ci",
-        "boundary_gap",
-        "replay",
-        "sprt",
-        "ebstop",
-    }:
-        raise ValueError(
-            "AWSIM strategy mode currently supports "
-            "--mode explore/focus/margin/jama_edge/ttc_edge/worst_ttc/dkw/dkw_fixed/verify_consistency/binomial_ci/boundary_gap/replay/sprt/ebstop only"
-        )
-    if getattr(args, "target", "awsim") != "awsim" and getattr(args, "headless", False):
-        raise ValueError("--headless is only supported for target=awsim")
     refresh_interval = getattr(args, "refresh_interval", None)
     if refresh_interval is not None and refresh_interval <= 0:
         raise ValueError("--refresh-interval must be a positive integer")
@@ -911,16 +847,14 @@ def validate_args(args: argparse.Namespace) -> None:
     binomial_min_samples = getattr(args, "binomial_min_samples", None)
     if binomial_min_samples is not None and binomial_min_samples < 0:
         raise ValueError("--binomial-min-samples must be non-negative")
-    if getattr(args, "target", "awsim") != "awsim" and any(
-        [
-            getattr(args, "scenario_type", None) is not None,
-            getattr(args, "simulation_output_dir", None) is not None,
-            getattr(args, "expected_trace_path", None) is not None,
-            getattr(args, "local_loop_num", None) is not None,
-            getattr(args, "focus_points", None) is not None,
-        ]
-    ):
-        raise ValueError("AWSIM-only direct execution options are not supported for non-awsim targets")
+
+
+def _target_has_strategies(target: str) -> bool:
+    """Whether the target's plugin provides its own strategies (StrategySpec)."""
+    try:
+        return bool(getattr(get_target_plugin(target), "strategies", None))
+    except ValueError:
+        return False
 
 
 def _validate_stopping_rule(args: argparse.Namespace) -> None:
@@ -937,6 +871,40 @@ def _validate_stopping_rule(args: argparse.Namespace) -> None:
         raise ValueError(f"--stopping-rule {rule} requires --max-samples")
 
 
+def _prepare_target_statistics(args: argparse.Namespace, raw_argv: Sequence[str]) -> dict | None:
+    """Let the target plugin resolve its statistical run (optional hook).
+
+    The hook returns the case kind, fixed inputs to add and the default input
+    distribution; targets without it keep their statistical profile's default.
+    """
+    hook = getattr(get_target_plugin(args.target), "prepare_statistical_run", None)
+    if hook is None:
+        return None
+    flag_destinations = {
+        "--ebstop-value-range-min": "ebstop_value_range_min", "--ebstop_value_range_min": "ebstop_value_range_min",
+        "--ebstop-value-range-max": "ebstop_value_range_max", "--ebstop_value_range_max": "ebstop_value_range_max",
+    }
+    explicit = frozenset(
+        destination for flag, destination in flag_destinations.items()
+        if any(item == flag or item.startswith(flag + "=") for item in raw_argv)
+    )
+    prepared = hook(
+        mode=args.mode,
+        case_kind=args.case_kind,
+        case_kind_explicit=any(item in {"--case-kind", "--case_kind"} or item.startswith("--case-kind=")
+                               for item in raw_argv),
+        params=parse_param_assignments(getattr(args, "params", []) or []),
+        explicit_options=explicit,
+        decision_mode=getattr(args, "dynamics_decision_mode", "judgment"),
+    )
+    args.case_kind = prepared["case_kind"]
+    existing = parse_param_assignments(getattr(args, "params", []) or [])
+    args.params = list(getattr(args, "params", []) or []) + [
+        f"{key}={json.dumps(value)}" for key, value in prepared["params"].items() if key not in existing
+    ]
+    return dict(prepared["default_input_distribution"])
+
+
 def normalize_args(
     args: argparse.Namespace,
     *,
@@ -944,109 +912,44 @@ def normalize_args(
 ) -> argparse.Namespace:
     apply_target_defaults(args)
     raw_argv = list(argv) if argv is not None else []
-    explicit_config_module = "--config-module" in raw_argv
-    explicit_focus_points = "--focus_points" in raw_argv
-    explicit_dkw_bounds = any(flag in raw_argv for flag in ("--dkw-bounds", "--dkw_bounds"))
+    normalize_for_target(args, raw_argv, role="orchestrator")
+    iid_statistical_mode = (
+        supports_iid_sampling(getattr(args, "target", ""))
+        and getattr(args, "mode", "explore")
+        in {"binomial_ci", "sprt", "dkw", "dkw_fixed", "ebstop"}
+    )
+    target_default_distribution = (
+        _prepare_target_statistics(args, raw_argv) if iid_statistical_mode else None
+    )
+    if getattr(args, "config_module", None) is None:
+        args.config_module = default_config_module(args.target, args.case_kind)
+    if iid_statistical_mode:
+        from orchestration.random_parameter_sampling import normalize_input_distribution
 
-    if getattr(args, "target", "awsim") != "awsim":
-        if (
-            getattr(args, "target", "") == "prism"
-            and getattr(args, "mode", "") == "binomial_ci"
-            and getattr(args, "binomial_target", "c_collision") == "c_collision"
-        ):
-            args.binomial_target = load_statistical_target_profile(
-                "prism"
-            ).binary_metric
-        if getattr(args, "config_module", None) is None:
-            args.config_module = default_config_module(args.target, args.case_kind)
-        if (
-            supports_iid_sampling(getattr(args, "target", ""))
-            and getattr(args, "mode", "explore")
-            in {"binomial_ci", "sprt", "dkw", "dkw_fixed", "ebstop"}
-        ):
-            from orchestration.random_parameter_sampling import normalize_input_distribution
-
-            raw_distribution = getattr(args, "dynamics_input_distribution", None)
-            if raw_distribution is None:
-                fixed = parse_param_assignments(getattr(args, "params", []))
-                if args.target == "dynamics":
-                    from scenario_specs.uturn import PARAM_RANGES
-
-                    default_distribution = {
-                        key: {"distribution": "uniform", "min": lower, "max": upper}
-                        for key, (lower, upper) in PARAM_RANGES.items()
-                    }
-                else:
-                    default_distribution = dict(
-                        load_statistical_target_profile(args.target).default_input_distribution or {}
-                    )
-                raw_distribution = {
-                    key: value for key, value in default_distribution.items() if key not in fixed
-                }
-            else:
-                try:
-                    raw_distribution = json.loads(raw_distribution)
-                except json.JSONDecodeError as exc:
-                    raise ValueError("--dynamics-input-distribution must be valid JSON") from exc
-            if not isinstance(raw_distribution, dict):
-                raise ValueError("--dynamics-input-distribution must decode to an object")
-            args.dynamics_input_distribution = normalize_input_distribution(raw_distribution)
-        return args
-
-    if (
-        getattr(args, "scenario_profile", None) is None
-        and getattr(args, "container_profile", None) in SUPPORTED_SCENARIO_PROFILES
-    ):
-        args.scenario_profile = args.container_profile
-
-    if args.config_module is None or not explicit_config_module:
-        args.config_module = build_default_case_kind_module_name(
-            case_kind=args.case_kind,
-            scenario_profile=getattr(args, "scenario_profile", None),
+        fixed = parse_param_assignments(getattr(args, "params", []))
+        raw_distribution = getattr(args, "dynamics_input_distribution", None)
+        if raw_distribution is None:
+            default_distribution = (
+                target_default_distribution
+                if target_default_distribution is not None
+                else dict(load_statistical_target_profile(args.target).default_input_distribution or {})
+            )
+            raw_distribution = {
+                key: value for key, value in default_distribution.items() if key not in fixed
+            }
+        else:
+            try:
+                raw_distribution = json.loads(raw_distribution)
+            except json.JSONDecodeError as exc:
+                raise ValueError("--dynamics-input-distribution must be valid JSON") from exc
+        if not isinstance(raw_distribution, dict):
+            raise ValueError("--dynamics-input-distribution must decode to an object")
+        args.dynamics_input_distribution = normalize_input_distribution(
+            raw_distribution,
+            # Noise-only runs: every sample differs by its SDE seed.
+            allow_empty=str(fixed.get("solver_kind", "ode")) == "sde",
         )
-
-    if args.mode == "focus":
-        args.focus_points = _resolve_focus_points(
-            case_kind=args.case_kind,
-            config_module=args.config_module,
-            raw_focus_points=args.focus_points if explicit_focus_points else None,
-        )
-    else:
-        args.focus_points = _resolve_focus_points(
-            case_kind=args.case_kind,
-            config_module=args.config_module,
-            raw_focus_points=args.focus_points if explicit_focus_points else None,
-            allow_config_default=False,
-        )
-    if explicit_dkw_bounds and args.dkw_bounds:
-        try:
-            parsed_bounds = json.loads(args.dkw_bounds)
-        except json.JSONDecodeError as exc:
-            raise ValueError(f"--dkw-bounds must be valid JSON: {exc}") from exc
-        if not isinstance(parsed_bounds, dict):
-            raise ValueError("--dkw-bounds must decode to an object")
-        args.dkw_bounds = parsed_bounds
     return args
-
-
-def _resolve_focus_points(
-    *,
-    case_kind: str,
-    config_module: str,
-    raw_focus_points: str | None,
-    allow_config_default: bool = True,
-) -> list[dict[str, object]] | None:
-    if raw_focus_points:
-        try:
-            parsed = json.loads(raw_focus_points)
-        except json.JSONDecodeError as exc:
-            raise ValueError(f"--focus_points must be valid JSON: {exc}") from exc
-        if not isinstance(parsed, list):
-            raise ValueError("--focus_points must decode to a list of objects")
-        return [dict(point) for point in parsed]
-    if not allow_config_default:
-        return None
-    return load_focus_points(case_kind=case_kind, module_name=config_module)
 
 
 def build_orchestrator_config(args: argparse.Namespace) -> OrchestratorConfig:
@@ -1067,9 +970,10 @@ def build_orchestrator_config(args: argparse.Namespace) -> OrchestratorConfig:
         reason=getattr(args, "reason", "manual_orchestrator_run"),
         tags=list(getattr(args, "tags", [])),
         config_module=getattr(args, "config_module", None)
-        or build_default_case_kind_module_name(
-            case_kind=getattr(args, "case_kind", "uturn"),
-            scenario_profile=getattr(args, "scenario_profile", None),
+        or config_module_for(
+            getattr(args, "target", "awsim"),
+            getattr(args, "case_kind", "uturn"),
+            getattr(args, "scenario_profile", None),
         ),
         container_profile=getattr(args, "container_profile", None),
         scenario_profile=getattr(args, "scenario_profile", None),
@@ -1165,8 +1069,7 @@ def run_orchestrator(
         artifact_path = Path(f"{Path(args.output).expanduser()}.summary.json").resolve()
         artifact_path.parent.mkdir(parents=True, exist_ok=True)
         summary["statistical_artifact"] = str(artifact_path)
-        if args.target == "dynamics":
-            summary["dynamics_decision_mode"] = args.dynamics_decision_mode
+        summary.update(statistical_summary_extras(args))
         artifact_path.write_text(
             json.dumps(summary, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",

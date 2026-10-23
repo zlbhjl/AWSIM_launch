@@ -151,7 +151,7 @@ def test_shared_store_result_sink_uses_case_kind_theory_adapter(
     sink = SharedStoreResultSink(SharedStore(repository))
 
     monkeypatch.setattr(
-        "runtime.cluster.result_sink.build_theory_metrics",
+        "targets.awsim.plugin.build_theory_metrics",
         lambda **kwargs: {
             "theory_zone_a": "CUTIN",
             "theory_margin_a_human": float(kwargs["values"]["cutin_vy"]),

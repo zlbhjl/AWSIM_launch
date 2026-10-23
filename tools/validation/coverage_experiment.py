@@ -59,7 +59,7 @@ from scipy.stats import beta as beta_distribution
 from contracts.execution import TestCase
 from evaluation.dkw import DKWService
 from orchestration.dkw_mode import DKWModeRunner, DKWModeState
-from orchestration.dynamics_importance_sampling import (
+from targets.dynamics.importance_sampling import (
     DynamicsImportanceSamplingRunConfig,
     DynamicsImportanceSamplingRunner,
 )

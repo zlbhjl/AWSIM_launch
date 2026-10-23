@@ -36,7 +36,7 @@ from pathlib import Path
 
 import yaml
 
-from orchestration.dynamics_importance_sampling import (
+from targets.dynamics.importance_sampling import (
     DynamicsImportanceSamplingRunConfig,
     DynamicsImportanceSamplingRunner,
 )

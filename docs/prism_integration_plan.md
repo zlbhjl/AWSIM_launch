@@ -111,7 +111,7 @@ PRISMは公式配布の `prism-4.10.1-linux64-x86.tar.gz` を使用する。Dock
 
 コンテナは CPU 専用であり、`--gpus`、NVIDIA Container Toolkit、`DISPLAY`、`privileged`、host network は使用しない。したがって、新しい GPU driver 設定や既存 Autoware container profile の変更は発生しない。
 
-`runtime/container/profiles/prism_maude.py` は、このimageを司令塔から選択するための登録である。既存AWSIM profileは変更せず、後方互換の能力既定値として `target=awsim`、`requires_gpu=true`、`requires_ros=true`、`requires_runtime_monitor=true` を持つ。PRISM profileはこれらをすべてfalseとして宣言する。cluster managerはこの能力値を参照し、PRISMではGPU preflight、GPU watchdog、`--gpus all`、ROS環境、Xvfb、AWSIM固有mount・同期を行わない。
+`targets/prism/container_profiles/prism_maude.py`（2026-10-24 に `runtime/container/profiles/` から移動）は、このimageを司令塔から選択するための登録である。既存AWSIM profileは変更せず、後方互換の能力既定値として `target=awsim`、`requires_gpu=true`、`requires_ros=true`、`requires_runtime_monitor=true` を持つ。PRISM profileはこれらをすべてfalseとして宣言する。cluster managerはこの能力値を参照し、PRISMではGPU preflight、GPU watchdog、`--gpus all`、ROS環境、Xvfb、AWSIM固有mount・同期を行わない。
 
 固定パラメータ1件を共通Ray queueへ投入するcluster経路は次の形で使用する。各workerではPRISMによる経路生成とMaude判定を同じcontainer内で行い、司令塔には共通の評価結果だけを戻す。
 
@@ -407,7 +407,7 @@ PRISM の厳密なモデル検査は sample case とは別に1回実行し、`re
 |---|---|---|---|
 | 二項信頼区間 | `failure_reached` 0/1 | horizon 内障害確率の推定 | 対応 |
 | 二項信頼区間 | `maude_violation` 0/1 | Maude 規則違反率の推定 | 対応 |
-| DKW | `steps_to_failure_capped` | 打ち切り故障stepの分布・分位点 | 対応(`2026-09-18`実装、`--mode dkw`/`dkw_fixed --target prism`、`orchestration/prism_dkw_sampling.py`) |
+| DKW | `steps_to_failure_capped` | 打ち切り故障stepの分布・分位点 | 対応(`2026-09-18`実装、`--mode dkw`/`dkw_fixed --target prism`、`orchestration/fixed_parameter_dkw.py`、旧 `prism_dkw_sampling.py`) |
 | DKW simultaneous | 上記 + `degraded_visit_count` | 複数指標の同時評価 | 事後解析のみ(ライブ実行は単一指標のみ) |
 | SPRT | `c_failure` 0/1 (任意の二値metric) | H0/H1の逐次仮説検定(Wald 1945 / Younes 2006) | 対応(`2026-09-17`実装、`evaluation/sprt.py`) |
 | GP 境界推定 | 入力定数 -> `failure_reached` | パラメータ空間の危険境界 | 実装しない(`2026-09-17`決定) |

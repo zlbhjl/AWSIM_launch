@@ -5,7 +5,7 @@ import pandas as pd
 from contracts.statistics import StatisticalReport
 from orchestration.dkw_mode import DKWModeRunner
 from orchestration.fixed_parameter_sampling import FixedParameterSamplingStrategyConfig
-from orchestration.prism_dkw_sampling import (
+from orchestration.fixed_parameter_dkw import (
     PrismDkwSamplingStrategy,
     _RecordingDKWService,
 )
@@ -60,6 +60,16 @@ class FakeDKWService:
         )
 
 
+def _prism_exact_settings() -> dict[str, object]:
+    from targets.prism.plugin import PLUGIN
+
+    return {
+        "exact_probability_columns": PLUGIN.exact_probability_columns,
+        "exact_probability_metric": PLUGIN.exact_probability_metric,
+        "exact_model_check_failure_reason": PLUGIN.exact_model_check_failure_reason,
+    }
+
+
 def _config(**overrides: object) -> FixedParameterSamplingStrategyConfig:
     values: dict[str, object] = {
         "target": "prism",
@@ -68,6 +78,8 @@ def _config(**overrides: object) -> FixedParameterSamplingStrategyConfig:
         "max_samples": 100,
         "experiment_id": "dkw-batch",
         "run_model_check_once": False,
+        # The exact model check of PRISM, as the orchestrator passes it from the plugin.
+        **_prism_exact_settings(),
     }
     values.update(overrides)
     return FixedParameterSamplingStrategyConfig(**values)

@@ -38,6 +38,20 @@ STREAMS = {"input": 0, "mixture_choice": 1, "innovation": 2}
 PAIRINGS = ("independent", "paired")
 
 
+def legacy_sample_seed(seed: int | None, sample_index: int) -> int | None:
+    """Seed policy 1 of the fixed importance-sampling runners.
+
+    Each outer seed owns a disjoint block ``seed * 1_000_000 + index``; the
+    ordinary and importance runs of one outer seed share it (common random
+    numbers). None stays None (the caller decides what an unseeded run means).
+    """
+    if seed is None:
+        return None
+    if sample_index < 1:
+        raise ValueError("sample_index must be positive")
+    return int(seed) * 1_000_000 + int(sample_index)
+
+
 def new_root_entropy() -> int:
     """Fresh 128-bit entropy for an experiment root; record it before sampling."""
     return int(np.random.SeedSequence().entropy)
@@ -86,6 +100,7 @@ __all__ = [
     "SDE_NOISE_STREAM",
     "STREAMS",
     "derive_seed",
+    "legacy_sample_seed",
     "new_root_entropy",
     "stream_seed",
 ]

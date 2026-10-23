@@ -50,13 +50,39 @@ python3 run_orchestrator_v2.py --target bernoulli \
 要りません。`tests/unit/architecture/test_add_target_without_shared_changes.py` は、テストの中で一時的な対象 `coin` を
 `targets/` に置き、共通部分を変えずに CLI から統計モードを最後まで実行できることを確かめています。
 
-それ以外の入力の引き方を使う対象では、現在は共通部分にも修正が必要です。対象ごとの処理を `plugin.py` に移していく予定です。
+それ以外の種類の対象も、`targets/<name>/` だけで追加できます。plugin に任意の属性・メソッドを持たせると、共通部分が
+それを呼びます（`getattr` で読むので、要らないものは書かなくてよい）。同じテストファイルが、一時的な対象を `targets/` に置き、
+共通部分を変えずに動くことを種類ごとに確かめています。
 
-| 対象の種類 | 共通部分に残っている対象ごとの処理 |
-|---|---|
-| AWSIM 型 (GP による探索、replay) | `orchestration/orchestrator.py` の `_build_strategy`、`orchestration/strategy.py` の 1 件実行の入力、`runtime/cluster/result_sink.py` の理論値の列 |
-| PRISM 型 (固定パラメータのくり返し、厳密なモデル検査) | `orchestration/orchestrator.py` の `_build_strategy` と `_resolve_target_total` |
-| 対象専用の CLI オプションと検証 | `apps/cli/orchestrator_main.py`, `apps/cli/worker_main.py` (例: `--prism-*`、`--dynamics-*`) |
+| 対象の種類 | plugin に置くもの | 例 |
+|---|---|---|
+| 自前の探索戦略を持つ (AWSIM 型: GP による探索、replay) | `strategies`（名前 → `StrategySpec`: 組み立て、自己終了か、`--stopping-rule` での置き換え先、待つ件数）と `select_strategy` | `targets/awsim/strategies/`、テストの対象 `walk` |
+| 固定パラメータのくり返し (PRISM 型) | `select_strategy` で共通の `fixed_parameter_sampling` / `fixed_parameter_dkw` を選ぶ。厳密なモデル検査は `run_model_check_once`、`exact_probability_columns`、`exact_probability_metric`、`exact_model_check_failure_reason` | `targets/prism/plugin.py`、テストの対象 `dice` |
+| クラスターのコンテナで動かす | `targets/<name>/container_profiles/<profile>.py`（`CONTAINER_LAUNCH_PROFILE`）。自動で見つかり、`--container-profile` の選択肢に加わる。必須にするなら `requires_container_profile = True` | `targets/awsim/container_profiles/`、テストの profile `walk_cpu` |
+| CLI の検査と既定値 | `normalize_cli_args`、`validate_orchestrator_args`、`exclusive_options`（その対象だけが受け付けるオプション）、`config_module_for`、`scenario_profiles` | `targets/awsim/cli.py` |
+| 統計の実行の要約に項目を足す | `statistical_summary_extras(args)`（返した dict を要約に加える） | dynamics の `dynamics_decision_mode` |
+| 保存した結果を単独で解釈し直す（`run_result_interpreter.py`） | `build_result_interpreter(case_kind=, config_module=)`（`interpret_path` を持つ解釈器を返す）。持つ対象だけが `--target` の選択肢に加わる | `targets/awsim/plugin.py`、`targets/bbsl/plugin.py` |
+| 実行・保存の細部 | `direct_case_input`（`--param` の 1 件の入力）、`derived_input_columns`（保存時に足す列）、`requires_gpu_health_check`、`task_payload_meta_keys` | `targets/awsim/plugin.py` |
+
+共通部分に残る対象ごとの部分は、**CLI オプションの定義**だけです。新しい対象が専用のオプションを持つときは、その定義を
+`apps/cli/orchestrator_main.py` / `worker_main.py` に足します（検査と既定値は plugin に置きます）。
+
+### 重点サンプリングに対応する
+
+固定 P・固定 Q の重点サンプリングは、`targets/<name>/` だけで対応できます。plugin に属性 `importance_sampling` を持たせ、
+`add_arguments(parser)`（対象専用のオプション）と `run(args)`（実験の実行）を持つオブジェクトを返します
+（`contracts/importance_sampling_plugin.py`）。共通の CLI `python3 -m apps.cli.importance_main` が、プランの `target:` から
+plugin を選び、オプションを足して `run` を呼びます。実行・保存・比較・完了の監査は
+`orchestration/fixed_importance_sampling.py` の関数をそのまま使えます。例は `targets/dynamics/importance_sampling.py` と、
+アーキテクチャのテストの一時的な対象 `coin` です（`targets/coin/` に置いたファイルだけで共通 CLI から実行できることを確かめています）。
+
+### dynamics にモデルを足す
+
+`targets/dynamics/models/<name>.py` に `HybridSystem` と adapter（`resolve`、`interpret` など）を置き、
+`targets/dynamics/models/registry.py` の `_adapters` に 1 行加えます。共通の SDE 実行器、統計モード（`--case-kind <name>` または
+`--param model_id=<name>`）、重点サンプリング（`dynamics_schema_version: 2` のプラン）がそのまま使えます。統計モードの既定は、
+入力を引かずにノイズだけを変え（標本ごとの `sde_seed`）、指標はモデルの `c_event` と連続値です。変えたいときは adapter に
+`statistical_defaults()` を定義します。テストでは一時的なモデルを登録して、統計モードを最後まで実行しています。
 
 ## 3. 判定器を追加する
 
@@ -143,14 +169,40 @@ python3 run_orchestrator_v2.py --target bernoulli \
 No change to the shared code is needed. `tests/unit/architecture/test_add_target_without_shared_changes.py` places a throwaway target
 `coin` under `targets/` within the test and runs a statistical mode end to end from the CLI without changing any shared code.
 
-Targets that draw inputs in other ways currently still need changes in the shared code. The target-specific handling is planned to
-move into `plugin.py`.
+Targets of the other kinds are added under `targets/<name>/` as well. The shared code calls optional plugin attributes and methods
+(read with `getattr`, so only the ones a target needs have to exist). The same test file places a throwaway target of each kind
+under `targets/` and checks that it runs without changing the shared code.
 
-| Kind of target | Target-specific handling remaining in the shared code |
-|---|---|
-| AWSIM-like (GP exploration, replay) | `_build_strategy` in `orchestration/orchestrator.py`, the single-case input in `orchestration/strategy.py`, the theory columns in `runtime/cluster/result_sink.py` |
-| PRISM-like (repeated fixed parameters, exact model checking) | `_build_strategy` and `_resolve_target_total` in `orchestration/orchestrator.py` |
-| Target-specific CLI options and validation | `apps/cli/orchestrator_main.py`, `apps/cli/worker_main.py` (for example, `--prism-*`, `--dynamics-*`) |
+| Kind of target | What the plugin provides | Example |
+|---|---|---|
+| Its own exploration strategy (AWSIM-like: GP exploration, replay) | `strategies` (name → `StrategySpec`: builder, self-terminating, replacement under `--stopping-rule`, cases to wait for) and `select_strategy` | `targets/awsim/strategies/`, the test target `walk` |
+| Repeated fixed parameters (PRISM-like) | `select_strategy` picking the shared `fixed_parameter_sampling` / `fixed_parameter_dkw`; the exact model check through `run_model_check_once`, `exact_probability_columns`, `exact_probability_metric`, `exact_model_check_failure_reason` | `targets/prism/plugin.py`, the test target `dice` |
+| Running in cluster containers | `targets/<name>/container_profiles/<profile>.py` (`CONTAINER_LAUNCH_PROFILE`), found automatically and added to the choices of `--container-profile`; `requires_container_profile = True` makes one mandatory | `targets/awsim/container_profiles/`, the test profile `walk_cpu` |
+| CLI checks and defaults | `normalize_cli_args`, `validate_orchestrator_args`, `exclusive_options` (options only this target accepts), `config_module_for`, `scenario_profiles` | `targets/awsim/cli.py` |
+| Adding entries to the summary of a statistical run | `statistical_summary_extras(args)` (the returned dict is added to the summary) | dynamics' `dynamics_decision_mode` |
+| Re-interpreting a saved result on its own (`run_result_interpreter.py`) | `build_result_interpreter(case_kind=, config_module=)` (returns an interpreter with `interpret_path`); only targets that have it are choices of `--target` | `targets/awsim/plugin.py`, `targets/bbsl/plugin.py` |
+| Execution and storage details | `direct_case_input` (the input of one `--param` case), `derived_input_columns` (columns added when storing), `requires_gpu_health_check`, `task_payload_meta_keys` | `targets/awsim/plugin.py` |
+
+The only target-specific part left in shared code is **the definition of CLI options**. A new target with its own options adds
+their definitions to `apps/cli/orchestrator_main.py` / `worker_main.py` (checks and defaults go in the plugin).
+
+### Supporting importance sampling
+
+Fixed-P/fixed-Q importance sampling needs code only under `targets/<name>/`. Give the plugin an attribute `importance_sampling`
+that returns an object with `add_arguments(parser)` (the target's options) and `run(args)` (the experiment)
+(`contracts/importance_sampling_plugin.py`). The generic CLI `python3 -m apps.cli.importance_main` selects the plugin from the plan's
+`target:`, adds its options and calls `run`. The functions in `orchestration/fixed_importance_sampling.py` do the running, storage,
+comparison and completion audit. See `targets/dynamics/importance_sampling.py` and the throwaway target `coin` of the architecture
+test (files placed only in `targets/coin/` run through the generic CLI).
+
+### Adding a dynamics model
+
+Put a `HybridSystem` and an adapter (`resolve`, `interpret`, ...) in `targets/dynamics/models/<name>.py` and add one line to
+`_adapters` in `targets/dynamics/models/registry.py`. The shared SDE runner, the statistical modes (`--case-kind <name>` or
+`--param model_id=<name>`) and importance sampling (a `dynamics_schema_version: 2` plan) then work unchanged. In the statistical
+modes the defaults draw no inputs and vary only the noise (a per-sample `sde_seed`), with the model's `c_event` and continuous metric;
+define `statistical_defaults()` on the adapter to change them. A test registers a throwaway model and runs a statistical mode end to
+end.
 
 ## 3. Adding a judge
 

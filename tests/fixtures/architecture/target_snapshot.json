@@ -959,7 +959,7 @@
           ]
         }
       },
-      "strategy": "orchestration.strategy.ActiveLearningStrategist",
+      "strategy": "targets.awsim.strategies.active_learning.ActiveLearningStrategist",
       "target_total": 10
     },
     "awsim:boundary_gap": {
@@ -1136,7 +1136,7 @@
           ]
         }
       },
-      "strategy": "orchestration.strategy.ActiveLearningStrategist",
+      "strategy": "targets.awsim.strategies.active_learning.ActiveLearningStrategist",
       "target_total": null
     },
     "awsim:dkw": {
@@ -1313,7 +1313,7 @@
           ]
         }
       },
-      "strategy": "orchestration.strategy.ActiveLearningStrategist",
+      "strategy": "targets.awsim.strategies.active_learning.ActiveLearningStrategist",
       "target_total": null
     },
     "awsim:dkw_fixed": {
@@ -1490,7 +1490,7 @@
           ]
         }
       },
-      "strategy": "orchestration.strategy.ActiveLearningStrategist",
+      "strategy": "targets.awsim.strategies.active_learning.ActiveLearningStrategist",
       "target_total": 10
     },
     "awsim:ebstop": {
@@ -1667,7 +1667,7 @@
           ]
         }
       },
-      "strategy": "orchestration.strategy.ActiveLearningStrategist",
+      "strategy": "targets.awsim.strategies.active_learning.ActiveLearningStrategist",
       "target_total": 10
     },
     "awsim:explore": {
@@ -1844,7 +1844,7 @@
           ]
         }
       },
-      "strategy": "orchestration.strategy.ActiveLearningStrategist",
+      "strategy": "targets.awsim.strategies.active_learning.ActiveLearningStrategist",
       "target_total": 10
     },
     "awsim:focus": {
@@ -2021,7 +2021,7 @@
           ]
         }
       },
-      "strategy": "orchestration.strategy.ActiveLearningStrategist",
+      "strategy": "targets.awsim.strategies.active_learning.ActiveLearningStrategist",
       "target_total": 10
     },
     "awsim:jama_edge": {
@@ -2198,7 +2198,7 @@
           ]
         }
       },
-      "strategy": "orchestration.strategy.ActiveLearningStrategist",
+      "strategy": "targets.awsim.strategies.active_learning.ActiveLearningStrategist",
       "target_total": 10
     },
     "awsim:margin": {
@@ -2375,7 +2375,7 @@
           ]
         }
       },
-      "strategy": "orchestration.strategy.ActiveLearningStrategist",
+      "strategy": "targets.awsim.strategies.active_learning.ActiveLearningStrategist",
       "target_total": 10
     },
     "awsim:replay": {
@@ -2419,7 +2419,7 @@
         "eligible_count": 2
       },
       "request": null,
-      "strategy": "orchestration.replay.ReplayCsvStrategy",
+      "strategy": "targets.awsim.strategies.replay.ReplayCsvStrategy",
       "strategy_config": {
         "case_kind": "uturn",
         "completed_source_loop_nums": [],
@@ -2618,7 +2618,7 @@
           ]
         }
       },
-      "strategy": "orchestration.strategy.ActiveLearningStrategist",
+      "strategy": "targets.awsim.strategies.active_learning.ActiveLearningStrategist",
       "target_total": 10
     },
     "awsim:ttc_edge": {
@@ -2795,7 +2795,7 @@
           ]
         }
       },
-      "strategy": "orchestration.strategy.ActiveLearningStrategist",
+      "strategy": "targets.awsim.strategies.active_learning.ActiveLearningStrategist",
       "target_total": 10
     },
     "awsim:verify_consistency": {
@@ -2972,7 +2972,7 @@
           ]
         }
       },
-      "strategy": "orchestration.strategy.ActiveLearningStrategist",
+      "strategy": "targets.awsim.strategies.active_learning.ActiveLearningStrategist",
       "target_total": null
     },
     "awsim:worst_ttc": {
@@ -3149,7 +3149,7 @@
           ]
         }
       },
-      "strategy": "orchestration.strategy.ActiveLearningStrategist",
+      "strategy": "targets.awsim.strategies.active_learning.ActiveLearningStrategist",
       "target_total": 10
     },
     "bernoulli:binomial_ci": {
@@ -3171,6 +3171,9 @@
       "strategy_config": {
         "case_id_prefix": null,
         "case_kind": "uturn",
+        "exact_model_check_failure_reason": "exact model check failed",
+        "exact_probability_columns": {},
+        "exact_probability_metric": null,
         "input_distribution": {
           "u_failure": {
             "distribution": "uniform",
@@ -3213,6 +3216,9 @@
       "strategy_config": {
         "case_id_prefix": null,
         "case_kind": "uturn",
+        "exact_model_check_failure_reason": "exact model check failed",
+        "exact_probability_columns": {},
+        "exact_probability_metric": null,
         "input_distribution": {
           "u_failure": {
             "distribution": "uniform",
@@ -3255,6 +3261,9 @@
       "strategy_config": {
         "case_id_prefix": null,
         "case_kind": "uturn",
+        "exact_model_check_failure_reason": "exact model check failed",
+        "exact_probability_columns": {},
+        "exact_probability_metric": null,
         "input_distribution": {
           "u_failure": {
             "distribution": "uniform",
@@ -3303,6 +3312,9 @@
       "strategy_config": {
         "case_id_prefix": null,
         "case_kind": "uturn",
+        "exact_model_check_failure_reason": "exact model check failed",
+        "exact_probability_columns": {},
+        "exact_probability_metric": null,
         "input_distribution": {
           "u_failure": {
             "distribution": "uniform",
@@ -3350,6 +3362,9 @@
       "strategy_config": {
         "case_id_prefix": null,
         "case_kind": "uturn",
+        "exact_model_check_failure_reason": "exact model check failed",
+        "exact_probability_columns": {},
+        "exact_probability_metric": null,
         "input_distribution": {
           "u_failure": {
             "distribution": "uniform",
@@ -3396,6 +3411,9 @@
       "strategy_config": {
         "case_id_prefix": null,
         "case_kind": "uturn",
+        "exact_model_check_failure_reason": "exact model check failed",
+        "exact_probability_columns": {},
+        "exact_probability_metric": null,
         "input_distribution": {
           "dx0": {
             "distribution": "uniform",
@@ -3438,6 +3456,9 @@
       "strategy_config": {
         "case_id_prefix": null,
         "case_kind": "uturn",
+        "exact_model_check_failure_reason": "exact model check failed",
+        "exact_probability_columns": {},
+        "exact_probability_metric": null,
         "input_distribution": {
           "dx0": {
             "distribution": "uniform",
@@ -3480,6 +3501,9 @@
       "strategy_config": {
         "case_id_prefix": null,
         "case_kind": "uturn",
+        "exact_model_check_failure_reason": "exact model check failed",
+        "exact_probability_columns": {},
+        "exact_probability_metric": null,
         "input_distribution": {
           "dx0": {
             "distribution": "uniform",
@@ -3528,6 +3552,9 @@
       "strategy_config": {
         "case_id_prefix": null,
         "case_kind": "uturn",
+        "exact_model_check_failure_reason": "exact model check failed",
+        "exact_probability_columns": {},
+        "exact_probability_metric": null,
         "input_distribution": {
           "dx0": {
             "distribution": "uniform",
@@ -3575,6 +3602,9 @@
       "strategy_config": {
         "case_id_prefix": null,
         "case_kind": "uturn",
+        "exact_model_check_failure_reason": "exact model check failed",
+        "exact_probability_columns": {},
+        "exact_probability_metric": null,
         "input_distribution": {
           "dx0": {
             "distribution": "uniform",
@@ -3621,6 +3651,12 @@
       "strategy_config": {
         "case_id_prefix": null,
         "case_kind": "uturn",
+        "exact_model_check_failure_reason": "PRISM exact model check failed",
+        "exact_probability_columns": {
+          "bounded_failure_probability": "prism_bounded_failure_probability",
+          "eventual_failure_probability": "prism_eventual_failure_probability"
+        },
+        "exact_probability_metric": "c_failure",
         "max_samples": 10,
         "params": {
           "steps": 20
@@ -3634,10 +3670,16 @@
     },
     "prism:dkw": {
       "request": null,
-      "strategy": "orchestration.prism_dkw_sampling.PrismDkwSamplingStrategy",
+      "strategy": "orchestration.fixed_parameter_dkw.FixedParameterDkwStrategy",
       "strategy_config": {
         "case_id_prefix": null,
         "case_kind": "uturn",
+        "exact_model_check_failure_reason": "PRISM exact model check failed",
+        "exact_probability_columns": {
+          "bounded_failure_probability": "prism_bounded_failure_probability",
+          "eventual_failure_probability": "prism_eventual_failure_probability"
+        },
+        "exact_probability_metric": "c_failure",
         "max_samples": 10,
         "params": {
           "steps": 20
@@ -3651,10 +3693,16 @@
     },
     "prism:dkw_fixed": {
       "request": null,
-      "strategy": "orchestration.prism_dkw_sampling.PrismDkwSamplingStrategy",
+      "strategy": "orchestration.fixed_parameter_dkw.FixedParameterDkwStrategy",
       "strategy_config": {
         "case_id_prefix": null,
         "case_kind": "uturn",
+        "exact_model_check_failure_reason": "PRISM exact model check failed",
+        "exact_probability_columns": {
+          "bounded_failure_probability": "prism_bounded_failure_probability",
+          "eventual_failure_probability": "prism_eventual_failure_probability"
+        },
+        "exact_probability_metric": "c_failure",
         "max_samples": 10,
         "params": {
           "steps": 20
@@ -3687,6 +3735,12 @@
       "strategy_config": {
         "case_id_prefix": null,
         "case_kind": "uturn",
+        "exact_model_check_failure_reason": "PRISM exact model check failed",
+        "exact_probability_columns": {
+          "bounded_failure_probability": "prism_bounded_failure_probability",
+          "eventual_failure_probability": "prism_eventual_failure_probability"
+        },
+        "exact_probability_metric": "c_failure",
         "max_samples": 10,
         "params": {
           "steps": 20
@@ -3737,6 +3791,12 @@
       "strategy_config": {
         "case_id_prefix": null,
         "case_kind": "uturn",
+        "exact_model_check_failure_reason": "PRISM exact model check failed",
+        "exact_probability_columns": {
+          "bounded_failure_probability": "prism_bounded_failure_probability",
+          "eventual_failure_probability": "prism_eventual_failure_probability"
+        },
+        "exact_probability_metric": "c_failure",
         "max_samples": 10,
         "params": {
           "steps": 20

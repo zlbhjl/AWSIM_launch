@@ -152,7 +152,7 @@ def test_e11_comparison_rejects_records_with_different_target_fingerprints() -> 
 
 
 def test_e12_missing_outer_seed_does_not_reuse_one_sde_seed(tmp_path: Path) -> None:
-    from orchestration.dynamics_importance_sampling import (
+    from targets.dynamics.importance_sampling import (
         DynamicsImportanceSamplingRunConfig,
         DynamicsImportanceSamplingRunner,
     )

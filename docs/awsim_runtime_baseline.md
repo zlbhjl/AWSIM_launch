@@ -17,7 +17,7 @@ PRISM target の追加で既存 AWSIM worker の実行条件が変わらない�
 | `autoware190_ekfdiagfix` | `autoware_internal:1.9.0-ekfdiagfix` | bridge | no | root（entrypointで切替） | host `aw-cheaker` を同一worker containerへmount |
 
 全profileのcluster worker起動では、現行どおり `--gpus all --shm-size=32gb` を使用する。
-Autoware 1.7.1 / 1.8.0 / 1.9.0系のmount詳細は `runtime/container/profiles/` を正本とする。
+Autoware 1.7.1 / 1.8.0 / 1.9.0系のmount詳細は `targets/awsim/container_profiles/` を正本とする。
 `autoware190*` は `autoware180_ekfdiagfix` と network / privileged / user / mount が同一で、
 違いは image、`autoware190_runtime`、DDS env (`CYCLONEDDS_URI` / `RMW_IMPLEMENTATION`) の明示だけである。
 

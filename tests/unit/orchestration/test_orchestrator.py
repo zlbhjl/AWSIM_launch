@@ -5,6 +5,7 @@ import pytest
 from contracts.evaluation import EvaluationRecord, ensure_evaluation_meta
 from contracts.execution import RunStatus, TestCase
 import orchestration.orchestrator as orchestrator_module
+import targets.awsim.strategies.builders as awsim_builders
 from orchestration.final_report import build_final_report
 from orchestration.orchestrator import (
     Orchestrator,
@@ -417,8 +418,8 @@ def test_orchestrator_builds_active_strategy_with_runtime_dataset_paths(
             captured["config"] = config
             captured["kwargs"] = kwargs
 
-    monkeypatch.setattr(orchestrator_module, "ActiveLearningStrategist", FakeStrategist)
-    monkeypatch.setattr(orchestrator_module.importlib, "import_module", lambda name: object())
+    monkeypatch.setattr(awsim_builders, "ActiveLearningStrategist", FakeStrategist)
+    monkeypatch.setattr(awsim_builders.importlib, "import_module", lambda name: object())
 
     dataset_csv = tmp_path / "custom_dataset.csv"
     orchestrator = Orchestrator()
@@ -665,8 +666,8 @@ def test_orchestrator_builds_active_strategy_with_legacy_cache_policy(
         def __init__(self, scenario_name, config, **kwargs):
             captured["kwargs"] = kwargs
 
-    monkeypatch.setattr(orchestrator_module, "ActiveLearningStrategist", FakeStrategist)
-    monkeypatch.setattr(orchestrator_module.importlib, "import_module", lambda name: object())
+    monkeypatch.setattr(awsim_builders, "ActiveLearningStrategist", FakeStrategist)
+    monkeypatch.setattr(awsim_builders.importlib, "import_module", lambda name: object())
 
     orchestrator = Orchestrator()
     strategy = orchestrator._build_strategy(
@@ -685,7 +686,7 @@ def test_orchestrator_dkw_and_verify_consistency_do_not_use_repeat_count_target_
     monkeypatch,
 ) -> None:
     monkeypatch.setattr(
-        orchestrator_module.importlib,
+        awsim_builders.importlib,
         "import_module",
         lambda _name: type("Cfg", (), {"REPEAT_COUNT": 1000})(),
     )

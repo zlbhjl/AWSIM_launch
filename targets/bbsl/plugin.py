@@ -18,5 +18,10 @@ class BBSLPlugin:
         del args
         return TargetComponents(backend=BBSLBackend(), result_interpreter=ResultInterpreter())
 
+    def build_result_interpreter(self, *, case_kind: str, config_module: str | None) -> ResultInterpreter:
+        """The interpreter of a saved raw result (apps/cli/result_interpreter_main.py)."""
+        del case_kind, config_module
+        return ResultInterpreter()
+
 
 PLUGIN = BBSLPlugin()

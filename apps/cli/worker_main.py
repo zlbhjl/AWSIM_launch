@@ -29,19 +29,21 @@ from runtime.cluster.result_sink import (
     SharedStoreResultSink,
 )
 from runtime.repository.local_history import LocalHistory
-from runtime.container.profile import SUPPORTED_CONTAINER_PROFILES
+from runtime.container.profile_registry import list_container_profiles
 from runtime.container.gpu_health import probe_nvidia_smi
+from apps.cli.target_hooks import (
+    config_module_for,
+    normalize_for_target,
+    reject_foreign_options,
+    scenario_profile_choices,
+)
+from orchestration.strategy import direct_case_input
 from targets.registry import (
     apply_target_defaults,
     build_target_components,
     default_config_module,
+    get_target_plugin,
     list_target_names,
-)
-from targets.awsim.case_kinds import (
-    SUPPORTED_SCENARIO_PROFILES,
-    build_default_case_kind_module_name,
-    load_case_definition,
-    load_focus_points,
 )
 
 
@@ -312,13 +314,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--container-profile",
-        choices=SUPPORTED_CONTAINER_PROFILES,
+        choices=list_container_profiles(),
         default=None,
         help="Optional named container runtime profile (for example: legacy, autoware171, autoware180, autoware190).",
     )
     parser.add_argument(
         "--scenario-profile",
-        choices=SUPPORTED_SCENARIO_PROFILES,
+        choices=scenario_profile_choices(),
         default=None,
         help="Optional named scenario spec profile (for example: legacy, autoware171).",
     )
@@ -337,10 +339,10 @@ def validate_args(args: argparse.Namespace) -> None:
         )
     if fixture_mode and simulation_mode:
         raise ValueError("Do not mix --fixture with --param key=value")
-    if args.target != "awsim" and args.headless:
-        raise ValueError("--headless is only supported for target=awsim")
-    if args.target == "dynamics" and args.case_kind != "uturn":
-        raise ValueError("target=dynamics currently supports only --case-kind uturn")
+    reject_foreign_options(args)
+    validate_target = getattr(get_target_plugin(args.target), "validate_worker_args", None)
+    if validate_target is not None:
+        validate_target(case_kind=args.case_kind, params=parse_param_assignments(args.params or []))
     queue_connect_timeout = getattr(args, "queue_connect_timeout", 30.0)
     if queue_connect_timeout is not None and float(queue_connect_timeout) < 0.0:
         raise ValueError("--queue-connect-timeout must be non-negative")
@@ -376,17 +378,6 @@ def validate_args(args: argparse.Namespace) -> None:
     refresh_interval = getattr(args, "refresh_interval", None)
     if refresh_interval is not None and refresh_interval <= 0:
         raise ValueError("--refresh-interval must be a positive integer")
-    if args.target != "awsim" and any(
-        [
-            getattr(args, "scenario_type", None) is not None,
-            getattr(args, "simulation_output_dir", None) is not None,
-            getattr(args, "expected_trace_path", None) is not None,
-            getattr(args, "local_loop_num", None) is not None,
-            getattr(args, "legacy_type", None) is not None,
-            getattr(args, "focus_points", None) is not None,
-        ]
-    ):
-        raise ValueError("AWSIM-only direct execution options are not supported for non-awsim targets")
 
 
 def normalize_args(
@@ -396,72 +387,10 @@ def normalize_args(
 ) -> argparse.Namespace:
     apply_target_defaults(args)
     raw_argv = list(argv) if argv is not None else []
-    explicit_case_kind = "--case-kind" in raw_argv
-    explicit_config_module = "--config-module" in raw_argv
-    explicit_scenario_type = "--scenario-type" in raw_argv
-    explicit_focus_points = "--focus_points" in raw_argv
-
-    if args.target != "awsim":
-        if args.config_module is None:
-            args.config_module = default_config_module(args.target, args.case_kind)
-        return args
-
-    if (
-        getattr(args, "scenario_profile", None) is None
-        and getattr(args, "container_profile", None) in SUPPORTED_SCENARIO_PROFILES
-    ):
-        args.scenario_profile = args.container_profile
-
-    if args.legacy_type and not explicit_case_kind:
-        args.case_kind = args.legacy_type
-
-    if args.config_module is None or not explicit_config_module:
-        args.config_module = build_default_case_kind_module_name(
-            case_kind=args.case_kind,
-            scenario_profile=getattr(args, "scenario_profile", None),
-        )
-
-    case_definition = load_case_definition(
-        case_kind=args.case_kind,
-        module_name=args.config_module,
-    )
-    if not explicit_scenario_type:
-        args.scenario_type = str(case_definition.get("scenario_type", args.case_kind))
-
-    if args.mode == "focus":
-        args.focus_points = _resolve_focus_points(
-            case_kind=args.case_kind,
-            config_module=args.config_module,
-            raw_focus_points=args.focus_points if explicit_focus_points else None,
-        )
-    else:
-        args.focus_points = _resolve_focus_points(
-            case_kind=args.case_kind,
-            config_module=args.config_module,
-            raw_focus_points=args.focus_points if explicit_focus_points else None,
-            allow_config_default=False,
-        )
+    normalize_for_target(args, raw_argv, role="worker")
+    if args.config_module is None:
+        args.config_module = default_config_module(args.target, args.case_kind)
     return args
-
-
-def _resolve_focus_points(
-    *,
-    case_kind: str,
-    config_module: str,
-    raw_focus_points: str | None,
-    allow_config_default: bool = True,
-) -> list[dict[str, object]] | None:
-    if raw_focus_points:
-        try:
-            parsed = json.loads(raw_focus_points)
-        except json.JSONDecodeError as exc:
-            raise ValueError(f"--focus_points must be valid JSON: {exc}") from exc
-        if not isinstance(parsed, list):
-            raise ValueError("--focus_points must decode to a list of objects")
-        return [dict(point) for point in parsed]
-    if not allow_config_default:
-        return None
-    return load_focus_points(case_kind=case_kind, module_name=config_module)
 
 
 def build_test_case(args: argparse.Namespace) -> TestCase | None:
@@ -492,10 +421,7 @@ def build_test_case(args: argparse.Namespace) -> TestCase | None:
             "config_module": getattr(
                 args,
                 "config_module",
-                build_default_case_kind_module_name(
-                    case_kind=args.case_kind,
-                    scenario_profile=getattr(args, "scenario_profile", None),
-                ),
+                config_module_for(args.target, args.case_kind, getattr(args, "scenario_profile", None)),
             ),
             **(
                 {"container_profile": str(args.container_profile)}
@@ -528,23 +454,12 @@ def build_test_case(args: argparse.Namespace) -> TestCase | None:
 
 
 def build_direct_input(args: argparse.Namespace) -> dict[str, object]:
-    if args.target == "awsim":
-        return build_simulation_input(args)
-    return parse_param_assignments(args.params)
+    return direct_case_input(args.target, parse_param_assignments(args.params), args, role="worker")
 
 
 def build_simulation_input(args: argparse.Namespace) -> dict[str, object]:
-    payload = parse_param_assignments(args.params)
-    scenario_type = args.scenario_type or args.case_kind
-    payload["scenario_type"] = scenario_type
-    payload["ext_mode"] = getattr(args, "ext_mode", "cvm")
-    if args.simulation_output_dir:
-        payload["output_dir"] = str(Path(args.simulation_output_dir).expanduser().resolve())
-    if args.expected_trace_path:
-        payload["expected_trace_path"] = str(Path(args.expected_trace_path).expanduser().resolve())
-    if args.local_loop_num is not None:
-        payload["local_loop_num"] = args.local_loop_num
-    return payload
+    """The AWSIM direct input (kept for callers; see targets/awsim/plugin.py direct_case_input)."""
+    return direct_case_input("awsim", parse_param_assignments(args.params), args, role="worker")
 
 
 def parse_param_assignments(values: Sequence[str]) -> dict[str, object]:
@@ -833,7 +748,7 @@ def run_worker_with_summary(
                 )
             )
             if task_source_impl is not None
-            and args.target == "awsim"
+            and bool(getattr(get_target_plugin(args.target), "requires_gpu_health_check", False))
             and bool(getattr(args, "worker_gpu_health_check", False))
             else None
         ),

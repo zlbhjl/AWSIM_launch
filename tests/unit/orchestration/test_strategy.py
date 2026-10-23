@@ -5,16 +5,16 @@ import numpy as np
 import pandas as pd
 import pytest
 
-import orchestration.strategy as strategy_module
+import targets.awsim.strategies.active_learning as strategy_module
 from contracts.statistics import StatisticalReport
 from orchestration.strategy import (
-    ActiveLearningStrategist,
     FixedCaseStrategy,
     FixedCaseStrategyConfig,
     ParameterCaseStrategy,
     ParameterCaseStrategyConfig,
 )
-from orchestration.replay import ReplayCsvStrategy, ReplayCsvStrategyConfig
+from targets.awsim.strategies.active_learning import ActiveLearningStrategist
+from targets.awsim.strategies.replay import ReplayCsvStrategy, ReplayCsvStrategyConfig
 from runtime.repository.consistency_classification import (
     ConsistencyClassificationRepository,
 )

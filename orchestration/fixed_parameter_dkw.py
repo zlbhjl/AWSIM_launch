@@ -42,16 +42,15 @@ class _RecordingDKWService:
         return summary
 
 
-class PrismDkwSamplingStrategy(FixedParameterSamplingStrategy):
-    """Fixed-point DKW sampling for target=prism.
+class FixedParameterDkwStrategy(FixedParameterSamplingStrategy):
+    """Fixed-point DKW sampling for targets that repeat one parameter set (e.g. PRISM).
 
     Reuses DKWModeRunner (the same stage-based alpha-spending engine AWSIM's
     --mode dkw/dkw_fixed already use) by always handing it the same fixed
     parameter point instead of a randomly sampled one. This subclasses
-    FixedParameterSamplingStrategy (rather than composing it) purely so the
-    orchestrator's dispatch loop, which special-cases
-    `isinstance(strategy, FixedParameterSamplingStrategy)` to allow multiple
-    tasks per tick, still applies here.
+    FixedParameterSamplingStrategy (rather than composing it) to reuse its
+    exact-model-check flow and ``issues_many_cases``, which lets the
+    orchestrator queue several tasks per tick.
     """
 
     def __init__(
@@ -83,7 +82,7 @@ class PrismDkwSamplingStrategy(FixedParameterSamplingStrategy):
                 self.waiting_for_result = True
                 return None
             if not self._capture_exact_model_check(model_check):
-                self.stop_reason = "PRISM exact model check failed"
+                self.stop_reason = self.config.exact_model_check_failure_reason
                 return None
 
         df_dataset = self._load_matching_records("sample")
@@ -145,6 +144,7 @@ class PrismDkwSamplingStrategy(FixedParameterSamplingStrategy):
             tags=list(self.config.tags),
             reason=str(payload.get("reason", "")),
             meta={
+                # Stored in datasets as provenance; kept from the previous module name.
                 "source_module": "orchestration.prism_dkw_sampling",
                 "experiment_id": self.experiment_id,
                 "sampling_signature": self.sampling_signature,
@@ -163,4 +163,7 @@ class PrismDkwSamplingStrategy(FixedParameterSamplingStrategy):
         }
 
 
-__all__ = ["PrismDkwSamplingStrategy", "_RecordingDKWService"]
+# The name before the strategy was made target-neutral.
+PrismDkwSamplingStrategy = FixedParameterDkwStrategy
+
+__all__ = ["FixedParameterDkwStrategy", "PrismDkwSamplingStrategy", "_RecordingDKWService"]

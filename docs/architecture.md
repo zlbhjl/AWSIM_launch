@@ -24,23 +24,25 @@ AWSIM_launch/
 ├── contracts/                     # target 間で共通のデータ型 (TestCase, RawRunResult, EvaluationRecord, StatisticalReport など)。
 ├── orchestration/                 # target に依存しない制御ロジック
 │   ├── orchestrator.py            # 司令塔本体。戦略に従ってケースを発行し、停止条件を判定する。
-│   ├── strategy.py                # 探索戦略 (explore / focus / boundary_gap など、GP 境界モデル)。
+│   ├── strategy_registry.py       # 戦略の選択と登録。対象の plugin が自分の戦略 (StrategySpec) を足せる。
+│   ├── strategy.py                # 共通の 1 件実行の戦略 (fixture / --param)。
 │   ├── binomial_mode.py / dkw_mode.py / sprt_mode.py / ebstop_mode.py # 統計モードごとの停止判定。
-│   ├── replay.py                  # 既存 CSV のケースを再実行する replay モード。
+│   ├── fixed_parameter_dkw.py     # 固定パラメータのくり返しでの DKW (PRISM 型の対象が使う)。
 │   ├── random_parameter_sampling.py / fixed_parameter_sampling.py # 入力サンプリング。
 │   └── worker_loop.py             # ワーカー側のループ (取得 → 実行 → 解釈 → 保存 → 完了報告)。
 ├── evaluation/                    # 統計計算 (binomial_ci, dkw, sprt, ebstop, importance_sampling, alpha_spending, gp_boundary) と FT4D サービス。
 ├── runtime/
 │   ├── cluster/                   # Ray 接続、TaskQueue / SharedStore actor、各号機の container 起動、worker watchdog、結果 sink。
 │   ├── container/                 # container 内のプロセス管理
-│   │   ├── profiles/              # container_profile 定義 (autoware171 / 180* / 190* / prism_maude など)。
+│   │   ├── profile_registry.py    # targets/*/container_profiles/ の profile を自動で見つける。
 │   │   ├── supervised_process/    # PID 1 の process supervisor。
 │   │   └── launcher.py, supervisor.py, xvfb.py, gpu_health.py など
 │   └── repository/                # dataset CSV、パラメータバッファ、SharedStore、履歴・再開用データ。
 ├── targets/                       # 検証対象ごとの実装
 │   ├── registry.py                # --target から backend / result_interpreter を組み立てる。
-│   ├── awsim/                     # AWSIM: case_kinds/, scenario_builders/, scenario_runner.py, backend.py, result_interpreter.py, theory_specs/
-│   ├── prism/                     # PRISM: モデル実行、-simpath解析、Maude判定、固定Q重点サンプリング
+│   ├── awsim/                     # AWSIM: case_kinds/, scenario_builders/, scenario_runner.py, backend.py, result_interpreter.py, theory_specs/,
+│   │                              #   strategies/ (GP 探索・replay), container_profiles/ (autoware171 / 180* / 190* / legacy), cli.py
+│   ├── prism/                     # PRISM: モデル実行、-simpath解析、Maude判定、固定Q重点サンプリング、container_profiles/ (prism_maude)
 │   ├── dynamics/                  # ODE/SDE: models/, runners/, calibrations/
 │   └── bbsl/                      # BBSL raw result の解釈と FT4D 入力化
 ├── verifiers/                     # Maude 実行境界と判定 (verifiers/maude/)、BBSL legacy 互換 adapter。
@@ -73,8 +75,9 @@ AWSIM_launch/
     `TaskQueueActor` (`runtime/cluster/ray_queue.py`) と `SharedStoreActor` (`runtime/repository/shared_store.py`) を detached actor として作ります。
     続いて `runtime/cluster/cluster_manager.py` が `redis_cluster/cluster_config.py` の各号機へ SSH し、
     コード同期・GPU preflight の後、`container_profile` に従って worker container を起動します。
-2.  **タスク生成**: `orchestration/orchestrator.py` が、モードに応じた戦略 (`orchestration/strategy.py` の探索戦略、
-    `binomial_mode.py` / `dkw_mode.py` / `sprt_mode.py` / `ebstop_mode.py`、`replay.py` など) から次のケースを決め、キューに積みます。
+2.  **タスク生成**: `orchestration/orchestrator.py` が、モードに応じた戦略 (共通の戦略、または対象の plugin が登録した
+    `targets/awsim/strategies/` の GP 探索・replay など。統計モードの停止判定は `binomial_mode.py` / `dkw_mode.py` /
+    `sprt_mode.py` / `ebstop_mode.py`) から次のケースを決め、キューに積みます。
 3.  **タスク実行**: 各 container では process supervisor が PID 1 で動き、その子 process の `run_worker_v2.py` が
     Ray Client (`ray://<master-ip>:10001`) でキューからケースを取ります。`orchestration/worker_loop.py` が
     `targets/registry.py` で選んだ target の backend (AWSIM なら `targets/awsim/backend.py`) を呼び、
@@ -128,23 +131,25 @@ AWSIM_launch/
 ├── contracts/                     # Data types shared by targets (TestCase, RawRunResult, EvaluationRecord, StatisticalReport, ...).
 ├── orchestration/                 # Target-independent control logic
 │   ├── orchestrator.py            # The orchestrator. Issues cases according to the strategy and checks stopping conditions.
-│   ├── strategy.py                # Exploration strategies (explore / focus / boundary_gap, ..., GP boundary model).
+│   ├── strategy_registry.py       # Strategy selection and registration; target plugins can add their own (StrategySpec).
+│   ├── strategy.py                # Shared single-case strategies (fixture / --param).
 │   ├── binomial_mode.py / dkw_mode.py / sprt_mode.py / ebstop_mode.py # Stopping decisions per statistical mode.
-│   ├── replay.py                  # Replay mode that re-runs the cases of an existing CSV.
+│   ├── fixed_parameter_dkw.py     # DKW over repeated fixed parameters (used by PRISM-like targets).
 │   ├── random_parameter_sampling.py / fixed_parameter_sampling.py # Input sampling.
 │   └── worker_loop.py             # The worker loop (take → run → interpret → store → report completion).
 ├── evaluation/                    # Statistics (binomial_ci, dkw, sprt, ebstop, importance_sampling, alpha_spending, gp_boundary) and the FT4D service.
 ├── runtime/
 │   ├── cluster/                   # Ray connection, TaskQueue / SharedStore actors, starting containers on each node, worker watchdog, result sink.
 │   ├── container/                 # Process management inside containers
-│   │   ├── profiles/              # container_profile definitions (autoware171 / 180* / 190* / prism_maude, ...).
+│   │   ├── profile_registry.py    # Finds the profiles in targets/*/container_profiles/.
 │   │   ├── supervised_process/    # The process supervisor that runs as PID 1.
 │   │   └── launcher.py, supervisor.py, xvfb.py, gpu_health.py, ...
 │   └── repository/                # Dataset CSV, parameter buffer, SharedStore, history and resume data.
 ├── targets/                       # Implementation per target
 │   ├── registry.py                # Builds the backend / result_interpreter from --target.
-│   ├── awsim/                     # AWSIM: case_kinds/, scenario_builders/, scenario_runner.py, backend.py, result_interpreter.py, theory_specs/
-│   ├── prism/                     # PRISM: model execution, -simpath parsing, Maude judgment, fixed-Q importance sampling
+│   ├── awsim/                     # AWSIM: case_kinds/, scenario_builders/, scenario_runner.py, backend.py, result_interpreter.py, theory_specs/,
+│   │                              #   strategies/ (GP exploration, replay), container_profiles/ (autoware171 / 180* / 190* / legacy), cli.py
+│   ├── prism/                     # PRISM: model execution, -simpath parsing, Maude judgment, fixed-Q importance sampling, container_profiles/ (prism_maude)
 │   ├── dynamics/                  # ODE/SDE: models/, runners/, calibrations/
 │   └── bbsl/                      # Interpreting BBSL raw results and converting them to FT4D input
 ├── verifiers/                     # Maude execution boundary and judgments (verifiers/maude/), legacy BBSL adapter.
@@ -177,9 +182,9 @@ The following is the v2 flow (`run_orchestrator_cluster_v2.py`).
     `TaskQueueActor` (`runtime/cluster/ray_queue.py`) and `SharedStoreActor` (`runtime/repository/shared_store.py`) as detached actors.
     Then `runtime/cluster/cluster_manager.py` connects to each node in `redis_cluster/cluster_config.py` over SSH, syncs the code,
     runs a GPU preflight check, and starts worker containers according to the `container_profile`.
-2.  **Task generation**: `orchestration/orchestrator.py` decides the next case from the strategy for the mode (exploration strategies in
-    `orchestration/strategy.py`, `binomial_mode.py` / `dkw_mode.py` / `sprt_mode.py` / `ebstop_mode.py`, `replay.py`, ...) and puts it
-    on the queue.
+2.  **Task generation**: `orchestration/orchestrator.py` decides the next case from the strategy for the mode (a shared strategy, or
+    one a target plugin registered, such as the GP exploration and replay in `targets/awsim/strategies/`; the statistical stopping is in
+    `binomial_mode.py` / `dkw_mode.py` / `sprt_mode.py` / `ebstop_mode.py`) and puts it on the queue.
 3.  **Task execution**: in each container the process supervisor runs as PID 1, and its child process `run_worker_v2.py` takes cases
     from the queue over Ray Client (`ray://<master-ip>:10001`). `orchestration/worker_loop.py` calls the backend of the target chosen by
     `targets/registry.py` (for AWSIM, `targets/awsim/backend.py`), which starts AWSIM, Autoware, the Runtime Monitor, and the scenario

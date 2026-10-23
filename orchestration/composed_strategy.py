@@ -148,6 +148,7 @@ def build_composed_fixed_parameter_strategy(
     orchestrator: "Orchestrator", config: "OrchestratorConfig"
 ) -> FixedParameterSamplingStrategy:
     from orchestration.orchestrator import (
+        _exact_model_check_settings,
         _fixed_parameter_minimum_dkw_value,
         _fixed_parameter_reason_prefix,
         _runs_model_check_once,
@@ -169,6 +170,7 @@ def build_composed_fixed_parameter_strategy(
             max_samples=int(config.max_samples), experiment_id=config.experiment_id,
             case_id_prefix=config.case_id, reason_prefix=_fixed_parameter_reason_prefix(config.target),
             tags=tuple(config.tags), run_model_check_once=_runs_model_check_once(config.target),
+            **_exact_model_check_settings(config.target),
         ),
         dataset_repository=orchestrator._build_dataset_repository(config),
         statistical_service=StoppingRuleService(rule, SampleKind.FIXED_POINT_IID),

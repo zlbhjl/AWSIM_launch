@@ -22,7 +22,7 @@ import time
 from multiprocessing import Pool
 from pathlib import Path
 
-from orchestration.dynamics_importance_sampling import (
+from targets.dynamics.importance_sampling import (
     DynamicsImportanceSamplingRunConfig,
     DynamicsImportanceSamplingRunner,
 )
