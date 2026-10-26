@@ -1,0 +1,2271 @@
+{
+  "reps": 2000,
+  "seed_base": 20261101,
+  "scenarios": [
+    {
+      "scenario": "is_final_ou_a_3sd_two_sided_q0_n1000",
+      "engine": "importance_fixed",
+      "mode": "importance_probability",
+      "description": "Fixed final plan ou_a_3sd_two_sided_q0.yaml (pilot-tuned Q), n=1000 ordinary + 1000 importance paths",
+      "reps": 2000,
+      "correct_rate": 0.943,
+      "correct_rate_ci95": [
+        0.9319224956206372,
+        0.952755033198733
+      ],
+      "nominal": 0.95,
+      "below_nominal": false,
+      "mean_sample_count": 1000.0,
+      "truth": 0.0026997960632601866,
+      "intervals": {
+        "mc_wilson": {
+          "coverage": 0.947,
+          "coverage_ci95": [
+            0.9362572070012274,
+            0.9564069564074236
+          ],
+          "below_nominal": false,
+          "missing_rate": 0.0,
+          "mean_width": 0.007239993256260531
+        },
+        "is_normal": {
+          "coverage": 0.943,
+          "coverage_ci95": [
+            0.9319224956206372,
+            0.952755033198733
+          ],
+          "below_nominal": false,
+          "missing_rate": 0.05600000000000005,
+          "mean_width": 0.005971850325281414
+        },
+        "is_hoeffding": {
+          "coverage": 1.0,
+          "coverage_ci95": [
+            0.998157260206594,
+            1.0
+          ],
+          "below_nominal": false,
+          "missing_rate": 0.0,
+          "mean_width": 0.04569444083467354
+        },
+        "is_bernstein": {
+          "coverage": 1.0,
+          "coverage_ci95": [
+            0.998157260206594,
+            1.0
+          ],
+          "below_nominal": false,
+          "missing_rate": 0.0,
+          "mean_width": 0.019473302383988103
+        }
+      },
+      "estimators": {
+        "mc": {
+          "mean": 0.0026714999999999534,
+          "bias": -2.8296063260189067e-05,
+          "std": 0.001617682353893704,
+          "rmse": 0.0016175253992429402,
+          "relative_rmse": 0.5991287346680804,
+          "no_event_rate": 0.067,
+          "missing_rate": 0.0
+        },
+        "is": {
+          "mean": 0.002747499999999958,
+          "bias": 4.770393673981321e-05,
+          "std": 0.0016269810335839202,
+          "rmse": 0.0016272736142334805,
+          "relative_rmse": 0.6027394573901399,
+          "no_event_rate": 0.056,
+          "missing_rate": 0.0
+        }
+      },
+      "mean_seconds_per_path": 0.001829383241205494
+    },
+    {
+      "scenario": "is_final_ou_a_3sd_two_sided_q1_n1000",
+      "engine": "importance_fixed",
+      "mode": "importance_probability",
+      "description": "Fixed final plan ou_a_3sd_two_sided_q1.yaml (pilot-tuned Q), n=1000 ordinary + 1000 importance paths",
+      "reps": 2000,
+      "correct_rate": 0.0,
+      "correct_rate_ci95": [
+        0.0,
+        0.0018427397934059364
+      ],
+      "nominal": 0.95,
+      "below_nominal": true,
+      "mean_sample_count": 1000.0,
+      "truth": 0.0026997960632601866,
+      "intervals": {
+        "mc_wilson": {
+          "coverage": 0.947,
+          "coverage_ci95": [
+            0.9362572070012274,
+            0.9564069564074236
+          ],
+          "below_nominal": false,
+          "missing_rate": 0.0,
+          "mean_width": 0.007239993256260531
+        },
+        "is_normal": {
+          "coverage": 0.0,
+          "coverage_ci95": [
+            0.0,
+            0.0018427397934059364
+          ],
+          "below_nominal": true,
+          "missing_rate": 0.0,
+          "mean_width": 0.0003178930147993493
+        }
+      },
+      "estimators": {
+        "mc": {
+          "mean": 0.0026714999999999534,
+          "bias": -2.8296063260189067e-05,
+          "std": 0.001617682353893704,
+          "rmse": 0.0016175253992429402,
+          "relative_rmse": 0.5991287346680804,
+          "no_event_rate": 0.067,
+          "missing_rate": 0.0
+        },
+        "is": {
+          "mean": 0.0013528409168615525,
+          "bias": -0.001346955146398636,
+          "std": 8.243770665188203e-05,
+          "rmse": 0.0013494742472163182,
+          "relative_rmse": 0.4998430309535072,
+          "no_event_rate": 0.0,
+          "missing_rate": 0.0
+        }
+      },
+      "mean_seconds_per_path": 0.0021855619566994882
+    },
+    {
+      "scenario": "is_final_ou_a_3sd_two_sided_q1d_n1000",
+      "engine": "importance_fixed",
+      "mode": "importance_probability",
+      "description": "Fixed final plan ou_a_3sd_two_sided_q1d.yaml (pilot-tuned Q), n=1000 ordinary + 1000 importance paths",
+      "reps": 2000,
+      "correct_rate": 0.2385,
+      "correct_rate_ci95": [
+        0.21996698620263946,
+        0.25780266431530663
+      ],
+      "nominal": 0.95,
+      "below_nominal": true,
+      "mean_sample_count": 1000.0,
+      "truth": 0.0026997960632601866,
+      "intervals": {
+        "mc_wilson": {
+          "coverage": 0.947,
+          "coverage_ci95": [
+            0.9362572070012274,
+            0.9564069564074236
+          ],
+          "below_nominal": false,
+          "missing_rate": 0.0,
+          "mean_width": 0.007239993256260531
+        },
+        "is_normal": {
+          "coverage": 0.2385,
+          "coverage_ci95": [
+            0.21996698620263946,
+            0.25780266431530663
+          ],
+          "below_nominal": true,
+          "missing_rate": 0.0,
+          "mean_width": 0.004466947615669933
+        },
+        "is_hoeffding": {
+          "coverage": 1.0,
+          "coverage_ci95": [
+            0.998157260206594,
+            1.0
+          ],
+          "below_nominal": false,
+          "missing_rate": 0.0,
+          "mean_width": 0.21746921995855045
+        },
+        "is_bernstein": {
+          "coverage": 1.0,
+          "coverage_ci95": [
+            0.998157260206594,
+            1.0
+          ],
+          "below_nominal": false,
+          "missing_rate": 0.0,
+          "mean_width": 0.0679811610660377
+        }
+      },
+      "estimators": {
+        "mc": {
+          "mean": 0.0026714999999999534,
+          "bias": -2.8296063260189067e-05,
+          "std": 0.001617682353893704,
+          "rmse": 0.0016175253992429402,
+          "relative_rmse": 0.5991287346680804,
+          "no_event_rate": 0.067,
+          "missing_rate": 0.0
+        },
+        "is": {
+          "mean": 0.0027345157851821848,
+          "bias": 3.4719721921996315e-05,
+          "std": 0.0026454590914942967,
+          "rmse": 0.0026450255267119385,
+          "relative_rmse": 0.9797130837793322,
+          "no_event_rate": 0.0,
+          "missing_rate": 0.0
+        }
+      },
+      "mean_seconds_per_path": 0.0021402778261302487
+    },
+    {
+      "scenario": "is_final_ou_a_3sd_two_sided_q2_n1000",
+      "engine": "importance_fixed",
+      "mode": "importance_probability",
+      "description": "Fixed final plan ou_a_3sd_two_sided_q2.yaml (pilot-tuned Q), n=1000 ordinary + 1000 importance paths",
+      "reps": 2000,
+      "correct_rate": 0.004,
+      "correct_rate_ci95": [
+        0.0017284495734761454,
+        0.007866303828537383
+      ],
+      "nominal": 0.95,
+      "below_nominal": true,
+      "mean_sample_count": 1000.0,
+      "truth": 0.0026997960632601866,
+      "intervals": {
+        "mc_wilson": {
+          "coverage": 0.947,
+          "coverage_ci95": [
+            0.9362572070012274,
+            0.9564069564074236
+          ],
+          "below_nominal": false,
+          "missing_rate": 0.0,
+          "mean_width": 0.007239993256260531
+        },
+        "is_normal": {
+          "coverage": 0.004,
+          "coverage_ci95": [
+            0.0017284495734761454,
+            0.007866303828537383
+          ],
+          "below_nominal": true,
+          "missing_rate": 0.0,
+          "mean_width": 0.0007029377710290117
+        }
+      },
+      "estimators": {
+        "mc": {
+          "mean": 0.0026714999999999534,
+          "bias": -2.8296063260189067e-05,
+          "std": 0.001617682353893704,
+          "rmse": 0.0016175253992429402,
+          "relative_rmse": 0.5991287346680804,
+          "no_event_rate": 0.067,
+          "missing_rate": 0.0
+        },
+        "is": {
+          "mean": 0.001359139712225742,
+          "bias": -0.0013406563510344476,
+          "std": 0.00018575197437739691,
+          "rmse": 0.0013534570534952726,
+          "relative_rmse": 0.501318255817027,
+          "no_event_rate": 0.0,
+          "missing_rate": 0.0
+        }
+      },
+      "mean_seconds_per_path": 0.0027583601776372483
+    },
+    {
+      "scenario": "is_final_ou_a_3sd_two_sided_q3_n1000",
+      "engine": "importance_fixed",
+      "mode": "importance_probability",
+      "description": "Fixed final plan ou_a_3sd_two_sided_q3.yaml (pilot-tuned Q), n=1000 ordinary + 1000 importance paths",
+      "reps": 2000,
+      "correct_rate": 0.9235,
+      "correct_rate_ci95": [
+        0.9109693516535009,
+        0.9347713500433006
+      ],
+      "nominal": 0.95,
+      "below_nominal": true,
+      "mean_sample_count": 1000.0,
+      "truth": 0.0026997960632601866,
+      "intervals": {
+        "mc_wilson": {
+          "coverage": 0.947,
+          "coverage_ci95": [
+            0.9362572070012274,
+            0.9564069564074236
+          ],
+          "below_nominal": false,
+          "missing_rate": 0.0,
+          "mean_width": 0.007239993256260531
+        },
+        "is_normal": {
+          "coverage": 0.9235,
+          "coverage_ci95": [
+            0.9109693516535009,
+            0.9347713500433006
+          ],
+          "below_nominal": true,
+          "missing_rate": 0.0,
+          "mean_width": 0.0009401967477711246
+        }
+      },
+      "estimators": {
+        "mc": {
+          "mean": 0.0026714999999999534,
+          "bias": -2.8296063260189067e-05,
+          "std": 0.001617682353893704,
+          "rmse": 0.0016175253992429402,
+          "relative_rmse": 0.5991287346680804,
+          "no_event_rate": 0.067,
+          "missing_rate": 0.0
+        },
+        "is": {
+          "mean": 0.0026956330695016,
+          "bias": -4.162993758582237e-06,
+          "std": 0.00026731830530956686,
+          "rmse": 0.0002672838890252011,
+          "relative_rmse": 0.09900151076686797,
+          "no_event_rate": 0.0,
+          "missing_rate": 0.0
+        }
+      },
+      "mean_seconds_per_path": 0.0023025870256362536
+    },
+    {
+      "scenario": "is_final_ou_a_3sd_two_sided_q4_n1000",
+      "engine": "importance_fixed",
+      "mode": "importance_probability",
+      "description": "Fixed final plan ou_a_3sd_two_sided_q4.yaml (pilot-tuned Q), n=1000 ordinary + 1000 importance paths",
+      "reps": 2000,
+      "correct_rate": 0.7005,
+      "correct_rate_ci95": [
+        0.6798924776726623,
+        0.7205181136141783
+      ],
+      "nominal": 0.95,
+      "below_nominal": true,
+      "mean_sample_count": 1000.0,
+      "truth": 0.0026997960632601866,
+      "intervals": {
+        "mc_wilson": {
+          "coverage": 0.947,
+          "coverage_ci95": [
+            0.9362572070012274,
+            0.9564069564074236
+          ],
+          "below_nominal": false,
+          "missing_rate": 0.0,
+          "mean_width": 0.007239993256260531
+        },
+        "is_normal": {
+          "coverage": 0.7005,
+          "coverage_ci95": [
+            0.6798924776726623,
+            0.7205181136141783
+          ],
+          "below_nominal": true,
+          "missing_rate": 0.0,
+          "mean_width": 0.0039046705272162145
+        }
+      },
+      "estimators": {
+        "mc": {
+          "mean": 0.0026714999999999534,
+          "bias": -2.8296063260189067e-05,
+          "std": 0.001617682353893704,
+          "rmse": 0.0016175253992429402,
+          "relative_rmse": 0.5991287346680804,
+          "no_event_rate": 0.067,
+          "missing_rate": 0.0
+        },
+        "is": {
+          "mean": 0.002640356135203933,
+          "bias": -5.9439928056256645e-05,
+          "std": 0.002639276608399607,
+          "rmse": 0.0026392861213185717,
+          "relative_rmse": 0.9775872175068865,
+          "no_event_rate": 0.0,
+          "missing_rate": 0.0
+        }
+      },
+      "mean_seconds_per_path": 0.0031206548050075073
+    },
+    {
+      "scenario": "is_final_ou_a_3sd_two_sided_q5_n1000",
+      "engine": "importance_fixed",
+      "mode": "importance_probability",
+      "description": "Fixed final plan ou_a_3sd_two_sided_q5.yaml (pilot-tuned Q), n=1000 ordinary + 1000 importance paths",
+      "reps": 2000,
+      "correct_rate": 0.9395,
+      "correct_rate_ci95": [
+        0.9281411004979896,
+        0.9495479849066164
+      ],
+      "nominal": 0.95,
+      "below_nominal": true,
+      "mean_sample_count": 1000.0,
+      "truth": 0.0026997960632601866,
+      "intervals": {
+        "mc_wilson": {
+          "coverage": 0.947,
+          "coverage_ci95": [
+            0.9362572070012274,
+            0.9564069564074236
+          ],
+          "below_nominal": false,
+          "missing_rate": 0.0,
+          "mean_width": 0.007239993256260531
+        },
+        "is_normal": {
+          "coverage": 0.9395,
+          "coverage_ci95": [
+            0.9281411004979896,
+            0.9495479849066164
+          ],
+          "below_nominal": true,
+          "missing_rate": 0.0,
+          "mean_width": 0.0006348309511508184
+        }
+      },
+      "estimators": {
+        "mc": {
+          "mean": 0.0026714999999999534,
+          "bias": -2.8296063260189067e-05,
+          "std": 0.001617682353893704,
+          "rmse": 0.0016175253992429402,
+          "relative_rmse": 0.5991287346680804,
+          "no_event_rate": 0.067,
+          "missing_rate": 0.0
+        },
+        "is": {
+          "mean": 0.0026962403817941344,
+          "bias": -3.5556814660494117e-06,
+          "std": 0.00016556518978302594,
+          "rmse": 0.00016556197939908632,
+          "relative_rmse": 0.061323883552581754,
+          "no_event_rate": 0.0,
+          "missing_rate": 0.0
+        }
+      },
+      "mean_seconds_per_path": 0.00233855015665623
+    },
+    {
+      "scenario": "is_final_ou_a_3sd_upper_q0_n1000",
+      "engine": "importance_fixed",
+      "mode": "importance_probability",
+      "description": "Fixed final plan ou_a_3sd_upper_q0.yaml (pilot-tuned Q), n=1000 ordinary + 1000 importance paths",
+      "reps": 2000,
+      "correct_rate": 0.767,
+      "correct_rate_ci95": [
+        0.7478390454464463,
+        0.7853750070371975
+      ],
+      "nominal": 0.95,
+      "below_nominal": true,
+      "mean_sample_count": 1000.0,
+      "truth": 0.0013498980316300933,
+      "intervals": {
+        "mc_wilson": {
+          "coverage": 0.95,
+          "coverage_ci95": [
+            0.939518277916848,
+            0.9591357322817486
+          ],
+          "below_nominal": false,
+          "missing_rate": 0.0,
+          "mean_width": 0.0057156971684464465
+        },
+        "is_normal": {
+          "coverage": 0.767,
+          "coverage_ci95": [
+            0.7478390454464463,
+            0.7853750070371975
+          ],
+          "below_nominal": true,
+          "missing_rate": 0.23250000000000004,
+          "mean_width": 0.004347137748294536
+        },
+        "is_hoeffding": {
+          "coverage": 1.0,
+          "coverage_ci95": [
+            0.998157260206594,
+            1.0
+          ],
+          "below_nominal": false,
+          "missing_rate": 0.0,
+          "mean_width": 0.04433644083467346
+        },
+        "is_bernstein": {
+          "coverage": 1.0,
+          "coverage_ci95": [
+            0.998157260206594,
+            1.0
+          ],
+          "below_nominal": false,
+          "missing_rate": 0.0,
+          "mean_width": 0.01653199788360102
+        }
+      },
+      "estimators": {
+        "mc": {
+          "mean": 0.0013254999999999617,
+          "bias": -2.4398031630092492e-05,
+          "std": 0.001155083052611045,
+          "rmse": 0.0011550519529213543,
+          "relative_rmse": 0.8556586689192744,
+          "no_event_rate": 0.268,
+          "missing_rate": 0.0
+        },
+        "is": {
+          "mean": 0.0013894999999999552,
+          "bias": 3.960196836990778e-05,
+          "std": 0.0011451835978289018,
+          "rmse": 0.0011455819769439412,
+          "relative_rmse": 0.848643342016414,
+          "no_event_rate": 0.2325,
+          "missing_rate": 0.0
+        }
+      },
+      "mean_seconds_per_path": 0.0018191651941669947
+    },
+    {
+      "scenario": "is_final_ou_a_3sd_upper_q1_n1000",
+      "engine": "importance_fixed",
+      "mode": "importance_probability",
+      "description": "Fixed final plan ou_a_3sd_upper_q1.yaml (pilot-tuned Q), n=1000 ordinary + 1000 importance paths",
+      "reps": 2000,
+      "correct_rate": 0.9545,
+      "correct_rate_ci95": [
+        0.9444278089934208,
+        0.9632107219011825
+      ],
+      "nominal": 0.95,
+      "below_nominal": false,
+      "mean_sample_count": 1000.0,
+      "truth": 0.0013498980316300933,
+      "intervals": {
+        "mc_wilson": {
+          "coverage": 0.95,
+          "coverage_ci95": [
+            0.939518277916848,
+            0.9591357322817486
+          ],
+          "below_nominal": false,
+          "missing_rate": 0.0,
+          "mean_width": 0.0057156971684464465
+        },
+        "is_normal": {
+          "coverage": 0.9545,
+          "coverage_ci95": [
+            0.9444278089934208,
+            0.9632107219011825
+          ],
+          "below_nominal": false,
+          "missing_rate": 0.0,
+          "mean_width": 0.0003178930147993493
+        }
+      },
+      "estimators": {
+        "mc": {
+          "mean": 0.0013254999999999617,
+          "bias": -2.4398031630092492e-05,
+          "std": 0.001155083052611045,
+          "rmse": 0.0011550519529213543,
+          "relative_rmse": 0.8556586689192744,
+          "no_event_rate": 0.268,
+          "missing_rate": 0.0
+        },
+        "is": {
+          "mean": 0.0013528409168615525,
+          "bias": 2.9428852314591885e-06,
+          "std": 8.243770665188203e-05,
+          "rmse": 8.246961903494085e-05,
+          "relative_rmse": 0.061093221193420956,
+          "no_event_rate": 0.0,
+          "missing_rate": 0.0
+        }
+      },
+      "mean_seconds_per_path": 0.00214666248078625
+    },
+    {
+      "scenario": "is_final_ou_a_3sd_upper_q1d_n1000",
+      "engine": "importance_fixed",
+      "mode": "importance_probability",
+      "description": "Fixed final plan ou_a_3sd_upper_q1d.yaml (pilot-tuned Q), n=1000 ordinary + 1000 importance paths",
+      "reps": 2000,
+      "correct_rate": 0.9475,
+      "correct_rate_ci95": [
+        0.936800097516713,
+        0.9568623819153811
+      ],
+      "nominal": 0.95,
+      "below_nominal": false,
+      "mean_sample_count": 1000.0,
+      "truth": 0.0013498980316300933,
+      "intervals": {
+        "mc_wilson": {
+          "coverage": 0.95,
+          "coverage_ci95": [
+            0.939518277916848,
+            0.9591357322817486
+          ],
+          "below_nominal": false,
+          "missing_rate": 0.0,
+          "mean_width": 0.0057156971684464465
+        },
+        "is_normal": {
+          "coverage": 0.9475,
+          "coverage_ci95": [
+            0.936800097516713,
+            0.9568623819153811
+          ],
+          "below_nominal": false,
+          "missing_rate": 0.0,
+          "mean_width": 0.0003649773920459298
+        },
+        "is_hoeffding": {
+          "coverage": 1.0,
+          "coverage_ci95": [
+            0.998157260206594,
+            1.0
+          ],
+          "below_nominal": false,
+          "missing_rate": 0.0,
+          "mean_width": 0.21608922451271934
+        },
+        "is_bernstein": {
+          "coverage": 1.0,
+          "coverage_ci95": [
+            0.998157260206594,
+            1.0
+          ],
+          "below_nominal": false,
+          "missing_rate": 0.0,
+          "mean_width": 0.06303599284821489
+        }
+      },
+      "estimators": {
+        "mc": {
+          "mean": 0.0013254999999999617,
+          "bias": -2.4398031630092492e-05,
+          "std": 0.001155083052611045,
+          "rmse": 0.0011550519529213543,
+          "relative_rmse": 0.8556586689192744,
+          "no_event_rate": 0.268,
+          "missing_rate": 0.0
+        },
+        "is": {
+          "mean": 0.0013545203393508952,
+          "bias": 4.6223077208018215e-06,
+          "std": 9.484380566333021e-05,
+          "rmse": 9.493268945749392e-05,
+          "relative_rmse": 0.07032582256813596,
+          "no_event_rate": 0.0,
+          "missing_rate": 0.0
+        }
+      },
+      "mean_seconds_per_path": 0.0021111091273537407
+    },
+    {
+      "scenario": "is_final_ou_a_3sd_upper_q2_n1000",
+      "engine": "importance_fixed",
+      "mode": "importance_probability",
+      "description": "Fixed final plan ou_a_3sd_upper_q2.yaml (pilot-tuned Q), n=1000 ordinary + 1000 importance paths",
+      "reps": 2000,
+      "correct_rate": 0.9265,
+      "correct_rate_ci95": [
+        0.9141762916669246,
+        0.9375548553439291
+      ],
+      "nominal": 0.95,
+      "below_nominal": true,
+      "mean_sample_count": 1000.0,
+      "truth": 0.0013498980316300933,
+      "intervals": {
+        "mc_wilson": {
+          "coverage": 0.95,
+          "coverage_ci95": [
+            0.939518277916848,
+            0.9591357322817486
+          ],
+          "below_nominal": false,
+          "missing_rate": 0.0,
+          "mean_width": 0.0057156971684464465
+        },
+        "is_normal": {
+          "coverage": 0.9265,
+          "coverage_ci95": [
+            0.9141762916669246,
+            0.9375548553439291
+          ],
+          "below_nominal": true,
+          "missing_rate": 0.0,
+          "mean_width": 0.0007029377710290117
+        }
+      },
+      "estimators": {
+        "mc": {
+          "mean": 0.0013254999999999617,
+          "bias": -2.4398031630092492e-05,
+          "std": 0.001155083052611045,
+          "rmse": 0.0011550519529213543,
+          "relative_rmse": 0.8556586689192744,
+          "no_event_rate": 0.268,
+          "missing_rate": 0.0
+        },
+        "is": {
+          "mean": 0.001359139712225742,
+          "bias": 9.241680595647325e-06,
+          "std": 0.00018575197437739691,
+          "rmse": 0.00018593534561061982,
+          "relative_rmse": 0.13774028945437478,
+          "no_event_rate": 0.0,
+          "missing_rate": 0.0
+        }
+      },
+      "mean_seconds_per_path": 0.002746294401172002
+    },
+    {
+      "scenario": "is_final_ou_a_3sd_upper_q3_n1000",
+      "engine": "importance_fixed",
+      "mode": "importance_probability",
+      "description": "Fixed final plan ou_a_3sd_upper_q3.yaml (pilot-tuned Q), n=1000 ordinary + 1000 importance paths",
+      "reps": 2000,
+      "correct_rate": 0.6895,
+      "correct_rate_ci95": [
+        0.6687047592280642,
+        0.7097382585674823
+      ],
+      "nominal": 0.95,
+      "below_nominal": true,
+      "mean_sample_count": 1000.0,
+      "truth": 0.0013498980316300933,
+      "intervals": {
+        "mc_wilson": {
+          "coverage": 0.95,
+          "coverage_ci95": [
+            0.939518277916848,
+            0.9591357322817486
+          ],
+          "below_nominal": false,
+          "missing_rate": 0.0,
+          "mean_width": 0.0057156971684464465
+        },
+        "is_normal": {
+          "coverage": 0.6895,
+          "coverage_ci95": [
+            0.6687047592280642,
+            0.7097382585674823
+          ],
+          "below_nominal": true,
+          "missing_rate": 0.0,
+          "mean_width": 0.0011532890520194663
+        }
+      },
+      "estimators": {
+        "mc": {
+          "mean": 0.0013254999999999617,
+          "bias": -2.4398031630092492e-05,
+          "std": 0.001155083052611045,
+          "rmse": 0.0011550519529213543,
+          "relative_rmse": 0.8556586689192744,
+          "no_event_rate": 0.268,
+          "missing_rate": 0.0
+        },
+        "is": {
+          "mean": 0.0013455690463811923,
+          "bias": -4.328985248901604e-06,
+          "std": 0.0016728439706669457,
+          "rmse": 0.0016724313100498153,
+          "relative_rmse": 1.2389315865808332,
+          "no_event_rate": 0.0,
+          "missing_rate": 0.0
+        }
+      },
+      "mean_seconds_per_path": 0.0025929240425072377
+    },
+    {
+      "scenario": "is_final_ou_a_3sd_upper_q4_n1000",
+      "engine": "importance_fixed",
+      "mode": "importance_probability",
+      "description": "Fixed final plan ou_a_3sd_upper_q4.yaml (pilot-tuned Q), n=1000 ordinary + 1000 importance paths",
+      "reps": 2000,
+      "correct_rate": 0.426,
+      "correct_rate_ci95": [
+        0.40420021176070464,
+        0.44801706856072726
+      ],
+      "nominal": 0.95,
+      "below_nominal": true,
+      "mean_sample_count": 1000.0,
+      "truth": 0.0013498980316300933,
+      "intervals": {
+        "mc_wilson": {
+          "coverage": 0.95,
+          "coverage_ci95": [
+            0.939518277916848,
+            0.9591357322817486
+          ],
+          "below_nominal": false,
+          "missing_rate": 0.0,
+          "mean_width": 0.0057156971684464465
+        },
+        "is_normal": {
+          "coverage": 0.426,
+          "coverage_ci95": [
+            0.40420021176070464,
+            0.44801706856072726
+          ],
+          "below_nominal": true,
+          "missing_rate": 0.0,
+          "mean_width": 0.0022747234481991026
+        }
+      },
+      "estimators": {
+        "mc": {
+          "mean": 0.0013254999999999617,
+          "bias": -2.4398031630092492e-05,
+          "std": 0.001155083052611045,
+          "rmse": 0.0011550519529213543,
+          "relative_rmse": 0.8556586689192744,
+          "no_event_rate": 0.268,
+          "missing_rate": 0.0
+        },
+        "is": {
+          "mean": 0.0012227485090714114,
+          "bias": -0.0001271495225586833,
+          "std": 0.006090290222017152,
+          "rmse": 0.006090094923068966,
+          "relative_rmse": 4.5115221893573425,
+          "no_event_rate": 0.0,
+          "missing_rate": 0.0
+        }
+      },
+      "mean_seconds_per_path": 0.0034270799850079966
+    },
+    {
+      "scenario": "is_final_ou_a_3sd_upper_q5_n1000",
+      "engine": "importance_fixed",
+      "mode": "importance_probability",
+      "description": "Fixed final plan ou_a_3sd_upper_q5.yaml (pilot-tuned Q), n=1000 ordinary + 1000 importance paths",
+      "reps": 2000,
+      "correct_rate": 0.949,
+      "correct_rate_ci95": [
+        0.9384302465684916,
+        0.9582271615092796
+      ],
+      "nominal": 0.95,
+      "below_nominal": false,
+      "mean_sample_count": 1000.0,
+      "truth": 0.0013498980316300933,
+      "intervals": {
+        "mc_wilson": {
+          "coverage": 0.95,
+          "coverage_ci95": [
+            0.939518277916848,
+            0.9591357322817486
+          ],
+          "below_nominal": false,
+          "missing_rate": 0.0,
+          "mean_width": 0.0057156971684464465
+        },
+        "is_normal": {
+          "coverage": 0.949,
+          "coverage_ci95": [
+            0.9384302465684916,
+            0.9582271615092796
+          ],
+          "below_nominal": false,
+          "missing_rate": 0.0,
+          "mean_width": 0.00035331846157853845
+        }
+      },
+      "estimators": {
+        "mc": {
+          "mean": 0.0013254999999999617,
+          "bias": -2.4398031630092492e-05,
+          "std": 0.001155083052611045,
+          "rmse": 0.0011550519529213543,
+          "relative_rmse": 0.8556586689192744,
+          "no_event_rate": 0.268,
+          "missing_rate": 0.0
+        },
+        "is": {
+          "mean": 0.001351253328329659,
+          "bias": 1.3552966995642435e-06,
+          "std": 9.05877210369182e-05,
+          "rmse": 9.05752116431699e-05,
+          "relative_rmse": 0.06709781740610007,
+          "no_event_rate": 0.0,
+          "missing_rate": 0.0
+        }
+      },
+      "mean_seconds_per_path": 0.0023454000716570033
+    },
+    {
+      "scenario": "is_final_ou_a_4sd_two_sided_q0_n1000",
+      "engine": "importance_fixed",
+      "mode": "importance_probability",
+      "description": "Fixed final plan ou_a_4sd_two_sided_q0.yaml (pilot-tuned Q), n=1000 ordinary + 1000 importance paths",
+      "reps": 2000,
+      "correct_rate": 0.061,
+      "correct_rate_ci95": [
+        0.050910993725659694,
+        0.07239827931531814
+      ],
+      "nominal": 0.95,
+      "below_nominal": true,
+      "mean_sample_count": 1000.0,
+      "truth": 6.334248366623973e-05,
+      "intervals": {
+        "mc_wilson": {
+          "coverage": 0.9345,
+          "coverage_ci95": [
+            0.9227559446019329,
+            0.9449494620964668
+          ],
+          "below_nominal": true,
+          "missing_rate": 0.0,
+          "mean_width": 0.003938398094734188
+        },
+        "is_normal": {
+          "coverage": 0.061,
+          "coverage_ci95": [
+            0.050910993725659694,
+            0.07239827931531814
+          ],
+          "below_nominal": true,
+          "missing_rate": 0.9390000000000001,
+          "mean_width": 0.0029896435915187586
+        },
+        "is_hoeffding": {
+          "coverage": 1.0,
+          "coverage_ci95": [
+            0.998157260206594,
+            1.0
+          ],
+          "below_nominal": false,
+          "missing_rate": 0.0,
+          "mean_width": 0.04300894083467269
+        },
+        "is_bernstein": {
+          "coverage": 1.0,
+          "coverage_ci95": [
+            0.998157260206594,
+            1.0
+          ],
+          "below_nominal": false,
+          "missing_rate": 0.0,
+          "mean_width": 0.012520685979970443
+        }
+      },
+      "estimators": {
+        "mc": {
+          "mean": 6.900000000000005e-05,
+          "bias": 5.657516333760229e-06,
+          "std": 0.0002688403570314279,
+          "rmse": 0.00026883267563870974,
+          "relative_rmse": 4.244113272463804,
+          "no_event_rate": 0.9345,
+          "missing_rate": 0.0
+        },
+        "is": {
+          "mean": 6.200000000000004e-05,
+          "bias": -1.3424836662398244e-06,
+          "std": 0.0002453285410353251,
+          "rmse": 0.0002452708752836278,
+          "relative_rmse": 3.872138588312922,
+          "no_event_rate": 0.939,
+          "missing_rate": 0.0
+        }
+      },
+      "mean_seconds_per_path": 0.0018037358217710096
+    },
+    {
+      "scenario": "is_final_ou_a_4sd_two_sided_q1_n1000",
+      "engine": "importance_fixed",
+      "mode": "importance_probability",
+      "description": "Fixed final plan ou_a_4sd_two_sided_q1.yaml (pilot-tuned Q), n=1000 ordinary + 1000 importance paths",
+      "reps": 2000,
+      "correct_rate": 0.0,
+      "correct_rate_ci95": [
+        0.0,
+        0.0018427397934059364
+      ],
+      "nominal": 0.95,
+      "below_nominal": true,
+      "mean_sample_count": 1000.0,
+      "truth": 6.334248366623973e-05,
+      "intervals": {
+        "mc_wilson": {
+          "coverage": 0.9345,
+          "coverage_ci95": [
+            0.9227559446019329,
+            0.9449494620964668
+          ],
+          "below_nominal": true,
+          "missing_rate": 0.0,
+          "mean_width": 0.003938398094734188
+        },
+        "is_normal": {
+          "coverage": 0.0,
+          "coverage_ci95": [
+            0.0,
+            0.0018427397934059364
+          ],
+          "below_nominal": true,
+          "missing_rate": 0.0,
+          "mean_width": 8.777887477540366e-06
+        }
+      },
+      "estimators": {
+        "mc": {
+          "mean": 6.900000000000005e-05,
+          "bias": 5.657516333760229e-06,
+          "std": 0.0002688403570314279,
+          "rmse": 0.00026883267563870974,
+          "relative_rmse": 4.244113272463804,
+          "no_event_rate": 0.9345,
+          "missing_rate": 0.0
+        },
+        "is": {
+          "mean": 3.174541761594894e-05,
+          "bias": -3.159706605029079e-05,
+          "std": 2.281717340976441e-06,
+          "rmse": 3.1679302610593294e-05,
+          "relative_rmse": 0.5001272570478276,
+          "no_event_rate": 0.0,
+          "missing_rate": 0.0
+        }
+      },
+      "mean_seconds_per_path": 0.0021409921974752544
+    },
+    {
+      "scenario": "is_final_ou_a_4sd_two_sided_q1d_n1000",
+      "engine": "importance_fixed",
+      "mode": "importance_probability",
+      "description": "Fixed final plan ou_a_4sd_two_sided_q1d.yaml (pilot-tuned Q), n=1000 ordinary + 1000 importance paths",
+      "reps": 2000,
+      "correct_rate": 0.0065,
+      "correct_rate_ci95": [
+        0.003465381208667553,
+        0.011089549271656375
+      ],
+      "nominal": 0.95,
+      "below_nominal": true,
+      "mean_sample_count": 1000.0,
+      "truth": 6.334248366623973e-05,
+      "intervals": {
+        "mc_wilson": {
+          "coverage": 0.9345,
+          "coverage_ci95": [
+            0.9227559446019329,
+            0.9449494620964668
+          ],
+          "below_nominal": true,
+          "missing_rate": 0.0,
+          "mean_width": 0.003938398094734188
+        },
+        "is_normal": {
+          "coverage": 0.0065,
+          "coverage_ci95": [
+            0.003465381208667553,
+            0.011089549271656375
+          ],
+          "below_nominal": true,
+          "missing_rate": 0.0,
+          "mean_width": 0.00010635322250890466
+        },
+        "is_hoeffding": {
+          "coverage": 1.0,
+          "coverage_ci95": [
+            0.998157260206594,
+            1.0
+          ],
+          "below_nominal": false,
+          "missing_rate": 0.0,
+          "mean_width": 0.21479898649184787
+        },
+        "is_bernstein": {
+          "coverage": 1.0,
+          "coverage_ci95": [
+            0.998157260206594,
+            1.0
+          ],
+          "below_nominal": false,
+          "missing_rate": 0.0,
+          "mean_width": 0.061579665113040916
+        }
+      },
+      "estimators": {
+        "mc": {
+          "mean": 6.900000000000005e-05,
+          "bias": 5.657516333760229e-06,
+          "std": 0.0002688403570314279,
+          "rmse": 0.00026883267563870974,
+          "relative_rmse": 4.244113272463804,
+          "no_event_rate": 0.9345,
+          "missing_rate": 0.0
+        },
+        "is": {
+          "mean": 6.428231847923454e-05,
+          "bias": 9.398348129950316e-07,
+          "std": 0.00040188972703395653,
+          "rmse": 0.0004017903412335296,
+          "relative_rmse": 6.343141569102631,
+          "no_event_rate": 0.0,
+          "missing_rate": 0.0
+        }
+      },
+      "mean_seconds_per_path": 0.0021099633154219987
+    },
+    {
+      "scenario": "is_final_ou_a_4sd_two_sided_q2_n1000",
+      "engine": "importance_fixed",
+      "mode": "importance_probability",
+      "description": "Fixed final plan ou_a_4sd_two_sided_q2.yaml (pilot-tuned Q), n=1000 ordinary + 1000 importance paths",
+      "reps": 2000,
+      "correct_rate": 0.01,
+      "correct_rate_ci95": [
+        0.0061186575427434635,
+        0.015402125783560048
+      ],
+      "nominal": 0.95,
+      "below_nominal": true,
+      "mean_sample_count": 1000.0,
+      "truth": 6.334248366623973e-05,
+      "intervals": {
+        "mc_wilson": {
+          "coverage": 0.9345,
+          "coverage_ci95": [
+            0.9227559446019329,
+            0.9449494620964668
+          ],
+          "below_nominal": true,
+          "missing_rate": 0.0,
+          "mean_width": 0.003938398094734188
+        },
+        "is_normal": {
+          "coverage": 0.01,
+          "coverage_ci95": [
+            0.0061186575427434635,
+            0.015402125783560048
+          ],
+          "below_nominal": true,
+          "missing_rate": 0.0,
+          "mean_width": 1.8658156684638778e-05
+        }
+      },
+      "estimators": {
+        "mc": {
+          "mean": 6.900000000000005e-05,
+          "bias": 5.657516333760229e-06,
+          "std": 0.0002688403570314279,
+          "rmse": 0.00026883267563870974,
+          "relative_rmse": 4.244113272463804,
+          "no_event_rate": 0.9345,
+          "missing_rate": 0.0
+        },
+        "is": {
+          "mean": 3.191275514178913e-05,
+          "bias": -3.14297285244506e-05,
+          "std": 5.011622348752763e-06,
+          "rmse": 3.18265869283512e-05,
+          "relative_rmse": 0.5024524629638755,
+          "no_event_rate": 0.0,
+          "missing_rate": 0.0
+        }
+      },
+      "mean_seconds_per_path": 0.0027068973692557286
+    },
+    {
+      "scenario": "is_final_ou_a_4sd_two_sided_q3_n1000",
+      "engine": "importance_fixed",
+      "mode": "importance_probability",
+      "description": "Fixed final plan ou_a_4sd_two_sided_q3.yaml (pilot-tuned Q), n=1000 ordinary + 1000 importance paths",
+      "reps": 2000,
+      "correct_rate": 0.9135,
+      "correct_rate_ci95": [
+        0.9003157339600907,
+        0.9254565093685941
+      ],
+      "nominal": 0.95,
+      "below_nominal": true,
+      "mean_sample_count": 1000.0,
+      "truth": 6.334248366623973e-05,
+      "intervals": {
+        "mc_wilson": {
+          "coverage": 0.9345,
+          "coverage_ci95": [
+            0.9227559446019329,
+            0.9449494620964668
+          ],
+          "below_nominal": true,
+          "missing_rate": 0.0,
+          "mean_width": 0.003938398094734188
+        },
+        "is_normal": {
+          "coverage": 0.9135,
+          "coverage_ci95": [
+            0.9003157339600907,
+            0.9254565093685941
+          ],
+          "below_nominal": true,
+          "missing_rate": 0.0,
+          "mean_width": 2.6759877755974776e-05
+        }
+      },
+      "estimators": {
+        "mc": {
+          "mean": 6.900000000000005e-05,
+          "bias": 5.657516333760229e-06,
+          "std": 0.0002688403570314279,
+          "rmse": 0.00026883267563870974,
+          "relative_rmse": 4.244113272463804,
+          "no_event_rate": 0.9345,
+          "missing_rate": 0.0
+        },
+        "is": {
+          "mean": 6.310911701688683e-05,
+          "bias": -2.33366649352792e-07,
+          "std": 7.683036107057483e-06,
+          "rmse": 7.684659347913088e-06,
+          "relative_rmse": 0.12131919847672247,
+          "no_event_rate": 0.0,
+          "missing_rate": 0.0
+        }
+      },
+      "mean_seconds_per_path": 0.002297343204909259
+    },
+    {
+      "scenario": "is_final_ou_a_4sd_two_sided_q4_n1000",
+      "engine": "importance_fixed",
+      "mode": "importance_probability",
+      "description": "Fixed final plan ou_a_4sd_two_sided_q4.yaml (pilot-tuned Q), n=1000 ordinary + 1000 importance paths",
+      "reps": 2000,
+      "correct_rate": 0.6745,
+      "correct_rate_ci95": [
+        0.6534702353068542,
+        0.6950169726069773
+      ],
+      "nominal": 0.95,
+      "below_nominal": true,
+      "mean_sample_count": 1000.0,
+      "truth": 6.334248366623973e-05,
+      "intervals": {
+        "mc_wilson": {
+          "coverage": 0.9345,
+          "coverage_ci95": [
+            0.9227559446019329,
+            0.9449494620964668
+          ],
+          "below_nominal": true,
+          "missing_rate": 0.0,
+          "mean_width": 0.003938398094734188
+        },
+        "is_normal": {
+          "coverage": 0.6745,
+          "coverage_ci95": [
+            0.6534702353068542,
+            0.6950169726069773
+          ],
+          "below_nominal": true,
+          "missing_rate": 0.0,
+          "mean_width": 0.00010988305292436371
+        }
+      },
+      "estimators": {
+        "mc": {
+          "mean": 6.900000000000005e-05,
+          "bias": 5.657516333760229e-06,
+          "std": 0.0002688403570314279,
+          "rmse": 0.00026883267563870974,
+          "relative_rmse": 4.244113272463804,
+          "no_event_rate": 0.9345,
+          "missing_rate": 0.0
+        },
+        "is": {
+          "mean": 6.463256915349235e-05,
+          "bias": 1.2900854872526402e-06,
+          "std": 9.595129782280723e-05,
+          "rmse": 9.593598151198805e-05,
+          "relative_rmse": 1.5145598334521893,
+          "no_event_rate": 0.0,
+          "missing_rate": 0.0
+        }
+      },
+      "mean_seconds_per_path": 0.0031041312313509714
+    },
+    {
+      "scenario": "is_final_ou_a_4sd_two_sided_q5_n1000",
+      "engine": "importance_fixed",
+      "mode": "importance_probability",
+      "description": "Fixed final plan ou_a_4sd_two_sided_q5.yaml (pilot-tuned Q), n=1000 ordinary + 1000 importance paths",
+      "reps": 2000,
+      "correct_rate": 0.9405,
+      "correct_rate_ci95": [
+        0.9292204627311629,
+        0.9504653327666379
+      ],
+      "nominal": 0.95,
+      "below_nominal": false,
+      "mean_sample_count": 1000.0,
+      "truth": 6.334248366623973e-05,
+      "intervals": {
+        "mc_wilson": {
+          "coverage": 0.9345,
+          "coverage_ci95": [
+            0.9227559446019329,
+            0.9449494620964668
+          ],
+          "below_nominal": true,
+          "missing_rate": 0.0,
+          "mean_width": 0.003938398094734188
+        },
+        "is_normal": {
+          "coverage": 0.9405,
+          "coverage_ci95": [
+            0.9292204627311629,
+            0.9504653327666379
+          ],
+          "below_nominal": false,
+          "missing_rate": 0.0,
+          "mean_width": 1.7533003788676275e-05
+        }
+      },
+      "estimators": {
+        "mc": {
+          "mean": 6.900000000000005e-05,
+          "bias": 5.657516333760229e-06,
+          "std": 0.0002688403570314279,
+          "rmse": 0.00026883267563870974,
+          "relative_rmse": 4.244113272463804,
+          "no_event_rate": 0.9345,
+          "missing_rate": 0.0
+        },
+        "is": {
+          "mean": 6.325643233782185e-05,
+          "bias": -8.605132841799922e-08,
+          "std": 4.545161974547177e-06,
+          "rmse": 4.544840256522185e-06,
+          "relative_rmse": 0.0717502692264101,
+          "no_event_rate": 0.0,
+          "missing_rate": 0.0
+        }
+      },
+      "mean_seconds_per_path": 0.0023206322814155068
+    },
+    {
+      "scenario": "is_final_ou_a_4sd_upper_q0_n1000",
+      "engine": "importance_fixed",
+      "mode": "importance_probability",
+      "description": "Fixed final plan ou_a_4sd_upper_q0.yaml (pilot-tuned Q), n=1000 ordinary + 1000 importance paths",
+      "reps": 2000,
+      "correct_rate": 0.0285,
+      "correct_rate_ci95": [
+        0.021655518443871286,
+        0.03676886985847282
+      ],
+      "nominal": 0.95,
+      "below_nominal": true,
+      "mean_sample_count": 1000.0,
+      "truth": 3.167124183311986e-05,
+      "intervals": {
+        "mc_wilson": {
+          "coverage": 0.964,
+          "coverage_ci95": [
+            0.9548767895645072,
+            0.9717277176946876
+          ],
+          "below_nominal": false,
+          "missing_rate": 0.0,
+          "mean_width": 0.0038870197723071933
+        },
+        "is_normal": {
+          "coverage": 0.0285,
+          "coverage_ci95": [
+            0.021655518443871286,
+            0.03676886985847282
+          ],
+          "below_nominal": true,
+          "missing_rate": 0.9715,
+          "mean_width": 0.0029917263709558577
+        },
+        "is_hoeffding": {
+          "coverage": 1.0,
+          "coverage_ci95": [
+            0.998157260206594,
+            1.0
+          ],
+          "below_nominal": false,
+          "missing_rate": 0.0,
+          "mean_width": 0.04297594083467268
+        },
+        "is_bernstein": {
+          "coverage": 1.0,
+          "coverage_ci95": [
+            0.998157260206594,
+            1.0
+          ],
+          "below_nominal": false,
+          "missing_rate": 0.0,
+          "mean_width": 0.012394139518489678
+        }
+      },
+      "estimators": {
+        "mc": {
+          "mean": 3.7000000000000025e-05,
+          "bias": 5.328758166880078e-06,
+          "std": 0.00019403562794614978,
+          "rmse": 0.00019406028873420074,
+          "relative_rmse": 6.127334373458772,
+          "no_event_rate": 0.964,
+          "missing_rate": 0.0
+        },
+        "is": {
+          "mean": 2.9000000000000024e-05,
+          "bias": -2.6712418331198534e-06,
+          "std": 0.00017080277162094645,
+          "rmse": 0.0001707809577585581,
+          "relative_rmse": 5.392303802245157,
+          "no_event_rate": 0.9715,
+          "missing_rate": 0.0
+        }
+      },
+      "mean_seconds_per_path": 0.001789906337261986
+    },
+    {
+      "scenario": "is_final_ou_a_4sd_upper_q1_n1000",
+      "engine": "importance_fixed",
+      "mode": "importance_probability",
+      "description": "Fixed final plan ou_a_4sd_upper_q1.yaml (pilot-tuned Q), n=1000 ordinary + 1000 importance paths",
+      "reps": 2000,
+      "correct_rate": 0.946,
+      "correct_rate_ci95": [
+        0.9351721452311595,
+        0.9554953768613262
+      ],
+      "nominal": 0.95,
+      "below_nominal": false,
+      "mean_sample_count": 1000.0,
+      "truth": 3.167124183311986e-05,
+      "intervals": {
+        "mc_wilson": {
+          "coverage": 0.964,
+          "coverage_ci95": [
+            0.9548767895645072,
+            0.9717277176946876
+          ],
+          "below_nominal": false,
+          "missing_rate": 0.0,
+          "mean_width": 0.0038870197723071933
+        },
+        "is_normal": {
+          "coverage": 0.946,
+          "coverage_ci95": [
+            0.9351721452311595,
+            0.9554953768613262
+          ],
+          "below_nominal": false,
+          "missing_rate": 0.0,
+          "mean_width": 8.777887477540366e-06
+        }
+      },
+      "estimators": {
+        "mc": {
+          "mean": 3.7000000000000025e-05,
+          "bias": 5.328758166880078e-06,
+          "std": 0.00019403562794614978,
+          "rmse": 0.00019406028873420074,
+          "relative_rmse": 6.127334373458772,
+          "no_event_rate": 0.964,
+          "missing_rate": 0.0
+        },
+        "is": {
+          "mean": 3.174541761594894e-05,
+          "bias": 7.417578282900956e-08,
+          "std": 2.281717340976441e-06,
+          "rmse": 2.282352504294385e-06,
+          "relative_rmse": 0.07206387789656038,
+          "no_event_rate": 0.0,
+          "missing_rate": 0.0
+        }
+      },
+      "mean_seconds_per_path": 0.002137741619351251
+    },
+    {
+      "scenario": "is_final_ou_a_4sd_upper_q1d_n1000",
+      "engine": "importance_fixed",
+      "mode": "importance_probability",
+      "description": "Fixed final plan ou_a_4sd_upper_q1d.yaml (pilot-tuned Q), n=1000 ordinary + 1000 importance paths",
+      "reps": 2000,
+      "correct_rate": 0.9485,
+      "correct_rate_ci95": [
+        0.9378866139553728,
+        0.9577724878882076
+      ],
+      "nominal": 0.95,
+      "below_nominal": false,
+      "mean_sample_count": 1000.0,
+      "truth": 3.167124183311986e-05,
+      "intervals": {
+        "mc_wilson": {
+          "coverage": 0.964,
+          "coverage_ci95": [
+            0.9548767895645072,
+            0.9717277176946876
+          ],
+          "below_nominal": false,
+          "missing_rate": 0.0,
+          "mean_width": 0.0038870197723071933
+        },
+        "is_normal": {
+          "coverage": 0.9485,
+          "coverage_ci95": [
+            0.9378866139553728,
+            0.9577724878882076
+          ],
+          "below_nominal": false,
+          "missing_rate": 0.0,
+          "mean_width": 1.0013238865182588e-05
+        },
+        "is_hoeffding": {
+          "coverage": 1.0,
+          "coverage_ci95": [
+            0.998157260206594,
+            1.0
+          ],
+          "below_nominal": false,
+          "missing_rate": 0.0,
+          "mean_width": 0.2147664864918511
+        },
+        "is_bernstein": {
+          "coverage": 1.0,
+          "coverage_ci95": [
+            0.998157260206594,
+            1.0
+          ],
+          "below_nominal": false,
+          "missing_rate": 0.0,
+          "mean_width": 0.0614542568654999
+        }
+      },
+      "estimators": {
+        "mc": {
+          "mean": 3.7000000000000025e-05,
+          "bias": 5.328758166880078e-06,
+          "std": 0.00019403562794614978,
+          "rmse": 0.00019406028873420074,
+          "relative_rmse": 6.127334373458772,
+          "no_event_rate": 0.964,
+          "missing_rate": 0.0
+        },
+        "is": {
+          "mean": 3.1782318482427756e-05,
+          "bias": 1.1107664930786476e-07,
+          "std": 2.599065358907986e-06,
+          "rmse": 2.6007885710928207e-06,
+          "relative_rmse": 0.08211830103779114,
+          "no_event_rate": 0.0,
+          "missing_rate": 0.0
+        }
+      },
+      "mean_seconds_per_path": 0.0020781206143025027
+    },
+    {
+      "scenario": "is_final_ou_a_4sd_upper_q2_n1000",
+      "engine": "importance_fixed",
+      "mode": "importance_probability",
+      "description": "Fixed final plan ou_a_4sd_upper_q2.yaml (pilot-tuned Q), n=1000 ordinary + 1000 importance paths",
+      "reps": 2000,
+      "correct_rate": 0.9195,
+      "correct_rate_ci95": [
+        0.9067014912590344,
+        0.9310518797802613
+      ],
+      "nominal": 0.95,
+      "below_nominal": true,
+      "mean_sample_count": 1000.0,
+      "truth": 3.167124183311986e-05,
+      "intervals": {
+        "mc_wilson": {
+          "coverage": 0.964,
+          "coverage_ci95": [
+            0.9548767895645072,
+            0.9717277176946876
+          ],
+          "below_nominal": false,
+          "missing_rate": 0.0,
+          "mean_width": 0.0038870197723071933
+        },
+        "is_normal": {
+          "coverage": 0.9195,
+          "coverage_ci95": [
+            0.9067014912590344,
+            0.9310518797802613
+          ],
+          "below_nominal": true,
+          "missing_rate": 0.0,
+          "mean_width": 1.8658156684638778e-05
+        }
+      },
+      "estimators": {
+        "mc": {
+          "mean": 3.7000000000000025e-05,
+          "bias": 5.328758166880078e-06,
+          "std": 0.00019403562794614978,
+          "rmse": 0.00019406028873420074,
+          "relative_rmse": 6.127334373458772,
+          "no_event_rate": 0.964,
+          "missing_rate": 0.0
+        },
+        "is": {
+          "mean": 3.191275514178913e-05,
+          "bias": 2.415133086693255e-07,
+          "std": 5.011622348752763e-06,
+          "rmse": 5.016186705606094e-06,
+          "relative_rmse": 0.1583830129565829,
+          "no_event_rate": 0.0,
+          "missing_rate": 0.0
+        }
+      },
+      "mean_seconds_per_path": 0.002710365169472509
+    },
+    {
+      "scenario": "is_final_ou_a_4sd_upper_q3_n1000",
+      "engine": "importance_fixed",
+      "mode": "importance_probability",
+      "description": "Fixed final plan ou_a_4sd_upper_q3.yaml (pilot-tuned Q), n=1000 ordinary + 1000 importance paths",
+      "reps": 2000,
+      "correct_rate": 0.6375,
+      "correct_rate_ci95": [
+        0.6159924084320522,
+        0.6586036892496427
+      ],
+      "nominal": 0.95,
+      "below_nominal": true,
+      "mean_sample_count": 1000.0,
+      "truth": 3.167124183311986e-05,
+      "intervals": {
+        "mc_wilson": {
+          "coverage": 0.964,
+          "coverage_ci95": [
+            0.9548767895645072,
+            0.9717277176946876
+          ],
+          "below_nominal": false,
+          "missing_rate": 0.0,
+          "mean_width": 0.0038870197723071933
+        },
+        "is_normal": {
+          "coverage": 0.6375,
+          "coverage_ci95": [
+            0.6159924084320522,
+            0.6586036892496427
+          ],
+          "below_nominal": true,
+          "missing_rate": 0.0,
+          "mean_width": 3.450061997306947e-05
+        }
+      },
+      "estimators": {
+        "mc": {
+          "mean": 3.7000000000000025e-05,
+          "bias": 5.328758166880078e-06,
+          "std": 0.00019403562794614978,
+          "rmse": 0.00019406028873420074,
+          "relative_rmse": 6.127334373458772,
+          "no_event_rate": 0.964,
+          "missing_rate": 0.0
+        },
+        "is": {
+          "mean": 3.1893706405627144e-05,
+          "bias": 2.2246457250732213e-07,
+          "std": 5.801599772906626e-05,
+          "rmse": 5.800191854575828e-05,
+          "relative_rmse": 1.8313749379130246,
+          "no_event_rate": 0.0,
+          "missing_rate": 0.0
+        }
+      },
+      "mean_seconds_per_path": 0.0025416570583274975
+    },
+    {
+      "scenario": "is_final_ou_a_4sd_upper_q4_n1000",
+      "engine": "importance_fixed",
+      "mode": "importance_probability",
+      "description": "Fixed final plan ou_a_4sd_upper_q4.yaml (pilot-tuned Q), n=1000 ordinary + 1000 importance paths",
+      "reps": 2000,
+      "correct_rate": 0.3645,
+      "correct_rate_ci95": [
+        0.34336852752824115,
+        0.3860294926719845
+      ],
+      "nominal": 0.95,
+      "below_nominal": true,
+      "mean_sample_count": 1000.0,
+      "truth": 3.167124183311986e-05,
+      "intervals": {
+        "mc_wilson": {
+          "coverage": 0.964,
+          "coverage_ci95": [
+            0.9548767895645072,
+            0.9717277176946876
+          ],
+          "below_nominal": false,
+          "missing_rate": 0.0,
+          "mean_width": 0.0038870197723071933
+        },
+        "is_normal": {
+          "coverage": 0.3645,
+          "coverage_ci95": [
+            0.34336852752824115,
+            0.3860294926719845
+          ],
+          "below_nominal": true,
+          "missing_rate": 0.0,
+          "mean_width": 4.936173120948656e-05
+        }
+      },
+      "estimators": {
+        "mc": {
+          "mean": 3.7000000000000025e-05,
+          "bias": 5.328758166880078e-06,
+          "std": 0.00019403562794614978,
+          "rmse": 0.00019406028873420074,
+          "relative_rmse": 6.127334373458772,
+          "no_event_rate": 0.964,
+          "missing_rate": 0.0
+        },
+        "is": {
+          "mean": 2.5281459519804566e-05,
+          "bias": -6.389782313315262e-06,
+          "std": 9.758964995104215e-05,
+          "rmse": 9.777426668448983e-05,
+          "relative_rmse": 3.0871623916635764,
+          "no_event_rate": 0.0,
+          "missing_rate": 0.0
+        }
+      },
+      "mean_seconds_per_path": 0.003363005824249515
+    },
+    {
+      "scenario": "is_final_ou_a_4sd_upper_q5_n1000",
+      "engine": "importance_fixed",
+      "mode": "importance_probability",
+      "description": "Fixed final plan ou_a_4sd_upper_q5.yaml (pilot-tuned Q), n=1000 ordinary + 1000 importance paths",
+      "reps": 2000,
+      "correct_rate": 0.949,
+      "correct_rate_ci95": [
+        0.9384302465684916,
+        0.9582271615092796
+      ],
+      "nominal": 0.95,
+      "below_nominal": false,
+      "mean_sample_count": 1000.0,
+      "truth": 3.167124183311986e-05,
+      "intervals": {
+        "mc_wilson": {
+          "coverage": 0.964,
+          "coverage_ci95": [
+            0.9548767895645072,
+            0.9717277176946876
+          ],
+          "below_nominal": false,
+          "missing_rate": 0.0,
+          "mean_width": 0.0038870197723071933
+        },
+        "is_normal": {
+          "coverage": 0.949,
+          "coverage_ci95": [
+            0.9384302465684916,
+            0.9582271615092796
+          ],
+          "below_nominal": false,
+          "missing_rate": 0.0,
+          "mean_width": 1.0506472353461326e-05
+        }
+      },
+      "estimators": {
+        "mc": {
+          "mean": 3.7000000000000025e-05,
+          "bias": 5.328758166880078e-06,
+          "std": 0.00019403562794614978,
+          "rmse": 0.00019406028873420074,
+          "relative_rmse": 6.127334373458772,
+          "no_event_rate": 0.964,
+          "missing_rate": 0.0
+        },
+        "is": {
+          "mean": 3.173381016724775e-05,
+          "bias": 6.25683341278861e-08,
+          "std": 2.7192723018869296e-06,
+          "rmse": 2.719312307793846e-06,
+          "relative_rmse": 0.08586061519539641,
+          "no_event_rate": 0.0,
+          "missing_rate": 0.0
+        }
+      },
+      "mean_seconds_per_path": 0.00232206547245299
+    },
+    {
+      "scenario": "is_final_ou_b_3sd_upper_q0_n1000",
+      "engine": "importance_fixed",
+      "mode": "importance_probability",
+      "description": "Fixed final plan ou_b_3sd_upper_q0.yaml (pilot-tuned Q), n=1000 ordinary + 1000 importance paths",
+      "reps": 2000,
+      "correct_rate": 0.741,
+      "correct_rate_ci95": [
+        0.721206006055753,
+        0.760085010876053
+      ],
+      "nominal": 0.95,
+      "below_nominal": true,
+      "mean_sample_count": 1000.0,
+      "truth": 0.0013498980316300933,
+      "intervals": {
+        "mc_wilson": {
+          "coverage": 0.9545,
+          "coverage_ci95": [
+            0.9444278089934208,
+            0.9632107219011825
+          ],
+          "below_nominal": false,
+          "missing_rate": 0.0,
+          "mean_width": 0.005754102912860946
+        },
+        "is_normal": {
+          "coverage": 0.741,
+          "coverage_ci95": [
+            0.721206006055753,
+            0.760085010876053
+          ],
+          "below_nominal": true,
+          "missing_rate": 0.259,
+          "mean_width": 0.004353292689931771
+        },
+        "is_hoeffding": {
+          "coverage": 1.0,
+          "coverage_ci95": [
+            0.998157260206594,
+            1.0
+          ],
+          "below_nominal": false,
+          "missing_rate": 0.0,
+          "mean_width": 0.04429194083467337
+        },
+        "is_bernstein": {
+          "coverage": 1.0,
+          "coverage_ci95": [
+            0.998157260206594,
+            1.0
+          ],
+          "below_nominal": false,
+          "missing_rate": 0.0,
+          "mean_width": 0.01639049161269732
+        }
+      },
+      "estimators": {
+        "mc": {
+          "mean": 0.0013549999999999626,
+          "bias": 5.10196836990589e-06,
+          "std": 0.001161744302724328,
+          "rmse": 0.0011614650360993472,
+          "relative_rmse": 0.8604094597403031,
+          "no_event_rate": 0.2615,
+          "missing_rate": 0.0
+        },
+        "is": {
+          "mean": 0.0013449999999999628,
+          "bias": -4.89803163009268e-06,
+          "std": 0.0011604517758882105,
+          "rmse": 0.00116017196600929,
+          "relative_rmse": 0.8594515576915863,
+          "no_event_rate": 0.259,
+          "missing_rate": 0.0
+        }
+      },
+      "mean_seconds_per_path": 0.0018988661784010172
+    },
+    {
+      "scenario": "is_final_ou_b_3sd_upper_q1_n1000",
+      "engine": "importance_fixed",
+      "mode": "importance_probability",
+      "description": "Fixed final plan ou_b_3sd_upper_q1.yaml (pilot-tuned Q), n=1000 ordinary + 1000 importance paths",
+      "reps": 2000,
+      "correct_rate": 0.9415,
+      "correct_rate_ci95": [
+        0.9303006442029863,
+        0.9513818520087965
+      ],
+      "nominal": 0.95,
+      "below_nominal": false,
+      "mean_sample_count": 1000.0,
+      "truth": 0.0013498980316300933,
+      "intervals": {
+        "mc_wilson": {
+          "coverage": 0.9545,
+          "coverage_ci95": [
+            0.9444278089934208,
+            0.9632107219011825
+          ],
+          "below_nominal": false,
+          "missing_rate": 0.0,
+          "mean_width": 0.005754102912860946
+        },
+        "is_normal": {
+          "coverage": 0.9415,
+          "coverage_ci95": [
+            0.9303006442029863,
+            0.9513818520087965
+          ],
+          "below_nominal": false,
+          "missing_rate": 0.0,
+          "mean_width": 0.0003398827935112424
+        }
+      },
+      "estimators": {
+        "mc": {
+          "mean": 0.0013549999999999626,
+          "bias": 5.10196836990589e-06,
+          "std": 0.001161744302724328,
+          "rmse": 0.0011614650360993472,
+          "relative_rmse": 0.8604094597403031,
+          "no_event_rate": 0.2615,
+          "missing_rate": 0.0
+        },
+        "is": {
+          "mean": 0.0013517964076611116,
+          "bias": 1.8983760310216064e-06,
+          "std": 8.851738398162851e-05,
+          "rmse": 8.851561124950075e-05,
+          "relative_rmse": 0.06557207224208791,
+          "no_event_rate": 0.0,
+          "missing_rate": 0.0
+        }
+      },
+      "mean_seconds_per_path": 0.0022664144275084943
+    },
+    {
+      "scenario": "is_final_ou_b_3sd_upper_q1d_n1000",
+      "engine": "importance_fixed",
+      "mode": "importance_probability",
+      "description": "Fixed final plan ou_b_3sd_upper_q1d.yaml (pilot-tuned Q), n=1000 ordinary + 1000 importance paths",
+      "reps": 2000,
+      "correct_rate": 0.9405,
+      "correct_rate_ci95": [
+        0.9292204627311629,
+        0.9504653327666379
+      ],
+      "nominal": 0.95,
+      "below_nominal": false,
+      "mean_sample_count": 1000.0,
+      "truth": 0.0013498980316300933,
+      "intervals": {
+        "mc_wilson": {
+          "coverage": 0.9545,
+          "coverage_ci95": [
+            0.9444278089934208,
+            0.9632107219011825
+          ],
+          "below_nominal": false,
+          "missing_rate": 0.0,
+          "mean_width": 0.005754102912860946
+        },
+        "is_normal": {
+          "coverage": 0.9405,
+          "coverage_ci95": [
+            0.9292204627311629,
+            0.9504653327666379
+          ],
+          "below_nominal": false,
+          "missing_rate": 0.0,
+          "mean_width": 0.00038850492285221535
+        },
+        "is_hoeffding": {
+          "coverage": 1.0,
+          "coverage_ci95": [
+            0.998157260206594,
+            1.0
+          ],
+          "below_nominal": false,
+          "missing_rate": 0.0,
+          "mean_width": 0.21608786201334154
+        },
+        "is_bernstein": {
+          "coverage": 1.0,
+          "coverage_ci95": [
+            0.998157260206594,
+            1.0
+          ],
+          "below_nominal": false,
+          "missing_rate": 0.0,
+          "mean_width": 0.06305179710348348
+        }
+      },
+      "estimators": {
+        "mc": {
+          "mean": 0.0013549999999999626,
+          "bias": 5.10196836990589e-06,
+          "std": 0.001161744302724328,
+          "rmse": 0.0011614650360993472,
+          "relative_rmse": 0.8604094597403031,
+          "no_event_rate": 0.2615,
+          "missing_rate": 0.0
+        },
+        "is": {
+          "mean": 0.0013531578399726262,
+          "bias": 3.2598083425316268e-06,
+          "std": 0.00010200225936954746,
+          "rmse": 0.00010202884413960706,
+          "relative_rmse": 0.07558263050165376,
+          "no_event_rate": 0.0,
+          "missing_rate": 0.0
+        }
+      },
+      "mean_seconds_per_path": 0.002202464654964747
+    },
+    {
+      "scenario": "is_final_ou_b_3sd_upper_q2_n1000",
+      "engine": "importance_fixed",
+      "mode": "importance_probability",
+      "description": "Fixed final plan ou_b_3sd_upper_q2.yaml (pilot-tuned Q), n=1000 ordinary + 1000 importance paths",
+      "reps": 2000,
+      "correct_rate": 0.9285,
+      "correct_rate_ci95": [
+        0.9163172907307654,
+        0.9394074588484547
+      ],
+      "nominal": 0.95,
+      "below_nominal": true,
+      "mean_sample_count": 1000.0,
+      "truth": 0.0013498980316300933,
+      "intervals": {
+        "mc_wilson": {
+          "coverage": 0.9545,
+          "coverage_ci95": [
+            0.9444278089934208,
+            0.9632107219011825
+          ],
+          "below_nominal": false,
+          "missing_rate": 0.0,
+          "mean_width": 0.005754102912860946
+        },
+        "is_normal": {
+          "coverage": 0.9285,
+          "coverage_ci95": [
+            0.9163172907307654,
+            0.9394074588484547
+          ],
+          "below_nominal": true,
+          "missing_rate": 0.0,
+          "mean_width": 0.0007324923998356443
+        }
+      },
+      "estimators": {
+        "mc": {
+          "mean": 0.0013549999999999626,
+          "bias": 5.10196836990589e-06,
+          "std": 0.001161744302724328,
+          "rmse": 0.0011614650360993472,
+          "relative_rmse": 0.8604094597403031,
+          "no_event_rate": 0.2615,
+          "missing_rate": 0.0
+        },
+        "is": {
+          "mean": 0.0013585817952216836,
+          "bias": 8.683763591587114e-06,
+          "std": 0.0001870821379705906,
+          "rmse": 0.00018723683995033636,
+          "relative_rmse": 0.13870443215939443,
+          "no_event_rate": 0.0,
+          "missing_rate": 0.0
+        }
+      },
+      "mean_seconds_per_path": 0.0027681395053110185
+    },
+    {
+      "scenario": "is_final_ou_b_3sd_upper_q3_n1000",
+      "engine": "importance_fixed",
+      "mode": "importance_probability",
+      "description": "Fixed final plan ou_b_3sd_upper_q3.yaml (pilot-tuned Q), n=1000 ordinary + 1000 importance paths",
+      "reps": 2000,
+      "correct_rate": 0.2535,
+      "correct_rate_ci95": [
+        0.23455752771866165,
+        0.2731677210732811
+      ],
+      "nominal": 0.95,
+      "below_nominal": true,
+      "mean_sample_count": 1000.0,
+      "truth": 0.0013498980316300933,
+      "intervals": {
+        "mc_wilson": {
+          "coverage": 0.9545,
+          "coverage_ci95": [
+            0.9444278089934208,
+            0.9632107219011825
+          ],
+          "below_nominal": false,
+          "missing_rate": 0.0,
+          "mean_width": 0.005754102912860946
+        },
+        "is_normal": {
+          "coverage": 0.2535,
+          "coverage_ci95": [
+            0.23455752771866165,
+            0.2731677210732811
+          ],
+          "below_nominal": true,
+          "missing_rate": 0.0,
+          "mean_width": 0.0013808631358423746
+        }
+      },
+      "estimators": {
+        "mc": {
+          "mean": 0.0013549999999999626,
+          "bias": 5.10196836990589e-06,
+          "std": 0.001161744302724328,
+          "rmse": 0.0011614650360993472,
+          "relative_rmse": 0.8604094597403031,
+          "no_event_rate": 0.2615,
+          "missing_rate": 0.0
+        },
+        "is": {
+          "mean": 0.0009305063865379013,
+          "bias": -0.0004193916450921911,
+          "std": 0.0018318590471271047,
+          "rmse": 0.0018788078844656502,
+          "relative_rmse": 1.3918146707695116,
+          "no_event_rate": 0.0,
+          "missing_rate": 0.0
+        }
+      },
+      "mean_seconds_per_path": 0.0025637749263134834
+    },
+    {
+      "scenario": "is_final_ou_b_3sd_upper_q4_n1000",
+      "engine": "importance_fixed",
+      "mode": "importance_probability",
+      "description": "Fixed final plan ou_b_3sd_upper_q4.yaml (pilot-tuned Q), n=1000 ordinary + 1000 importance paths",
+      "reps": 2000,
+      "correct_rate": 0.1615,
+      "correct_rate_ci95": [
+        0.14562754296090286,
+        0.17837143651021833
+      ],
+      "nominal": 0.95,
+      "below_nominal": true,
+      "mean_sample_count": 1000.0,
+      "truth": 0.0013498980316300933,
+      "intervals": {
+        "mc_wilson": {
+          "coverage": 0.9545,
+          "coverage_ci95": [
+            0.9444278089934208,
+            0.9632107219011825
+          ],
+          "below_nominal": false,
+          "missing_rate": 0.0,
+          "mean_width": 0.005754102912860946
+        },
+        "is_normal": {
+          "coverage": 0.1615,
+          "coverage_ci95": [
+            0.14562754296090286,
+            0.17837143651021833
+          ],
+          "below_nominal": true,
+          "missing_rate": 0.0,
+          "mean_width": 0.0011650436701943249
+        }
+      },
+      "estimators": {
+        "mc": {
+          "mean": 0.0013549999999999626,
+          "bias": 5.10196836990589e-06,
+          "std": 0.001161744302724328,
+          "rmse": 0.0011614650360993472,
+          "relative_rmse": 0.8604094597403031,
+          "no_event_rate": 0.2615,
+          "missing_rate": 0.0
+        },
+        "is": {
+          "mean": 0.000586637371862657,
+          "bias": -0.0007632606597674336,
+          "std": 0.001545576376922298,
+          "rmse": 0.0017234206591776795,
+          "relative_rmse": 1.2767043278791452,
+          "no_event_rate": 0.0,
+          "missing_rate": 0.0
+        }
+      },
+      "mean_seconds_per_path": 0.002810509998151781
+    },
+    {
+      "scenario": "is_final_ou_b_3sd_upper_q5_n1000",
+      "engine": "importance_fixed",
+      "mode": "importance_probability",
+      "description": "Fixed final plan ou_b_3sd_upper_q5.yaml (pilot-tuned Q), n=1000 ordinary + 1000 importance paths",
+      "reps": 2000,
+      "correct_rate": 0.938,
+      "correct_rate_ci95": [
+        0.92652355225711,
+        0.948170451237647
+      ],
+      "nominal": 0.95,
+      "below_nominal": true,
+      "mean_sample_count": 1000.0,
+      "truth": 0.0013498980316300933,
+      "intervals": {
+        "mc_wilson": {
+          "coverage": 0.9545,
+          "coverage_ci95": [
+            0.9444278089934208,
+            0.9632107219011825
+          ],
+          "below_nominal": false,
+          "missing_rate": 0.0,
+          "mean_width": 0.005754102912860946
+        },
+        "is_normal": {
+          "coverage": 0.938,
+          "coverage_ci95": [
+            0.92652355225711,
+            0.948170451237647
+          ],
+          "below_nominal": true,
+          "missing_rate": 0.0,
+          "mean_width": 0.00037872968411289276
+        }
+      },
+      "estimators": {
+        "mc": {
+          "mean": 0.0013549999999999626,
+          "bias": 5.10196836990589e-06,
+          "std": 0.001161744302724328,
+          "rmse": 0.0011614650360993472,
+          "relative_rmse": 0.8604094597403031,
+          "no_event_rate": 0.2615,
+          "missing_rate": 0.0
+        },
+        "is": {
+          "mean": 0.0013522636728463809,
+          "bias": 2.3656412162872148e-06,
+          "std": 9.933129396853315e-05,
+          "rmse": 9.93346307530591e-05,
+          "relative_rmse": 0.0735867661301097,
+          "no_event_rate": 0.0,
+          "missing_rate": 0.0
+        }
+      },
+      "mean_seconds_per_path": 0.0019887713850389923
+    }
+  ]
+}
