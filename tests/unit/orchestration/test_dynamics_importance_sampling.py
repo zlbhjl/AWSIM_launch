@@ -8,10 +8,10 @@ import pytest
 
 from contracts.evaluation import EvaluationRecord
 from contracts.execution import RawRunResult, RunStatus
+from orchestration.seeding import legacy_sample_seed as _sample_seed
 from targets.dynamics.importance_sampling import (
     DynamicsImportanceSamplingRunConfig,
     DynamicsImportanceSamplingRunner,
-    _sample_seed,
 )
 from runtime.repository.importance_experiment_manifest import ManifestMismatchError
 from runtime.repository.importance_sampling_results import ImportanceSamplingResultsRepository
@@ -152,6 +152,7 @@ def test_v2_ordinary_and_importance_streams_are_independent_unless_paired(tmp_pa
 
 
 def test_v2_injected_failure_is_incomplete_until_retried(tmp_path: Path) -> None:
+    """With one attempt per sample, a failure stays unresolved until --retry-failed."""
     class Flaky(DynamicsBackend):
         failed = False
 
@@ -162,11 +163,27 @@ def test_v2_injected_failure_is_incomplete_until_retried(tmp_path: Path) -> None
             return super().run(case)
 
     backend = Flaky(DynamicsBackendConfig(output_root=tmp_path / "artifacts"))
-    assert _run_v2(tmp_path, GAUSSIAN_Q1, backend=backend)["final_status"] == "incomplete"
-    retried = _run_v2(tmp_path, GAUSSIAN_Q1, backend=backend, retry_failed=True)
+    assert _run_v2(tmp_path, GAUSSIAN_Q1, backend=backend, max_attempts=1)["final_status"] == "incomplete"
+    retried = _run_v2(tmp_path, GAUSSIAN_Q1, backend=backend, retry_failed=True, max_attempts=1)
 
     assert retried["final_status"] == "complete"
     assert retried["audit"]["importance"]["counts"]["retries"] == 1
+
+
+def test_v2_failed_samples_are_run_again_by_default(tmp_path: Path) -> None:
+    class Flaky(DynamicsBackend):
+        failures = 0
+
+        def run(self, case):
+            if case.meta["sampling"]["sample_id"] == "ordinary-000002" and Flaky.failures < 2:
+                Flaky.failures += 1
+                raise RuntimeError("injected failure")
+            return super().run(case)
+
+    comparison = _run_v2(tmp_path, GAUSSIAN_Q1, backend=Flaky(DynamicsBackendConfig(output_root=tmp_path / "a")))
+
+    assert comparison["final_status"] == "complete"  # third attempt succeeded
+    assert comparison["audit"]["ordinary"]["counts"]["retries"] == 2
 
 
 def test_v2_plan_with_an_innovation_law_proposal(tmp_path: Path) -> None:

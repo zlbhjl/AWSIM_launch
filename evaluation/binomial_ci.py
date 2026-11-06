@@ -9,7 +9,7 @@ from contracts.evaluation import EvaluationRecord
 from contracts.statistics import StatisticalReport, StatisticalRequest
 from evaluation.alpha_spending import spending_budget_at
 from evaluation.dkw import records_to_data_frame
-import point_extractors
+from evaluation.region_filter import RegionVocabulary, filter_rows
 
 
 def calculate_binomial_confidence_interval(
@@ -20,6 +20,7 @@ def calculate_binomial_confidence_interval(
     method: str = "wilson",
     bounds: dict[str, tuple[float, float]] | None = None,
     region: str = "custom",
+    vocabulary: RegionVocabulary | None = None,
     reason_pattern: str | None = None,
     anytime_valid: bool = False,
 ) -> dict[str, object] | None:
@@ -44,9 +45,10 @@ def calculate_binomial_confidence_interval(
         working_df = working_df[reason_series.str.contains(reason_pattern, na=False)]
 
     try:
-        working_df = point_extractors.filter_by_region_and_bounds(
+        working_df = filter_rows(
             working_df,
             region=region,
+            vocabulary=vocabulary,
             bounds=bounds,
         )
     except Exception:
@@ -120,6 +122,7 @@ def evaluate_and_summarize_binomial_ci(
     method: str = "wilson",
     bounds: dict[str, tuple[float, float]] | None = None,
     region: str = "custom",
+    vocabulary: RegionVocabulary | None = None,
     reason_pattern: str | None = None,
 ) -> dict[str, object]:
     result = calculate_binomial_confidence_interval(
@@ -129,6 +132,7 @@ def evaluate_and_summarize_binomial_ci(
         method=method,
         bounds=bounds,
         region=region,
+        vocabulary=vocabulary,
         reason_pattern=reason_pattern,
     )
     if not result:
@@ -168,6 +172,7 @@ class BinomialCIService:
     ) -> StatisticalReport:
         method = str(request.options.get("method", "wilson"))
         region = str(request.options.get("region", "custom"))
+        vocabulary = request.options.get("region_vocabulary")
         min_samples = int(request.options.get("min_samples", 0))
         max_samples = request.options.get("max_samples")
         resolved_max_samples = int(max_samples) if max_samples is not None else None
@@ -186,6 +191,7 @@ class BinomialCIService:
             method=method,
             bounds=request.bounds,
             region=region,
+            vocabulary=vocabulary,
             reason_pattern=reason_pattern,
             anytime_valid=anytime_valid,
         )

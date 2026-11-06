@@ -10,7 +10,10 @@ import numpy as np
 import pytest
 
 from contracts.execution import RunStatus, TestCase
+from orchestration.importance.weights import compose_internal_weight
 from targets.dynamics.backend import DynamicsBackend, DynamicsBackendConfig
+from targets.dynamics.profile import parse_noise_path_q
+from targets.dynamics.runners.sde import as_path_proposal
 from targets.dynamics.models.exact import (
     ou_euler_terminal_variance,
     ou_terminal_exceedance_probability,
@@ -131,7 +134,12 @@ def test_backend_and_interpreter_judge_the_event_and_merge_the_path_weight(tmp_p
     assert record.status is RunStatus.SUCCESS
     assert record.output["c_event"] == int(record.output["x_terminal"] > 1.0)
     assert record.output["step_count"] == 100
-    sampling = record.meta["sampling"]
+    # The backend reports the path densities; the shared code composes the weight.
+    report = record.meta["sampling"]["internal"]
+    assert report["log_p"] == raw.meta["sde_path_log_p"]
+    assert report["sampled_component"] == 0 and len(report["log_q"]) == 1
+    proposal = as_path_proposal(parse_noise_path_q(case.input["noise_path_q"], channels=frozenset({"w"})))
+    sampling = compose_internal_weight(record, proposal.internal_proposal()).meta["sampling"]
     noise_log_ratio = raw.meta["sde_path_log_p"] - raw.meta["sde_path_log_q"]
     assert sampling["log_importance_weight"] == pytest.approx(log(2.0) + noise_log_ratio)
     assert record.meta["model_id"] == "ou_scalar"

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
 import pandas as pd
@@ -20,12 +20,27 @@ class GPBoundaryModel:
         return self.model.predict(x_scaled, return_std=True)
 
 
+@dataclass(frozen=True)
+class TrainingRules:
+    """Target knowledge used when result rows become GP training data.
+
+    ``clean`` removes or fixes rows before training (for example invalid
+    sentinel values); ``critical`` marks rows always kept when the training
+    set is thinned to ``max_train_samples``. Without rules, rows are used as
+    they are and thinning keeps only the most recent ones.
+    """
+
+    clean: Callable[[pd.DataFrame], pd.DataFrame] | None = None
+    critical: Callable[[pd.DataFrame], pd.Series] | None = None
+
+
 @dataclass
 class GPBoundaryService:
     """Compatibility wrapper around the canonical GP boundary function API."""
 
     feature_names: list[str]
     boundary_model: GPBoundaryModel | None = None
+    training_rules: TrainingRules | None = None
 
     def train(
         self,
@@ -45,6 +60,7 @@ class GPBoundaryService:
             n_restarts_optimizer=n_restarts_optimizer,
             random_state=random_state,
             max_train_samples=max_train_samples,
+            training_rules=self.training_rules,
         )
         return self.boundary_model is not None
 
@@ -60,6 +76,7 @@ def prepare_training_data_frame(
     target_column: str,
     feature_names: Sequence[str],
     max_train_samples: int = 1500,
+    training_rules: TrainingRules | None = None,
 ) -> pd.DataFrame | None:
     if df_dataset is None or target_column not in df_dataset.columns:
         return None
@@ -69,25 +86,8 @@ def prepare_training_data_frame(
         return None
 
     working_df = df_dataset.copy()
-    for col in working_df.columns:
-        if col.startswith("c_") or col.startswith("formula_"):
-            working_df = working_df[~working_df[col].isin([-1, "-1", -1.0])]
-
-    if "c_collision" in working_df.columns:
-        collision_mask = working_df["c_collision"].isin([1, "1", 1.0])
-        for col in working_df.columns:
-            if col.startswith("c_ttc_"):
-                working_df.loc[collision_mask, col] = 1
-
-    ttc_cols = sorted(
-        [c for c in working_df.columns if c.startswith("c_ttc_")],
-        key=lambda x: float(x.split("_")[-1]),
-    )
-    for i in range(len(ttc_cols) - 1):
-        working_df.loc[
-            working_df[ttc_cols[i]].isin([1, "1", 1.0]),
-            ttc_cols[i + 1],
-        ] = 1
+    if training_rules is not None and training_rules.clean is not None:
+        working_df = training_rules.clean(working_df)
 
     for col in feature_names:
         working_df[col] = pd.to_numeric(working_df[col], errors="coerce")
@@ -100,9 +100,9 @@ def prepare_training_data_frame(
 
     if len(valid_df) > max_train_samples:
         is_critical = (
-            (valid_df.get("c_collision", 0) == 1)
-            | (valid_df.get("min_ttc", 999.0) < 1.5)
-            | (valid_df.get("min_distance", 999.0) < 2.0)
+            training_rules.critical(valid_df)
+            if training_rules is not None and training_rules.critical is not None
+            else pd.Series(False, index=valid_df.index)
         )
         recent_threshold = valid_df["loop_num"].max() - 500
         is_recent = valid_df["loop_num"] > recent_threshold
@@ -128,12 +128,14 @@ def fit_gp_boundary_model(
     n_restarts_optimizer: int = 5,
     random_state: int = 42,
     max_train_samples: int = 1500,
+    training_rules: TrainingRules | None = None,
 ) -> GPBoundaryModel | None:
     training_df = prepare_training_data_frame(
         df_dataset,
         target_column=target_column,
         feature_names=feature_names,
         max_train_samples=max_train_samples,
+        training_rules=training_rules,
     )
     if training_df is None:
         return None
@@ -164,6 +166,7 @@ def predict_uncertainty(boundary_model: GPBoundaryModel, x_new):
 __all__ = [
     "GPBoundaryModel",
     "GPBoundaryService",
+    "TrainingRules",
     "fit_gp_boundary_model",
     "predict_uncertainty",
     "prepare_training_data_frame",

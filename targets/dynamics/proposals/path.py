@@ -17,6 +17,10 @@ import math
 from collections.abc import Sequence
 from dataclasses import dataclass
 
+from contracts.importance_sampling_plugin import InternalProposal
+from contracts.sampling import TARGET_COMPONENT
+from orchestration.importance.weights import choose_component, mixture_log_q, mixture_weight_bound, needs_choice
+
 from .base import InnovationLaw
 
 
@@ -52,50 +56,38 @@ class PathProposal:
     @property
     def needs_choice(self) -> bool:
         """Whether a per-path component draw is needed (beta = 1 means P only)."""
-        if self.defensive_weight is not None:
-            return self.defensive_weight < 1.0
-        return len(self.components) > 1
+        return needs_choice(self.weights, self.defensive_weight)
+
+    def choose_index(self, uniform: float | None) -> int | str:
+        """Map one U(0, 1) draw to ``"target"`` (P) or a component index."""
+        return choose_component(self.weights, self.defensive_weight, uniform)
 
     def choose(self, uniform: float | None) -> InnovationLaw | _TargetComponent:
         """Map one U(0, 1) draw to P (``TARGET``) or a component."""
-        beta = self.defensive_weight
-        if beta is not None and beta >= 1.0:
-            return TARGET
-        if uniform is None:
-            return self.components[0]
-        if beta is not None:
-            if uniform < beta:
-                return TARGET
-            uniform = (uniform - beta) / (1.0 - beta)
-        cumulative = 0.0
-        for component, weight in zip(self.components, self.weights):
-            cumulative += weight
-            if uniform < cumulative:
-                return component
-        return self.components[-1]
+        index = self.choose_index(uniform)
+        return TARGET if index == TARGET_COMPONENT else self.components[index]
 
     def log_q(self, log_p: float, log_r: Sequence[float]) -> float:
         """Log path density of Q from log P and the log density of each component."""
-        beta = self.defensive_weight
-        if beta is not None and beta >= 1.0:
-            return log_p
-        component_scale = 1.0 if beta is None else 1.0 - beta
-        terms = [math.log(component_scale * weight) + value for weight, value in zip(self.weights, log_r)]
-        if beta is not None:
-            terms.append(math.log(beta) + log_p)
-        finite = [term for term in terms if term != -math.inf]
-        if not finite:
-            return -math.inf
-        peak = max(finite)
-        return peak + math.log(sum(math.exp(term - peak) for term in finite))
+        return mixture_log_q(self.weights, self.defensive_weight, log_p, log_r)
 
     def noise_weight_bound(self) -> float | None:
         """Upper bound of the noise part of P/Q, or None if unbounded."""
-        if self.defensive_weight is not None:
-            return 1.0 / self.defensive_weight
-        if all(component is TARGET for component in self.components):
-            return 1.0
-        return None
+        return mixture_weight_bound(self.component_names(), self.defensive_weight)
+
+    def component_names(self) -> tuple[str, ...]:
+        return tuple(TARGET_COMPONENT if component is TARGET else f"component_{index}"
+                     for index, component in enumerate(self.components))
+
+    def internal_proposal(self) -> InternalProposal:
+        """This proposal as seen by the shared importance-sampling code."""
+        return InternalProposal(
+            components=self.component_names(),
+            weights=tuple(self.weights),
+            definition=self,
+            fingerprint_source=self.describe(),
+            defensive_weight=self.defensive_weight,
+        )
 
     def referenced_channels(self) -> frozenset[str]:
         names: set[str] = set()

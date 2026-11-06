@@ -11,9 +11,11 @@ from collections.abc import Callable, Sequence
 
 from contracts.evaluation import EvaluationRecord
 from contracts.execution import TestCase
+from contracts.importance_sampling_plugin import InternalProposal
 from evaluation.importance_sampling_audit import audit_fixed_sample_run
 from evaluation.importance_sampling_comparison import compare_sampling_methods
-from orchestration.worker_loop import WorkerLoop
+from orchestration.importance.executors import CaseExecutor, CaseJob, LocalExecutor
+from orchestration.importance.weights import compose_internal_weight
 from runtime.repository.importance_experiment_manifest import ExperimentManifest
 from runtime.repository.importance_sampling_results import ImportanceSamplingResultsRepository
 
@@ -31,21 +33,25 @@ def run_fixed_importance_sampling_comparison(
     confidence: float,
     plan_id: str,
     target_width: float | None = None,
+    internal_proposal: InternalProposal | None = None,
+    executor: CaseExecutor | None = None,
 ) -> dict[str, object]:
-    """Resume and compare fixed-size ordinary and importance runs."""
+    """Resume and compare fixed-size ordinary and importance runs.
+
+    ``internal_proposal``: the proposal over the target's internal randomness,
+    used to turn each record's ``internal`` report into its weight.
+    """
 
     if max_samples < 1:
         raise ValueError("max_samples must be positive")
-    for run_kind in ("ordinary", "importance"):
-        _run_missing(
-            backend=backend,
-            result_interpreter=result_interpreter,
-            repository=repository,
-            run_kind=run_kind,
-            existing_count=len(repository.load_records(run_kind)),
-            max_samples=max_samples,
-            build_case=build_case,
-        )
+    executor = executor or LocalExecutor(backend=backend, result_interpreter=result_interpreter)
+    jobs: list[CaseJob] = []
+    for run_kind in RUN_KINDS:
+        sink = importance_record_sink(repository, run_kind, internal_proposal)
+        existing_count = len(repository.load_records(run_kind))
+        jobs += [CaseJob(build_case(run_kind, index), sink, run_kind)
+                 for index in range(existing_count + 1, max_samples + 1)]
+    executor.run(jobs)
     comparison = compare_sampling_methods(
         repository.load_records("ordinary"),
         repository.load_records("importance"),
@@ -58,23 +64,17 @@ def run_fixed_importance_sampling_comparison(
     return {"comparison": comparison, "comparison_path": str(comparison_path)}
 
 
-def _run_missing(
-    *,
-    backend: object,
-    result_interpreter: object,
+def importance_record_sink(
     repository: ImportanceSamplingResultsRepository,
     run_kind: str,
-    existing_count: int,
-    max_samples: int,
-    build_case: Callable[[str, int], TestCase],
-) -> None:
-    loop = WorkerLoop(
-        backend=backend,
-        result_interpreter=result_interpreter,
-        result_sink=lambda record: repository.append_record(run_kind, record),
-    )
-    for index in range(existing_count + 1, max_samples + 1):
-        loop.run_once(build_case(run_kind, index))
+    internal_proposal: InternalProposal | None,
+) -> Callable[[EvaluationRecord], object]:
+    """Save a record after composing its weight from the ``internal`` report, if any."""
+
+    def sink(record: EvaluationRecord) -> object:
+        return repository.append_record(run_kind, compose_internal_weight(record, internal_proposal))
+
+    return sink
 
 
 def sample_id(run_kind: str, index: int) -> str:
@@ -91,6 +91,9 @@ def run_strict_fixed_importance_sampling_comparison(
     metric: str,
     confidence: float,
     retry_failed: bool = False,
+    internal_proposal: InternalProposal | None = None,
+    executor: CaseExecutor | None = None,
+    max_attempts: int = 1,
 ) -> dict[str, object]:
     """Fixed-N comparison with sample ids, a completion audit and resume by id.
 
@@ -100,28 +103,40 @@ def run_strict_fixed_importance_sampling_comparison(
     replaced by a new draw. Each case is tagged with its ``sample_id``, the
     manifest fingerprints and ``meta.attempt_id``.
 
-    Without ``retry_failed``, samples whose latest attempt failed stay
-    unresolved and the comparison is marked incomplete.
+    A sample whose attempt failed is run again (same inputs and streams)
+    until it resolves or has had ``max_attempts`` attempts. ``retry_failed``
+    gives samples that used up their attempts in an earlier run one more.
+    Samples that stay unresolved mark the comparison incomplete.
     """
 
     planned = manifest.planned_samples
-    for run_kind in RUN_KINDS:
-        attempts = _latest_attempts(repository.load_records(run_kind))
-        loop = WorkerLoop(
-            backend=backend,
-            result_interpreter=result_interpreter,
-            result_sink=lambda record, kind=run_kind: repository.append_record(kind, record),
-        )
-        for index in range(1, planned + 1):
-            identifier = sample_id(run_kind, index)
-            latest = attempts.get(identifier)
-            if latest is None:
-                attempt_id = 0
-            elif retry_failed and not _is_resolved(latest[1], run_kind=run_kind, metric=metric):
-                attempt_id = latest[0] + 1
-            else:
-                continue
-            loop.run_once(_tag_case(build_case(run_kind, index), manifest, run_kind, identifier, attempt_id))
+    executor = executor or LocalExecutor(backend=backend, result_interpreter=result_interpreter)
+    first_round = True
+    # One attempt per unresolved sample and round; a sample whose attempt left
+    # no record (lost on a cluster) does not come back, so the rounds are bounded.
+    for _round in range(max_attempts + (1 if retry_failed else 0)):
+        jobs: list[CaseJob] = []
+        for run_kind in RUN_KINDS:
+            attempts = _latest_attempts(repository.load_records(run_kind))
+            sink = importance_record_sink(repository, run_kind, internal_proposal)
+            for index in range(1, planned + 1):
+                identifier = sample_id(run_kind, index)
+                latest = attempts.get(identifier)
+                if latest is None:
+                    attempt_id = 0
+                elif _is_resolved(latest[1], run_kind=run_kind, metric=metric):
+                    continue
+                elif latest[0] + 1 < max_attempts or (first_round and retry_failed):
+                    attempt_id = latest[0] + 1
+                else:
+                    continue
+                jobs.append(CaseJob(
+                    _tag_case(build_case(run_kind, index), manifest, run_kind, identifier, attempt_id), sink, run_kind,
+                ))
+        if not jobs:
+            break
+        executor.run(jobs)
+        first_round = False
 
     records = {run_kind: repository.load_records(run_kind) for run_kind in RUN_KINDS}
     audits = {
@@ -216,6 +231,7 @@ def _is_resolved(record: EvaluationRecord, *, run_kind: str, metric: str) -> boo
 
 
 __all__ = [
+    "importance_record_sink",
     "run_fixed_importance_sampling_comparison",
     "run_strict_fixed_importance_sampling_comparison",
     "sample_id",

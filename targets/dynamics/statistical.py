@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contracts.statistical_region import PassthroughStatisticalRegionPolicy
+from contracts.metric_spec import binary, real
 from targets.statistical import StatisticalTargetProfile
 
 
@@ -12,6 +13,8 @@ STATISTICAL_TARGET_PROFILE = StatisticalTargetProfile(
     region_policy_name="passthrough",
     minimum_dkw_value=0.0,
     iid_sampling=True,
+    # The U-turn's TTC has no fixed range (see targets/awsim/statistical.py).
+    metric_specs={"c_collision": binary(), "c_event": binary(), "min_ttc": real()},
 )
 
 

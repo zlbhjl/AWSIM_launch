@@ -410,16 +410,17 @@ def test_orchestrator_builds_active_strategy_with_runtime_dataset_paths(
     monkeypatch,
     tmp_path,
 ) -> None:
+    import orchestration.region_sampling as region_sampling
+
     captured: dict[str, object] = {}
 
-    class FakeStrategist:
-        def __init__(self, scenario_name, config, **kwargs):
-            captured["scenario_name"] = scenario_name
-            captured["config"] = config
+    class FakeStrategy:
+        def __init__(self, **kwargs):
             captured["kwargs"] = kwargs
 
-    monkeypatch.setattr(awsim_builders, "ActiveLearningStrategist", FakeStrategist)
-    monkeypatch.setattr(awsim_builders.importlib, "import_module", lambda name: object())
+    # AWSIM's statistical modes run on the shared region sampling (docs/statistics_single_path_plan.md).
+    monkeypatch.setattr(region_sampling, "RegionSamplingStrategy", FakeStrategy)
+    monkeypatch.setattr(region_sampling.importlib, "import_module", lambda name: object())
 
     dataset_csv = tmp_path / "custom_dataset.csv"
     orchestrator = Orchestrator()
@@ -443,17 +444,16 @@ def test_orchestrator_builds_active_strategy_with_runtime_dataset_paths(
         )
     )
 
-    assert isinstance(strategy, FakeStrategist)
-    assert captured["scenario_name"] == "uturn"
+    assert isinstance(strategy, FakeStrategy)
     kwargs = captured["kwargs"]
+    assert kwargs["scenario_name"] == "uturn"
     repository = kwargs["dataset_repository"]
     history_repository = kwargs["statistical_history_repository"]
     assert kwargs["run_mode"] == "dkw_fixed"
-    assert kwargs["focus_points"] == [{"dx0": 15.0}]
-    assert kwargs["dkw_bounds"] == {"dx0": [15.0, 20.0]}
-    assert kwargs["dkw_region"] == "intersect_safe"
-    assert kwargs["dkw_pure_smc"] is True
-    assert kwargs["dkw_simultaneous"] is True
+    assert kwargs["bounds"] == {"dx0": [15.0, 20.0]}
+    assert kwargs["region"] == "intersect_safe"
+    assert kwargs["pure_smc"] is True
+    assert kwargs["simultaneous"] is True
     assert kwargs["max_samples"] == 12
     assert kwargs["binomial_target"] == "c_ttc_1.1"
     assert kwargs["binomial_method"] == "clopper-pearson"
@@ -463,6 +463,7 @@ def test_orchestrator_builds_active_strategy_with_runtime_dataset_paths(
     assert str(repository.dataset_csv) == str(dataset_csv.resolve())
     assert str(repository.base_csv).endswith("custom_dataset_base.csv")
     assert str(history_repository.traces_dir) == str(dataset_csv.resolve().parent)
+    assert str(kwargs["statistical_samples_repository"].traces_dir) == str(dataset_csv.resolve().parent)
 
 
 def test_orchestrator_manages_external_workers_with_queue_watermarks() -> None:
@@ -718,7 +719,8 @@ def test_orchestrator_dkw_and_verify_consistency_do_not_use_repeat_count_target_
     )
 
 
-def test_orchestrator_dkw_fixed_still_uses_sampling_cap_as_target_total() -> None:
+def test_orchestrator_waits_for_no_case_count_in_awsim_statistical_modes() -> None:
+    """The region sampling issues at most max_samples and stops by itself (verification V10b)."""
     orchestrator = Orchestrator()
 
     assert orchestrator._resolve_target_total(
@@ -729,7 +731,7 @@ def test_orchestrator_dkw_fixed_still_uses_sampling_cap_as_target_total() -> Non
             max_samples=12,
         ),
         last_loop_num=4,
-    ) == 16
+    ) is None
 
 
 def test_orchestrator_prism_sprt_and_ebstop_do_not_stop_after_one_task() -> None:
@@ -1242,3 +1244,107 @@ def test_dynamics_decision_modes_map_to_binary_metrics() -> None:
         "judgment": "c_collision",
         "screening": "c_screening_candidate",
     }
+
+
+class _EndlessStrategy:
+    """Issues cases forever (like replay or a strategy that waits for its results)."""
+
+    def __init__(self) -> None:
+        self.index = 0
+
+    def next_test_case(self):
+        self.index += 1
+        return TestCase(case_id=f"endless_{self.index}", target="awsim", case_kind="uturn",
+                        input={"dx0": float(self.index)}, reason="endless")
+
+
+def _external_run(strategy, *, target_total, take_per_poll=1, polls_limit=200, **config):
+    """Run the orchestrator with one external worker that takes ``take_per_poll`` cases per poll."""
+    queue = TaskQueue()
+    taken: list[str] = []
+    polls = {"count": 0}
+
+    class _Orchestrator(Orchestrator):
+        def _build_strategy(self, _config):
+            return strategy
+
+        def _resolve_target_total(self, _config, _last_loop_num):
+            return target_total
+
+    def sleeper(_seconds: float) -> None:
+        polls["count"] += 1
+        if polls["count"] > polls_limit:
+            raise AssertionError("the run did not finish")
+        for _ in range(take_per_poll):
+            payload = queue.get_next_task()
+            if payload is None or payload.get("system_command") == "stop":
+                return
+            taken.append(str(payload["case_id"]))
+            queue.update_worker_status("worker-remote", "success")
+            queue.report_completion(int(payload["global_loop_num"]), "success")
+
+    summary = _Orchestrator(queue=queue, worker_runner=lambda *a, **k: 0, sleeper=sleeper).run(
+        OrchestratorConfig(output="/tmp/records.jsonl", worker_id="worker-remote", dataset_csv="/tmp/uturn_dataset.csv",
+                           run_inline_worker=False, worker_count=1, poll_interval_sec=0.0, **config)
+    )
+    return summary, taken, polls["count"]
+
+
+def test_the_case_limit_ends_a_run_with_no_fixed_total() -> None:
+    """--max-strategy-cases on a run with no total (replay) used to wait forever (verification V7, 2026-11-03)."""
+    summary, taken, _ = _external_run(_EndlessStrategy(), target_total=None, max_strategy_cases=3,
+                                      queue_high_water=2, queue_low_water=1)
+
+    assert taken == ["endless_1", "endless_2", "endless_3"]
+    assert summary["stop_reason"] == "Reached max_strategy_cases=3"
+    assert summary["completed_count"] == 3
+
+
+def test_queued_cases_are_cancelled_at_once_when_the_target_is_reached() -> None:
+    """After the stop signal no worker takes queued cases; they used to wait for the
+    600 s stalled-drain timeout (verification V1/V2/V6, 2026-11-03)."""
+    summary, taken, polls = _external_run(_EndlessStrategy(), target_total=2, queue_high_water=6, queue_low_water=1)
+
+    assert len(taken) == 2
+    assert summary["stop_reason"] == "Target Reached"
+    assert summary["queue_size"] == 0
+    assert polls < 10  # no stalled-drain wait
+
+
+def test_no_cases_are_issued_after_the_stop_signal() -> None:
+    """While a worker still runs a case after the stop, the queue emptied by the cancel was
+    refilled and cancelled at every poll (verification V10b, 2026-11-05: 1,239 cases issued)."""
+    queue = TaskQueue()
+    strategy = _EndlessStrategy()
+    running: list[int] = []
+    polls = {"count": 0}
+
+    class _Orchestrator(Orchestrator):
+        def _build_strategy(self, _config):
+            return strategy
+
+        def _resolve_target_total(self, _config, _last_loop_num):
+            return 2
+
+    def sleeper(_seconds: float) -> None:
+        polls["count"] += 1
+        if polls["count"] > 200:
+            raise AssertionError("the run did not finish")
+        if polls["count"] == 1:  # three workers take a case each; one is slow
+            running.extend(int(queue.get_next_task()["global_loop_num"]) for _ in range(3))
+            queue.update_worker_status("worker-remote", "running")
+            for loop_num in running[:2]:
+                queue.report_completion(loop_num, "success")
+        if polls["count"] == 20:
+            queue.report_completion(running[2], "success")
+            queue.update_worker_status("worker-remote", "success")
+
+    summary = _Orchestrator(queue=queue, worker_runner=lambda *a, **k: 0, sleeper=sleeper).run(
+        OrchestratorConfig(output="/tmp/records.jsonl", worker_id="worker-remote", dataset_csv="/tmp/uturn_dataset.csv",
+                           run_inline_worker=False, worker_count=1, poll_interval_sec=0.0,
+                           queue_high_water=6, queue_low_water=1)
+    )
+
+    assert summary["stop_reason"] == "Target Reached"
+    assert summary["queue_size"] == 0
+    assert strategy.index == 6  # only the first fill

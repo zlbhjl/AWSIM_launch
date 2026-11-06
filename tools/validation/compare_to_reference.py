@@ -1,6 +1,6 @@
 """Compare repeated fixed-N importance-sampling runs with an independent reference.
 
-For models without a closed form (model C, the U-turn) the coverage of an
+For models without a closed form (model C, the U-turn; any target) the coverage of an
 interval cannot be measured. Instead each final plan is run ``--runs`` times
 with independent random roots (phase ``final``), and the estimates and
 intervals are reported next to the reference estimate and its own
@@ -22,26 +22,14 @@ import time
 from multiprocessing import Pool
 from pathlib import Path
 
-from targets.dynamics.importance_sampling import (
-    DynamicsImportanceSamplingRunConfig,
-    DynamicsImportanceSamplingRunner,
-)
-from targets.dynamics.backend import DynamicsBackend, DynamicsBackendConfig
-from targets.dynamics.result_interpreter import DynamicsResultInterpreter
+from tools.validation.importance_runs import run_plan_fixed
 
 
 def run_once(task: tuple[str, int, int]) -> dict[str, object]:
     plan, samples, root = task
     with tempfile.TemporaryDirectory(prefix="reference-") as tmp:
-        runner = DynamicsImportanceSamplingRunner(
-            backend=DynamicsBackend(DynamicsBackendConfig(output_root=Path(tmp) / "a", artifact_policy="summary")),
-            result_interpreter=DynamicsResultInterpreter(),
-        )
         started = time.perf_counter()
-        comparison = runner.run_fixed_samples(DynamicsImportanceSamplingRunConfig(
-            sampling_plan_path=plan, output_root=Path(tmp) / "run", max_samples=samples,
-            root_entropy=root, phase="final",
-        ))["comparison"]
+        comparison = run_plan_fixed(plan, workdir=tmp, max_samples=samples, root_entropy=root, phase="final")
         elapsed = time.perf_counter() - started
     diagnostic = comparison.get("diagnostic", {})
     guarantee = comparison.get("guarantee", {})

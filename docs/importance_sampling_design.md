@@ -387,10 +387,10 @@ apps/cli/importance_main.py          (prism_importance_main.py も同じ)
   --stop-mode fixed_samples | importance_width | weighted_sequential
   --max-samples N
         ↓
-targets/prism/importance_sampling.py (PrismImportanceSamplingSupport → Runner)
+orchestration/importance/runner.py (共通の runner) + targets/prism/importance_sampling.py (PRISM の口)
 ```
 
-対象ごとの実験の組み立ては、各対象の plugin の `importance_sampling`（`contracts/importance_sampling_plugin.py`）が受け持つ。新しい対象は `targets/<name>/` に `add_arguments` と `run` を持つクラスを置けば、共通の CLI から使える。
+実験の組み立ては共通の runner が受け持ち、各対象の plugin の `importance_sampling`（`contracts/importance_sampling_plugin.py`）は、プランの読み込み（`prepare`）とケースの組み立て（`build_case`）だけを持つ。PRISM は経路の P・Q の対数密度を `meta.sampling.internal` で返し、重みは共通の runner が合成する（`docs/blackbox_importance_sampling_plan.md`）。
 
 `sampling_plan.yaml` はPとQの正本である。更新方針は拡張を使う場合だけ追加する。orchestrationは共通項目だけを読み、`proposal.definition` のPRISM固有の意味は `targets/prism/sampling.py` が実行直前に検証する。
 

@@ -106,12 +106,60 @@ COMBINATIONS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("prism", "dkw_fixed", ("--param", "steps=20", "--max-samples", "60", *DKW)),
     ("awsim", "binomial_ci", ("--max-samples", "100", *BINOMIAL)),
     ("awsim", "sprt", ("--max-samples", "100", *SPRT)),
-    ("awsim", "ebstop", ("--max-samples", "100", "--ebstop-target", "min_ttc", *EBSTOP_RANGE,
-                         "--ebstop-value-range-max", "10")),
+    # awsim + ebstop is refused before running: min_ttc has no fixed range
+    # (tests/unit/apps/test_ebstop_metric_check.py).
     ("awsim", "dkw", ("--max-samples", "100", "--dkw-pure-smc")),
     ("awsim", "dkw_fixed", ("--max-samples", "60", "--dkw-pure-smc")),
     ("awsim", "explore", ("--max-samples", "30")),
+    ("awsim", "margin", ("--max-samples", "30")),
+    ("awsim", "focus", ("--max-samples", "30")),
+    # Modes that start from earlier results: the dataset is prefilled (PREFILLED_MODES).
+    ("awsim", "jama_edge", ("--max-samples", "30")),
+    ("awsim", "ttc_edge", ("--max-samples", "30")),
+    ("awsim", "worst_ttc", ("--max-samples", "30")),
+    ("awsim", "verify_consistency", ("--max-samples", "40")),
+    ("awsim", "boundary_gap", ("--max-samples", "40")),
 )
+# Statistical modes in more settings (docs/statistics_single_path_plan.md S0):
+# (key, target, mode, extra CLI arguments, options). Options: "prefill" starts
+# from earlier exploration results (named regions take their range from them;
+# DKW without --dkw-pure-smc reuses them with KDE weights), "resume_after" builds
+# a new strategy on the same dataset after that many steps, "batch" issues that
+# many cases before answering them (as with a deeper queue).
+VARIANTS: tuple[tuple[str, str, str, tuple[str, ...], dict[str, object]], ...] = (
+    ("awsim:binomial_ci@emp_safe", "awsim", "binomial_ci",
+     ("--max-samples", "60", *BINOMIAL, "--dkw-region", "emp_safe"), {"prefill": True}),
+    ("awsim:sprt@intersect_safe", "awsim", "sprt",
+     ("--max-samples", "60", *SPRT, "--dkw-region", "intersect_safe"), {"prefill": True}),
+    ("awsim:ebstop@c_collision", "awsim", "ebstop",
+     ("--max-samples", "60", "--ebstop-target", "c_collision", *EBSTOP_RANGE, "--ebstop-value-range-max", "1"), {}),
+    # The task count starts at the prefilled rows' highest loop number, so these
+    # allow more than PREFILL_ROWS samples.
+    ("awsim:dkw@kde", "awsim", "dkw", ("--max-samples", "400"), {"prefill": True}),
+    ("awsim:dkw@emp_safe", "awsim", "dkw",
+     ("--max-samples", "400", "--dkw-pure-smc", "--dkw-region", "emp_safe"), {"prefill": True}),
+    ("awsim:dkw@simultaneous", "awsim", "dkw", ("--max-samples", "100", "--dkw-pure-smc", "--dkw-simultaneous"), {}),
+    ("awsim:dkw_fixed@simultaneous", "awsim", "dkw_fixed",
+     ("--max-samples", "60", "--dkw-pure-smc", "--dkw-simultaneous"), {}),
+    ("awsim:dkw_fixed@kde", "awsim", "dkw_fixed", ("--max-samples", "340"), {"prefill": True}),
+    ("awsim:binomial_ci@resume", "awsim", "binomial_ci", ("--max-samples", "100", *BINOMIAL), {"resume_after": 30}),
+    ("awsim:sprt@resume", "awsim", "sprt", ("--max-samples", "100", *SPRT), {"resume_after": 3}),
+    ("awsim:dkw@resume", "awsim", "dkw", ("--max-samples", "100", "--dkw-pure-smc"), {"resume_after": 40}),
+    ("awsim:binomial_ci@batch4", "awsim", "binomial_ci", ("--max-samples", "100", *BINOMIAL), {"batch": 4}),
+    ("awsim:sprt@batch4", "awsim", "sprt", ("--max-samples", "100", *SPRT), {"batch": 4}),
+    ("awsim:dkw@batch4", "awsim", "dkw", ("--max-samples", "100", "--dkw-pure-smc"), {"batch": 4}),
+    # The region sampling under --stopping-rule (docs/statistics_single_path_plan.md S6).
+    ("awsim:binomial_ci@rule", "awsim", "binomial_ci",
+     ("--max-samples", "80", "--stopping-rule", "binomial_ci_fixed_strict"), {}),
+    ("awsim:sprt@rule", "awsim", "sprt", ("--max-samples", "100", *SPRT, "--stopping-rule", "sprt_wald"), {}),
+    ("awsim:dkw@rule", "awsim", "dkw",
+     ("--max-samples", "100", *DKW, "--stopping-rule", "dkw_sequential_stagewise"), {"batch": 4}),
+)
+# AWSIM modes that pick their points from earlier results get PREFILL_ROWS rows first.
+PREFILLED_MODES = frozenset({"jama_edge", "ttc_edge", "worst_ttc", "verify_consistency", "boundary_gap"})
+PREFILL_ROWS = 300
+# Exploration modes start with exact repeats; record every step to reach the GP phases.
+FULLY_TRACED = frozenset({("awsim", mode) for mode in ("margin", "focus", *PREFILLED_MODES)})
 
 
 def _rounded(value: object) -> object:
@@ -124,6 +172,36 @@ def _rounded(value: object) -> object:
     if isinstance(value, (str, int, bool)) or value is None:
         return value
     return str(value)
+
+
+def awsim_prefill_rows() -> list[dict[str, object]]:
+    """Deterministic earlier AWSIM results, with a theory margin column.
+
+    Drawn over the lower half of each U-turn range so that grid cells get several
+    rows, with noisy collisions near the boundary and near misses (TTC below
+    1.5 s), so every extraction mode finds points.
+    """
+    from scenario_specs.uturn import PARAM_RANGES
+
+    rows = []
+    for index in range(1, PREFILL_ROWS + 1):
+        case_input = {
+            name: round(lower + 0.5 * (upper - lower) * _uniform("prefill", index, name), 6)
+            for name, (lower, upper) in PARAM_RANGES.items()
+        }
+        margin = case_input["dx0"] - 0.35 * case_input["ego_speed"] + 0.2 * case_input["npc_speed"]
+        noise = 3.0 * (_uniform("prefill-noise", index) - 0.5)
+        rows.append({
+            **case_input,
+            "c_collision": int(margin + noise < 3.0),
+            "min_ttc": round(max(0.0, 0.3 * margin), 6),
+            "min_distance": round(max(0.0, margin), 6),
+            "z_margin": round(margin / 5.0, 6),
+            "min_ttb": round(max(0.0, 0.2 * margin + 1.0), 6),
+            "theory_margin_a_human": round(margin - 1.0, 6),
+            "status": "success", "reason": f"EXPLORATION: prefill ({index})", "loop_num": index,
+        })
+    return rows
 
 
 def _build_strategy(target: str, mode: str, extra: tuple[str, ...], tmp: Path):
@@ -148,37 +226,77 @@ def _final_report(strategy) -> object:
     return None
 
 
-def drive(target: str, mode: str, extra: tuple[str, ...], tmp: Path) -> dict[str, object]:
+def drive(target: str, mode: str, extra: tuple[str, ...], tmp: Path, **options: object) -> dict[str, object]:
     from threadpoolctl import threadpool_limits
 
     with threadpool_limits(limits=1):
-        return _drive(target, mode, extra, tmp)
+        return _drive(target, mode, extra, tmp, **options)
 
 
-def _drive(target: str, mode: str, extra: tuple[str, ...], tmp: Path) -> dict[str, object]:
-    strategy = _build_strategy(target, mode, extra, tmp)
+def _drive(
+    target: str, mode: str, extra: tuple[str, ...], tmp: Path, *,
+    prefill: bool = False, resume_after: int | None = None, batch: int = 1,
+) -> dict[str, object]:
     dataset = InMemoryDataset()
-    strategy.dataset_repository = dataset
+    if target == "awsim" and (prefill or mode in PREFILLED_MODES):
+        dataset.rows = awsim_prefill_rows()
+        pd.DataFrame(dataset.rows).to_csv(tmp / "dataset.csv", index=False)
+
+    def build():
+        strategy = _build_strategy(target, mode, extra, tmp)
+        strategy.dataset_repository = dataset
+        return strategy
+
+    strategy = build()
     outcome = OUTCOMES[target]
     steps: list[dict[str, object]] = []
     count = 0
+    resumed = False
     with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
-        while count < MAX_STEPS and (case := strategy.next_test_case()) is not None:
-            count += 1
-            if count <= TRACED_STEPS:
-                steps.append({"reason": case.reason, "input": _rounded(dict(case.input))})
-            dataset.rows.append(
-                {**case.input, **outcome(dict(case.input), count), "status": "success",
-                 "reason": case.reason, "loop_num": count}
-            )
+        while count < MAX_STEPS:
+            if resume_after is not None and not resumed and count >= resume_after:
+                resumed = True
+                pd.DataFrame(dataset.rows).to_csv(tmp / "dataset.csv", index=False)
+                strategy = build()
+                steps.append({"resumed_at": count})
+            issued = []
+            while len(issued) < batch and count + len(issued) < MAX_STEPS:
+                case = strategy.next_test_case()
+                if case is None:
+                    break
+                issued.append(case)
+            if not issued:
+                break
+            for case in issued:
+                count += 1
+                if count <= TRACED_STEPS or (target, mode) in FULLY_TRACED:
+                    steps.append({"reason": case.reason, "input": _rounded(dict(case.input))})
+                dataset.rows.append(
+                    {**case.input, **outcome(dict(case.input), count), "status": "success",
+                     "reason": case.reason, "loop_num": len(dataset.rows) + 1}
+                )
         report = _final_report(strategy)
-    return {
+    trace = {
         "steps": steps,
         "step_count": count,
         "stopped": count < MAX_STEPS,
         "stop_reason": getattr(strategy, "stop_reason", None),
         "final_report": _rounded(report),
     }
+    files = _written_files(tmp)
+    if files:
+        trace["files"] = files
+    return trace
+
+
+def _written_files(tmp: Path) -> dict[str, object]:
+    """The statistical history and sample CSVs a run wrote (row count and the first rows)."""
+    files = {}
+    for path in sorted([*tmp.glob("*_history.csv"), *tmp.glob("*_samples.csv")]):
+        frame = pd.read_csv(path)
+        rows = [{key: _rounded(value) for key, value in row.items()} for row in frame.head(TRACED_STEPS).to_dict("records")]
+        files[path.name] = {"columns": list(frame.columns), "row_count": int(len(frame)), "rows": rows}
+    return files
 
 
 def build_traces(tmp: Path) -> dict[str, object]:
@@ -187,6 +305,10 @@ def build_traces(tmp: Path) -> dict[str, object]:
         run_dir = tmp / f"{target}_{mode}"
         run_dir.mkdir(parents=True, exist_ok=True)
         traces[f"{target}:{mode}"] = drive(target, mode, extra, run_dir)
+    for key, target, mode, extra, options in VARIANTS:
+        run_dir = tmp / key.replace(":", "_").replace("@", "_")
+        run_dir.mkdir(parents=True, exist_ok=True)
+        traces[key] = drive(target, mode, extra, run_dir, **options)
     return json.loads(json.dumps(traces).replace(str(tmp), "<tmp>"))
 
 

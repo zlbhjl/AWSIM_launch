@@ -105,6 +105,28 @@ Clopper–Pearson区間は近似を使わず直接計算するため、名目の
 サンプル数ごとの誤り率予算をあらかじめ配分しておくことで、毎回チェックしても全体の誤り率が
 保証値を超えないよう設計されている。
 
+EBStop の保証には、**指標の値が必ず決まった範囲 [下限, 上限] に入る**ことが必要である。範囲の幅が区間の計算
+(経験的Bernstein不等式の第2項)に直接入るため、範囲を超える値が1つでもあると保証は成り立たない。範囲は
+`--ebstop-value-range-min/max`(既定 0〜10)で与える。評価のたびに値を確かめ、無限大や範囲外の値が1つでもあれば、
+区間を出さずにエラー(`next_action: error`、`out_of_range_count`)にする。
+
+**AWSIM の `min_ttc` には EBStop を使わない。** `min_ttc` には上限がない。衝突の見込みが一度もない回は無限大、
+接近の仕方によっては10秒を大きく超える。`AW_Kinematics_Extractor/uturn_dataset.csv`(U ターン、2,830 件、
+2026-11-01 に確認)では、0 が 806 件、無限大が 803 件、有限で 10 秒を超える値が 167 件(最大 25.0 秒)あった。
+約 34% が既定の範囲の外にあり、無限大を含むので平均そのものも定まらない。この指標に EBStop を使っても、出てくる
+区間に 95% の保証はない。代わりに次を使う。
+
+- TTC の分布や「TTC が x 秒以下になる確率」を知りたい: DKW(`--mode dkw` / `dkw_fixed`)。範囲のない値にも
+  使え、無限大は「大きい値」として正しく扱われる。
+- 危険な回の割合を知りたい: `c_collision`、または「TTC が しきい値 未満」の 0/1 の指標を作り、二項区間で扱う。
+- TTC の平均そのものが必要な場合に限り、上限で切った指標(例: `min_ttc_capped = min(min_ttc, 10 秒)`)を
+  AWSIM に足し、範囲 [0, 10] と宣言して EBStop を使う。推定されるのは「切った TTC の平均」で、上限の選び方で
+  値が変わる。
+
+範囲のない指標は、対象が `StatisticalTargetProfile.unbounded_metrics` で宣言する(AWSIM: `min_ttc`・`min_distance`・
+`min_ttb`、dynamics の U ターン: `min_ttc`)。これらに EBStop を選ぶと、実行前にエラーになる。`--target awsim --mode ebstop`
+は、既定の対象が `min_ttc` なので、そのままでは実行できない。
+
 **Alpha-spending補正**(`--binomial-anytime-valid`): Wilson/Clopper–Pearson区間は本来「1回
 だけ計算する」ことを前提にした数式だが、`binomial_ci`モードはサンプルが増えるたびに何度も区間を
 計算し直し、目標幅に達したら停止する設計。何度も結果を覗き見て都合の良いタイミングで止めると、
@@ -238,6 +260,27 @@ a stage), sequential `dkw` reached only 82.6–85.9%.
 or count metrics, but the target is a relative error rather than an absolute one. It stops based on the observed variance, so metrics
 with a small true variance converge with fewer samples. Because the error budget is allocated to each sample size in advance, the overall
 error rate stays within the guaranteed value even when checked every time.
+
+EBStop's guarantee requires **every value of the metric to lie in a fixed range [lower, upper]**. The width of the range enters the
+interval directly (the second term of the empirical Bernstein inequality), so a single value outside it breaks the guarantee. The range
+is given by `--ebstop-value-range-min/max` (default 0 to 10). The values are checked at every evaluation: if any is infinite or
+outside the range, no interval is produced and the evaluation is an error (`next_action: error`, `out_of_range_count`).
+
+**Do not use EBStop for AWSIM's `min_ttc`.** `min_ttc` has no upper bound: it is infinite in runs where a collision is never in
+prospect, and can be well over 10 seconds depending on the approach. In `AW_Kinematics_Extractor/uturn_dataset.csv` (U-turn, 2,830
+runs, checked on 2026-11-01) there were 806 zeros, 803 infinite values and 167 finite values above 10 seconds (maximum 25.0 s). About
+34% lie outside the default range, and with infinite values the mean itself is undefined, so an EBStop interval on this metric carries
+no 95% guarantee. Use instead:
+
+- For the distribution of TTC or "the probability that TTC is at most x seconds": DKW (`--mode dkw` / `dkw_fixed`). It works for
+  unbounded values and treats infinity correctly as a large value.
+- For the share of dangerous runs: `c_collision`, or a 0/1 metric "TTC below a threshold", with a binomial interval.
+- Only if the mean TTC itself is needed: add a capped metric to AWSIM (for example `min_ttc_capped = min(min_ttc, 10 s)`), declare
+  its range [0, 10] and use EBStop. What is estimated is the mean of the capped TTC, which depends on the chosen cap.
+
+Metrics without a fixed range are declared by the target in `StatisticalTargetProfile.unbounded_metrics` (AWSIM: `min_ttc`,
+`min_distance`, `min_ttb`; the dynamics U-turn: `min_ttc`). Choosing EBStop for one of them fails before the run starts.
+`--target awsim --mode ebstop` therefore does not run as is, since its default target is `min_ttc`.
 
 **Alpha-spending correction** (`--binomial-anytime-valid`): the Wilson / Clopper–Pearson formulas assume the interval is computed only
 once, but `binomial_ci` recomputes the interval every time a sample is added and stops when the target width is reached. Looking at the

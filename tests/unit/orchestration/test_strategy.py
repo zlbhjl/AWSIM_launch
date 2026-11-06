@@ -3,9 +3,12 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+
+from targets.awsim.statistical import AWSIM_REGION_VOCABULARY
 import pytest
 
-import targets.awsim.strategies.active_learning as strategy_module
+import orchestration.exploration.active_learning as strategy_module
+from targets.awsim import point_rules as point_extractors  # AWSIM's point rules (the spec uses this module)
 from contracts.statistics import StatisticalReport
 from orchestration.strategy import (
     FixedCaseStrategy,
@@ -203,9 +206,7 @@ def test_active_learning_strategist_prefers_grouped_case_definition_and_settings
     assert strategist.FOCUS_NOISE == 0.15
     assert strategist.dkw_target_metric == "min_ttc"
     assert strategist.dkw_target_metrics == ["min_ttc", "min_distance"]
-    assert strategist.binomial_target == "c_collision"
-    assert strategist.binomial_method == "wilson"
-    assert strategist.binomial_confidence == 0.95
+    # The statistical settings are read by the region sampling (test_region_sampling.py).
 
 
 def test_active_learning_strategist_explore_returns_global_search_when_dataset_empty() -> None:
@@ -355,7 +356,7 @@ def test_active_learning_strategist_verify_consistency_uses_extracted_points(
             return pd.DataFrame([{"loop_num": 1, "dx0": 12.0, "ego_speed": 32.0}])
 
     monkeypatch.setitem(
-        strategy_module.point_extractors.EXTRACTORS,
+        point_extractors.EXTRACTORS,
         "verify_consistency",
         lambda _df, _param_names, _config: [{"dx0": 15.0, "ego_speed": 35.0}],
     )
@@ -386,7 +387,7 @@ def test_active_learning_strategist_jama_edge_uses_extracted_points(
             return pd.DataFrame([{"loop_num": 1, "dx0": 12.0, "ego_speed": 32.0}])
 
     monkeypatch.setitem(
-        strategy_module.point_extractors.EXTRACTORS,
+        point_extractors.EXTRACTORS,
         "jama_edge",
         lambda _df, _param_names, _config: [{"dx0": 16.0, "ego_speed": 36.0}],
     )
@@ -417,7 +418,7 @@ def test_active_learning_strategist_jama_edge_stops_when_no_target_points_exist(
             return pd.DataFrame([{"loop_num": 1, "dx0": 12.0, "ego_speed": 32.0}])
 
     monkeypatch.setitem(
-        strategy_module.point_extractors.EXTRACTORS,
+        point_extractors.EXTRACTORS,
         "jama_edge",
         lambda _df, _param_names, _config: [],
     )
@@ -447,7 +448,7 @@ def test_active_learning_strategist_jama_edge_ignores_config_focus_points_when_e
             return pd.DataFrame([{"loop_num": 1, "dx0": 12.0, "ego_speed": 32.0}])
 
     monkeypatch.setitem(
-        strategy_module.point_extractors.EXTRACTORS,
+        point_extractors.EXTRACTORS,
         "jama_edge",
         lambda _df, _param_names, _config: [],
     )
@@ -479,7 +480,7 @@ def test_active_learning_strategist_ttc_edge_uses_extracted_points(
             return pd.DataFrame([{"loop_num": 1, "dx0": 12.0, "ego_speed": 32.0}])
 
     monkeypatch.setitem(
-        strategy_module.point_extractors.EXTRACTORS,
+        point_extractors.EXTRACTORS,
         "ttc_edge",
         lambda _df, _param_names, _config: [{"dx0": 17.0, "ego_speed": 37.0}],
     )
@@ -510,7 +511,7 @@ def test_active_learning_strategist_ttc_edge_stops_when_no_target_points_exist(
             return pd.DataFrame([{"loop_num": 1, "dx0": 12.0, "ego_speed": 32.0}])
 
     monkeypatch.setitem(
-        strategy_module.point_extractors.EXTRACTORS,
+        point_extractors.EXTRACTORS,
         "ttc_edge",
         lambda _df, _param_names, _config: [],
     )
@@ -540,7 +541,7 @@ def test_active_learning_strategist_worst_ttc_uses_extracted_points(
             return pd.DataFrame([{"loop_num": 1, "dx0": 12.0, "ego_speed": 32.0}])
 
     monkeypatch.setitem(
-        strategy_module.point_extractors.EXTRACTORS,
+        point_extractors.EXTRACTORS,
         "worst_ttc",
         lambda _df, _param_names, _config: [{"dx0": 18.0, "ego_speed": 38.0}],
     )
@@ -571,7 +572,7 @@ def test_active_learning_strategist_worst_ttc_stops_when_no_target_points_exist(
             return pd.DataFrame([{"loop_num": 1, "dx0": 12.0, "ego_speed": 32.0}])
 
     monkeypatch.setitem(
-        strategy_module.point_extractors.EXTRACTORS,
+        point_extractors.EXTRACTORS,
         "worst_ttc",
         lambda _df, _param_names, _config: [],
     )
@@ -601,7 +602,7 @@ def test_active_learning_strategist_verify_consistency_stops_when_no_mode_rows_e
             return pd.DataFrame([{"loop_num": 1, "dx0": 12.0, "ego_speed": 32.0}])
 
     monkeypatch.setitem(
-        strategy_module.point_extractors.EXTRACTORS,
+        point_extractors.EXTRACTORS,
         "verify_consistency",
         lambda _df, _param_names, _config: [{"dx0": 15.0, "ego_speed": 35.0}],
     )
@@ -693,7 +694,7 @@ def test_active_learning_strategist_verify_consistency_classifies_and_saves_resu
     classification_inputs: list[pd.DataFrame] = []
 
     monkeypatch.setitem(
-        strategy_module.point_extractors.EXTRACTORS,
+        point_extractors.EXTRACTORS,
         "verify_consistency",
         lambda _df, _param_names, _config: [{"dx0": 15.0, "ego_speed": 35.0}],
     )
@@ -704,7 +705,7 @@ def test_active_learning_strategist_verify_consistency_classifies_and_saves_resu
         stochastic = df.iloc[[1]].copy()
         return consistent, stochastic
 
-    monkeypatch.setattr(strategy_module.point_extractors, "classify_consistency", fake_classify)
+    monkeypatch.setattr(point_extractors, "classify_consistency", fake_classify)
 
     strategist = ActiveLearningStrategist(
         "uturn",
@@ -795,8 +796,10 @@ def test_consistency_classification_repository_saves_expected_paths(
     )
     df = pd.DataFrame([{"dx0": 15.0, "min_ttc": 0.8}])
 
+    import runtime.repository.consistency_classification as consistency_module
+
     monkeypatch.setattr(
-        strategy_module.point_extractors,
+        consistency_module,
         "save_dataframe_to_csv",
         lambda frame, output_path, success_msg=None: saved_paths.append((len(frame), output_path)) or True,
     )
@@ -930,12 +933,12 @@ def test_active_learning_strategist_boundary_gap_uses_extracted_focus_points(
             )
 
     monkeypatch.setitem(
-        strategy_module.point_extractors.EXTRACTORS,
+        point_extractors.EXTRACTORS,
         "boundary_gap",
         lambda _df, _param_names, _config: [{"dx0": 15.0, "ego_speed": 35.0}],
     )
     monkeypatch.setattr(
-        strategy_module.point_extractors,
+        point_extractors,
         "summarize_boundary_gap_progress",
         lambda _df, _param_names, _config, target_points=None: {
             "candidate_cells": 1,
@@ -975,12 +978,12 @@ def test_active_learning_strategist_boundary_gap_ignores_config_focus_points(
             return pd.DataFrame([{"loop_num": 1, "dx0": 12.0, "ego_speed": 32.0}])
 
     monkeypatch.setitem(
-        strategy_module.point_extractors.EXTRACTORS,
+        point_extractors.EXTRACTORS,
         "boundary_gap",
         lambda _df, _param_names, _config: [{"dx0": 15.0, "ego_speed": 35.0}],
     )
     monkeypatch.setattr(
-        strategy_module.point_extractors,
+        point_extractors,
         "summarize_boundary_gap_progress",
         lambda _df, _param_names, _config, target_points=None: {
             "candidate_cells": 1,
@@ -1032,12 +1035,12 @@ def test_active_learning_strategist_boundary_gap_refreshes_targets_after_cycle(
         return points_by_call.pop(0) if points_by_call else []
 
     monkeypatch.setitem(
-        strategy_module.point_extractors.EXTRACTORS,
+        point_extractors.EXTRACTORS,
         "boundary_gap",
         fake_extract,
     )
     monkeypatch.setattr(
-        strategy_module.point_extractors,
+        point_extractors,
         "summarize_boundary_gap_progress",
         lambda _df, _param_names, _config, target_points=None: {
             "candidate_cells": 1,
@@ -1089,12 +1092,12 @@ def test_active_learning_strategist_boundary_gap_stops_when_no_targets_remain(
         return points_by_call.pop(0) if points_by_call else []
 
     monkeypatch.setitem(
-        strategy_module.point_extractors.EXTRACTORS,
+        point_extractors.EXTRACTORS,
         "boundary_gap",
         fake_extract,
     )
     monkeypatch.setattr(
-        strategy_module.point_extractors,
+        point_extractors,
         "summarize_boundary_gap_progress",
         lambda _df, _param_names, _config, target_points=None: {
             "candidate_cells": 0,
@@ -1151,12 +1154,12 @@ def test_active_learning_strategist_boundary_gap_records_cycle_complete_before_s
         return points_by_call.pop(0) if points_by_call else []
 
     monkeypatch.setitem(
-        strategy_module.point_extractors.EXTRACTORS,
+        point_extractors.EXTRACTORS,
         "boundary_gap",
         fake_extract,
     )
     monkeypatch.setattr(
-        strategy_module.point_extractors,
+        point_extractors,
         "summarize_boundary_gap_progress",
         lambda _df, _param_names, _config, target_points=None: {
             "candidate_cells": 0,
@@ -1301,506 +1304,6 @@ def test_active_learning_strategist_boundary_gap_stops_after_dataset_growth_reso
             "densified_cells": 1,
         },
     ]
-
-
-def test_active_learning_strategist_binomial_ci_stops_when_interval_is_sufficient() -> None:
-    class Repo:
-        def load_dataset(self):
-            return pd.DataFrame([{"loop_num": 1, "c_collision": 0}])
-
-    class SamplesRepo:
-        def __init__(self):
-            self.saved_binomial_samples = None
-
-        def save_binomial_ci_samples(self, df):
-            self.saved_binomial_samples = df.copy()
-            return True
-
-    class FakeBinomialService:
-        def evaluate_request(self, _data, _request):
-            return StatisticalReport(
-                method="binomial_ci",
-                metric="c_collision",
-                sample_count=120,
-                estimate=0.1,
-                interval=(0.05, 0.06),
-                sufficient=True,
-                next_action="stop",
-                diagnostics={
-                    "status": "success",
-                    "filtered_df": pd.DataFrame([{"dx0": 13.0, "c_collision": 0}]),
-                },
-            )
-
-    samples_repo = SamplesRepo()
-    strategist = ActiveLearningStrategist(
-        "uturn",
-        SimpleNamespace(
-            PARAM_RANGES={"dx0": (10.0, 20.0)},
-            BINOMIAL_CI_TARGET="c_collision",
-            BINOMIAL_CI_TARGET_WIDTH=0.02,
-            BINOMIAL_CI_MIN_SAMPLES=100,
-        ),
-        dataset_repository=Repo(),
-        statistical_samples_repository=samples_repo,
-        binomial_ci_service=FakeBinomialService(),
-        run_mode="binomial_ci",
-        num_candidates=5,
-    )
-
-    payload = strategist.decide_next_target()
-
-    assert payload["system_command"] == "stop"
-    assert "Binomial CI Complete" in payload["reason"]
-    assert strategist.latest_final_report is not None
-    assert strategist.latest_final_report.target == "Binomial CI"
-    assert samples_repo.saved_binomial_samples is not None
-    assert list(samples_repo.saved_binomial_samples["dx0"]) == [13.0]
-
-
-def test_active_learning_strategist_binomial_ci_writes_history_record() -> None:
-    class Repo:
-        def load_dataset(self):
-            return pd.DataFrame([{"loop_num": 3, "c_collision": 0}])
-
-    class HistoryRepo:
-        def __init__(self):
-            self.binomial_records: list[dict[str, object]] = []
-
-        def append_binomial_ci_record(self, record):
-            self.binomial_records.append(dict(record))
-
-    class FakeBinomialService:
-        def evaluate_request(self, _data, _request):
-            return StatisticalReport(
-                method="binomial_ci",
-                metric="c_collision",
-                sample_count=120,
-                estimate=0.1,
-                interval=(0.05, 0.06),
-                sufficient=True,
-                next_action="stop",
-                diagnostics={
-                    "status": "success",
-                    "method": "wilson",
-                    "success_count": 12,
-                },
-            )
-
-    history_repo = HistoryRepo()
-    strategist = ActiveLearningStrategist(
-        "uturn",
-        SimpleNamespace(
-            PARAM_RANGES={"dx0": (10.0, 20.0)},
-            BINOMIAL_CI_TARGET="c_collision",
-            BINOMIAL_CI_METHOD="wilson",
-            BINOMIAL_CI_TARGET_WIDTH=0.02,
-            BINOMIAL_CI_MIN_SAMPLES=100,
-        ),
-        dataset_repository=Repo(),
-        statistical_history_repository=history_repo,
-        binomial_ci_service=FakeBinomialService(),
-        run_mode="binomial_ci",
-        num_candidates=5,
-    )
-
-    strategist.decide_next_target()
-
-    assert history_repo.binomial_records == [
-        {
-            "task_count": 3,
-            "metric": "c_collision",
-            "method": "wilson",
-            "confidence_level": 0.95,
-            "sample_size": 120,
-            "success_count": 12,
-            "estimate": 0.1,
-            "lower_bound": 0.05,
-            "upper_bound": 0.06,
-            "interval_width": 0.009999999999999995,
-            "target_width": 0.02,
-        }
-    ]
-
-
-def test_active_learning_strategist_binomial_ci_requests_more_samples_when_needed() -> None:
-    class Repo:
-        def load_dataset(self):
-            return pd.DataFrame([{"loop_num": 1, "c_collision": 0}])
-
-    class FakeBinomialService:
-        def evaluate_request(self, _data, _request):
-            return StatisticalReport(
-                method="binomial_ci",
-                metric="c_collision",
-                sample_count=12,
-                estimate=0.1,
-                interval=(0.0, 0.2),
-                sufficient=False,
-                next_action="collect_more_samples",
-                diagnostics={"status": "success"},
-            )
-
-    strategist = ActiveLearningStrategist(
-        "uturn",
-        SimpleNamespace(
-            PARAM_RANGES={"dx0": (10.0, 20.0)},
-            BINOMIAL_CI_TARGET="c_collision",
-            BINOMIAL_CI_TARGET_WIDTH=0.02,
-            BINOMIAL_CI_MIN_SAMPLES=100,
-        ),
-        dataset_repository=Repo(),
-        binomial_ci_service=FakeBinomialService(),
-        run_mode="binomial_ci",
-        num_candidates=5,
-    )
-
-    payload = strategist.decide_next_target()
-
-    assert payload["reason"] == "BINOMIAL_CI: Sampling (13)"
-    assert 10.0 <= payload["dx0"] <= 20.0
-
-
-def test_active_learning_strategist_binomial_ci_uses_region_aware_rejection_sampling() -> None:
-    class Repo:
-        def load_dataset(self):
-            return pd.DataFrame([{"loop_num": 1, "c_collision": 0}])
-
-    class FakeBinomialService:
-        def evaluate_request(self, _data, _request):
-            return StatisticalReport(
-                method="binomial_ci",
-                metric="c_collision",
-                sample_count=12,
-                estimate=0.1,
-                interval=(0.0, 0.2),
-                sufficient=False,
-                next_action="collect_more_samples",
-                diagnostics={"status": "success"},
-            )
-
-    class ThresholdRegionPolicy:
-        def build_filter_frame(self, point):
-            row = dict(point)
-            row["theory_margin_a_human"] = (
-                1.0 if float(point["dx0"]) >= 15.0 else -1.0
-            )
-            return pd.DataFrame([row])
-
-    strategist = ActiveLearningStrategist(
-        "uturn",
-        SimpleNamespace(
-            PARAM_RANGES={
-                "dx0": (10.0, 20.0),
-                "ego_speed": (30.0, 40.0),
-                "npc_speed": (10.0, 20.0),
-            },
-            BINOMIAL_CI_TARGET="c_collision",
-            BINOMIAL_CI_TARGET_WIDTH=0.02,
-            BINOMIAL_CI_MIN_SAMPLES=100,
-        ),
-        dataset_repository=Repo(),
-        binomial_ci_service=FakeBinomialService(),
-        run_mode="binomial_ci",
-        dkw_region="jama_safe",
-        statistical_region_policy=ThresholdRegionPolicy(),
-        num_candidates=5,
-    )
-    strategist.get_random_point = lambda index: {
-        1: {"dx0": 12.0, "ego_speed": 35.0, "npc_speed": 15.0},
-        2: {"dx0": 18.0, "ego_speed": 35.0, "npc_speed": 15.0},
-    }[index]
-
-    payload = strategist.decide_next_target()
-
-    assert payload["reason"] == "BINOMIAL_CI: Sampling (13)"
-    assert payload["dx0"] == 18.0
-    assert strategist.binomial_random_index == 2
-
-
-def test_active_learning_strategist_dkw_stops_when_report_is_sufficient() -> None:
-    class Repo:
-        def load_dataset(self):
-            return pd.DataFrame([{"loop_num": 1, "min_ttc": 1.0, "reason": "SMC: Sequential-DKW Sampling (Stage 1)"}])
-
-    class FakeDKWService:
-        def evaluate_request(self, _data, _request):
-            return StatisticalReport(
-                method="dkw",
-                metric="min_ttc",
-                sample_count=80,
-                estimate=1.0,
-                interval=(0.95, 1.05),
-                sufficient=True,
-                next_action="stop",
-                diagnostics={"status": "success"},
-            )
-
-    strategist = ActiveLearningStrategist(
-        "uturn",
-        SimpleNamespace(
-            PARAM_RANGES={"dx0": (10.0, 20.0)},
-            DKW_TARGET_METRIC="min_ttc",
-            DKW_TOTAL_DELTA=0.05,
-            DKW_TARGET_EPSILON=0.15,
-            DKW_BASE_SAMPLES=1,  # stage 1 is complete with the one sample
-        ),
-        dataset_repository=Repo(),
-        dkw_service=FakeDKWService(),
-        run_mode="dkw",
-        num_candidates=5,
-    )
-
-    payload = strategist.decide_next_target()
-
-    assert payload["system_command"] == "stop"
-    assert payload["reason"] == "SMC Verification Complete"
-
-
-def test_active_learning_strategist_dkw_writes_history_record() -> None:
-    class Repo:
-        def load_dataset(self):
-            return pd.DataFrame([{"loop_num": 4, "min_ttc": 1.0, "reason": "SMC: Sequential-DKW Sampling (Stage 1)"}])
-
-    class HistoryRepo:
-        def __init__(self):
-            self.dkw_records: list[dict[str, object]] = []
-
-        def append_dkw_record(self, record):
-            self.dkw_records.append(dict(record))
-
-    class FakeDKWService:
-        def evaluate_request(self, _data, _request):
-            return StatisticalReport(
-                method="dkw",
-                metric="min_ttc",
-                sample_count=80,
-                estimate=1.0,
-                interval=(0.95, 1.05),
-                sufficient=True,
-                next_action="stop",
-                diagnostics={"status": "success"},
-            )
-
-    history_repo = HistoryRepo()
-    strategist = ActiveLearningStrategist(
-        "uturn",
-        SimpleNamespace(
-            PARAM_RANGES={"dx0": (10.0, 20.0)},
-            DKW_TARGET_METRIC="min_ttc",
-            DKW_TOTAL_DELTA=0.05,
-            DKW_TARGET_EPSILON=0.15,
-            DKW_BASE_SAMPLES=1,  # stage 1 is complete with the one sample
-        ),
-        dataset_repository=Repo(),
-        statistical_history_repository=history_repo,
-        dkw_service=FakeDKWService(),
-        run_mode="dkw",
-        num_candidates=5,
-    )
-
-    strategist.decide_next_target()
-
-    assert history_repo.dkw_records == [
-        {
-            "stage": 1,
-            "task_count": 4,
-            "metric": "min_ttc",
-            "ess": 80,
-            "estimate": 1.0,
-            "lower_bound": 0.95,
-            "upper_bound": 1.05,
-            "interval_width": 0.10000000000000009,
-            "target_epsilon": 0.15,
-        }
-    ]
-
-
-def test_active_learning_strategist_dkw_requests_more_samples_when_needed() -> None:
-    class Repo:
-        def load_dataset(self):
-            return pd.DataFrame([{"loop_num": 1, "min_ttc": 1.0}])
-
-    class FakeDKWService:
-        def evaluate_request(self, _data, _request):
-            return StatisticalReport(
-                method="dkw",
-                metric="min_ttc",
-                sample_count=20,
-                estimate=1.0,
-                interval=(0.5, 1.5),
-                sufficient=False,
-                next_action="collect_more_samples",
-                diagnostics={"status": "success"},
-            )
-
-    strategist = ActiveLearningStrategist(
-        "uturn",
-        SimpleNamespace(
-            PARAM_RANGES={"dx0": (10.0, 20.0)},
-            DKW_TARGET_METRIC="min_ttc",
-            DKW_TOTAL_DELTA=0.05,
-            DKW_TARGET_EPSILON=0.15,
-            DKW_BASE_SAMPLES=50,
-        ),
-        dataset_repository=Repo(),
-        dkw_service=FakeDKWService(),
-        run_mode="dkw",
-        num_candidates=5,
-    )
-
-    payload = strategist.decide_next_target()
-
-    assert payload["reason"] == "SMC: Sequential-DKW Sampling (Stage 1)"
-    assert 10.0 <= payload["dx0"] <= 20.0
-
-
-def test_active_learning_strategist_auto_derives_dkw_bounds_from_region() -> None:
-    class Repo:
-        def load_dataset(self):
-            return pd.DataFrame(
-                [
-                    {
-                        "loop_num": 1,
-                        "dx0": 11.0,
-                        "ego_speed": 31.0,
-                        "npc_speed": 13.0,
-                        "c_collision": 0,
-                        "theory_margin_a_human": 0.2,
-                    },
-                    {
-                        "loop_num": 2,
-                        "dx0": 14.0,
-                        "ego_speed": 34.0,
-                        "npc_speed": 16.0,
-                        "c_collision": 0,
-                        "theory_margin_a_human": 0.5,
-                    },
-                    {
-                        "loop_num": 3,
-                        "dx0": 19.0,
-                        "ego_speed": 39.0,
-                        "npc_speed": 18.0,
-                        "c_collision": 1,
-                        "theory_margin_a_human": 0.5,
-                    },
-                ]
-            )
-
-    strategist = ActiveLearningStrategist(
-        "uturn",
-        SimpleNamespace(
-            PARAM_RANGES={
-                "dx0": (10.0, 20.0),
-                "ego_speed": (30.0, 40.0),
-                "npc_speed": (10.0, 20.0),
-            },
-            DKW_TARGET_METRIC="min_ttc",
-            DKW_TOTAL_DELTA=0.05,
-            DKW_TARGET_EPSILON=0.15,
-            DKW_BASE_SAMPLES=50,
-        ),
-        dataset_repository=Repo(),
-        run_mode="dkw",
-        dkw_region="intersect_safe",
-        num_candidates=5,
-    )
-
-    assert strategist.dkw_bounds == {
-        "dx0": (11.0, 14.0),
-        "ego_speed": (31.0, 34.0),
-        "npc_speed": (13.0, 16.0),
-    }
-    assert strategist.active_bounds == strategist.dkw_bounds
-
-
-def test_active_learning_strategist_dkw_uses_region_aware_rejection_sampling() -> None:
-    class Repo:
-        def load_dataset(self):
-            return pd.DataFrame([{"loop_num": 1, "min_ttc": 1.0}])
-
-    class FakeDKWService:
-        def evaluate_request(self, _data, _request):
-            return StatisticalReport(
-                method="dkw",
-                metric="min_ttc",
-                sample_count=20,
-                estimate=1.0,
-                interval=(0.5, 1.5),
-                sufficient=False,
-                next_action="collect_more_samples",
-                diagnostics={"status": "success"},
-            )
-
-    class ThresholdRegionPolicy:
-        def build_filter_frame(self, point):
-            row = dict(point)
-            row["theory_margin_a_human"] = (
-                1.0 if float(point["dx0"]) >= 15.0 else -1.0
-            )
-            return pd.DataFrame([row])
-
-    strategist = ActiveLearningStrategist(
-        "uturn",
-        SimpleNamespace(
-            PARAM_RANGES={
-                "dx0": (10.0, 20.0),
-                "ego_speed": (30.0, 40.0),
-                "npc_speed": (10.0, 20.0),
-            },
-            DKW_TARGET_METRIC="min_ttc",
-            DKW_TOTAL_DELTA=0.05,
-            DKW_TARGET_EPSILON=0.15,
-            DKW_BASE_SAMPLES=50,
-        ),
-        dataset_repository=Repo(),
-        dkw_service=FakeDKWService(),
-        run_mode="dkw",
-        dkw_region="jama_safe",
-        statistical_region_policy=ThresholdRegionPolicy(),
-        num_candidates=5,
-    )
-    strategist.get_random_point = lambda index: {
-        1: {"dx0": 12.0, "ego_speed": 35.0, "npc_speed": 15.0},
-        2: {"dx0": 18.0, "ego_speed": 35.0, "npc_speed": 15.0},
-    }[index]
-
-    payload = strategist.decide_next_target()
-
-    assert payload["reason"] == "SMC: Sequential-DKW Sampling (Stage 1)"
-    assert payload["dx0"] == 18.0
-    assert strategist.dkw_random_index == 2
-
-
-def test_active_learning_strategist_dkw_fixed_pure_smc_syncs_only_smc_rows() -> None:
-    class Repo:
-        def load_dataset(self):
-            return pd.DataFrame(
-                [
-                    {"loop_num": 101, "reason": "STEP1: Global Search (V:0)"},
-                    {"loop_num": 102, "reason": "STEP2: Boundary 0.5"},
-                    {"loop_num": 3, "reason": "SMC: Fixed Sampling (1/2000)"},
-                ]
-            )
-
-    strategist = ActiveLearningStrategist(
-        "uturn",
-        SimpleNamespace(
-            PARAM_RANGES={"dx0": (10.0, 20.0)},
-            DKW_TARGET_METRIC="min_ttc",
-            DKW_TOTAL_DELTA=0.05,
-            DKW_TARGET_EPSILON=0.15,
-            DKW_BASE_SAMPLES=50,
-        ),
-        dataset_repository=Repo(),
-        run_mode="dkw_fixed",
-        dkw_pure_smc=True,
-        num_candidates=5,
-    )
-
-    payload = strategist.decide_next_target()
-
-    assert payload["reason"] == "SMC: Fixed Sampling (4/2000)"
 
 
 def test_active_learning_strategist_sync_dispatched_task_count_ignores_invalid_loop_num() -> None:

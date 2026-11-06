@@ -9,6 +9,8 @@ an unrelated stream while staying reproducible.
 
 from __future__ import annotations
 
+import zlib
+
 import numpy as np
 
 # Streams that share (seed, sample_index) but must not share random numbers.
@@ -52,6 +54,18 @@ def legacy_sample_seed(seed: int | None, sample_index: int) -> int | None:
     return int(seed) * 1_000_000 + int(sample_index)
 
 
+def stream_key(stream: str) -> int:
+    """The spawn key of a named stream.
+
+    The shared streams keep their fixed keys (so recorded experiments replay);
+    a stream a target declares gets a stable key from its name, above 2**31 so
+    it never collides with the fixed ones.
+    """
+    if stream in STREAMS:
+        return STREAMS[stream]
+    return (1 << 31) | zlib.crc32(stream.encode("utf-8"))
+
+
 def new_root_entropy() -> int:
     """Fresh 128-bit entropy for an experiment root; record it before sampling."""
     return int(np.random.SeedSequence().entropy)
@@ -76,8 +90,8 @@ def stream_seed(
         raise ValueError(f"phase must be one of {sorted(PHASES)}")
     if run_kind not in RUN_KINDS:
         raise ValueError(f"run_kind must be one of {sorted(RUN_KINDS)}")
-    if stream not in STREAMS:
-        raise ValueError(f"stream must be one of {sorted(STREAMS)}")
+    if not isinstance(stream, str) or not stream:
+        raise ValueError("stream must be a non-empty name")
     if pairing not in PAIRINGS:
         raise ValueError(f"pairing must be one of {list(PAIRINGS)}")
     if sample_index < 1:
@@ -85,7 +99,7 @@ def stream_seed(
     run_key = PAIRED_RUN_KIND if pairing == "paired" else RUN_KINDS[run_kind]
     sequence = np.random.SeedSequence(
         int(root_entropy),
-        spawn_key=(PHASES[phase], run_key, int(sample_index), STREAMS[stream]),
+        spawn_key=(PHASES[phase], run_key, int(sample_index), stream_key(stream)),
     )
     words = sequence.generate_state(4, dtype=np.uint32)
     return sum(int(word) << (32 * position) for position, word in enumerate(words))
@@ -98,6 +112,7 @@ __all__ = [
     "RNG_POLICY_VERSION",
     "RUN_KINDS",
     "SDE_NOISE_STREAM",
+    "stream_key",
     "STREAMS",
     "derive_seed",
     "legacy_sample_seed",

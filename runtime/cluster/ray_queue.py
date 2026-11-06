@@ -16,6 +16,15 @@ class TaskQueue:
         self.in_flight: dict[int, dict[str, Any]] = {}
         self.completed_loop_nums: set[int] = set()
         self.time_func = time_func
+        # Retries (docs/statistical_modes_hardening_plan.md §3.3, §3.4): a case
+        # reported with a status other than success, or taken by a worker and
+        # not back within case_timeout_sec, is queued again with the same
+        # payload (attempt_id + 1) until max_attempts attempts were made.
+        self.max_attempts = 1
+        self.case_timeout_sec: float | None = None
+        self.dispatched_at: dict[int, float] = {}
+        self.retried_count = 0
+        self.abandoned_tasks: list[dict[str, Any]] = []
 
     def update_worker_status(self, worker_id: str, status: str) -> None:
         self.worker_statuses[worker_id] = status
@@ -34,7 +43,44 @@ class TaskQueue:
         self.dispatched_count += 1
         task["global_loop_num"] = self.dispatched_count
         self.in_flight[self.dispatched_count] = dict(task)
+        self.dispatched_at[self.dispatched_count] = float(self.time_func())
         return task
+
+    def configure_retries(self, max_attempts: int, case_timeout_sec: float | None = None) -> None:
+        if int(max_attempts) < 1:
+            raise ValueError("max_attempts must be positive")
+        self.max_attempts = int(max_attempts)
+        self.case_timeout_sec = None if case_timeout_sec is None else float(case_timeout_sec)
+
+    def _retry_or_abandon(self, task: dict[str, Any], reason: str) -> bool:
+        """Queue the task again if attempts remain; return True if it was queued."""
+        attempt = int(task.get("attempt_id", 0) or 0) + 1
+        payload = {key: value for key, value in task.items() if key != "global_loop_num"}
+        if attempt < self.max_attempts:
+            payload["attempt_id"] = attempt
+            payload["retry_reason"] = reason
+            # First in line: the samples before it wait for this one.
+            self.queue.insert(0, payload)
+            self.retried_count += 1
+            return True
+        self.abandoned_tasks.append({**payload, "abandon_reason": reason})
+        return False
+
+    def requeue_stale_tasks(self) -> list[int]:
+        """Treat cases a worker took more than case_timeout_sec ago as lost; queue them again."""
+        if self.case_timeout_sec is None:
+            return []
+        now = float(self.time_func())
+        stale = [loop for loop, taken in self.dispatched_at.items()
+                 if loop in self.in_flight and now - taken > self.case_timeout_sec]
+        for loop_num in stale:
+            task = self.in_flight.pop(loop_num)
+            self.dispatched_at.pop(loop_num, None)
+            # Counted as finished, so the run can end; a late report is ignored.
+            self.completed_loop_nums.add(loop_num)
+            self.completed_count += 1
+            self._retry_or_abandon(task, "lost")
+        return stale
 
     def set_start_counts(self, count: int) -> None:
         if self.dispatched_count == 0:
@@ -45,8 +91,11 @@ class TaskQueue:
         if loop_num in self.completed_loop_nums:
             return False
         self.completed_loop_nums.add(loop_num)
-        self.in_flight.pop(loop_num, None)
+        task = self.in_flight.pop(loop_num, None)
+        self.dispatched_at.pop(loop_num, None)
         self.completed_count += 1
+        if task is not None and str(status).lower() != "success" and self.max_attempts > 1:
+            self._retry_or_abandon(task, str(status))
         return True
 
     def get_in_flight_tasks(self) -> list[dict[str, Any]]:
@@ -66,6 +115,8 @@ class TaskQueue:
             "worker_status_updated_at": dict(self.worker_status_updated_at),
             "stop_signal": self.stop_signal,
             "stop_reason": self.stop_reason,
+            "retried_count": self.retried_count,
+            "abandoned_tasks": [dict(task) for task in self.abandoned_tasks],
         }
 
     def set_stop_signal(self, reason: str = "Target Reached or Master Stopped") -> None:

@@ -93,10 +93,13 @@ class SafetyEstimator:
         `evaluation/gp_boundary.py` の正式 API へ委譲する。
         """
         df_dataset = self.load_dataset()
+        from targets.awsim.exploration import AWSIM_TRAINING_RULES  # the rules gp_boundary used to embed
+
         return prepare_training_data_frame(
             df_dataset,
             target_column=target_column,
             feature_names=self.feature_names,
+            training_rules=AWSIM_TRAINING_RULES,
         )
 
     def train(self, target_column):
@@ -112,10 +115,13 @@ class SafetyEstimator:
             self.is_trained = False
             return False
         try:
+            from targets.awsim.exploration import AWSIM_TRAINING_RULES
+
             boundary_model = fit_gp_boundary_model(
                 df,
                 target_column=target_column,
                 feature_names=self.feature_names,
+                training_rules=AWSIM_TRAINING_RULES,
             )
             if boundary_model is None:
                 self.boundary_model = None

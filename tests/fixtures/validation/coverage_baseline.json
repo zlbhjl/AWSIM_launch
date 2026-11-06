@@ -179,6 +179,102 @@
   "sample_count": 50,
   "verdict": null
  },
+ "is_final_ou_a_3sd_two_sided_q5_n1000:20261018": {
+  "correct": true,
+  "estimate": 0.004068121,
+  "estimate_mc": 0.0,
+  "interval": [
+   0.002255246,
+   0.005880997
+  ],
+  "interval_is_bernstein": null,
+  "interval_is_hoeffding": null,
+  "sample_count": 50,
+  "verdict": null
+ },
+ "is_final_ou_a_3sd_two_sided_q5_n1000:20261019": {
+  "correct": true,
+  "estimate": 0.001715744,
+  "estimate_mc": 0.0,
+  "interval": [
+   0.000707357,
+   0.002724132
+  ],
+  "interval_is_bernstein": null,
+  "interval_is_hoeffding": null,
+  "sample_count": 50,
+  "verdict": null
+ },
+ "is_final_ou_a_3sd_two_sided_q5_n1000:20261020": {
+  "correct": true,
+  "estimate": 0.002222699,
+  "estimate_mc": 0.0,
+  "interval": [
+   0.001376662,
+   0.003068735
+  ],
+  "interval_is_bernstein": null,
+  "interval_is_hoeffding": null,
+  "sample_count": 50,
+  "verdict": null
+ },
+ "is_final_ou_b_3sd_upper_q1d_n1000:20261018": {
+  "correct": false,
+  "estimate": 0.000476952,
+  "estimate_mc": 0.0,
+  "interval": [
+   0.0,
+   0.000960991
+  ],
+  "interval_is_bernstein": [
+   0.0,
+   1.0
+  ],
+  "interval_is_hoeffding": [
+   0.0,
+   0.960799744
+  ],
+  "sample_count": 50,
+  "verdict": null
+ },
+ "is_final_ou_b_3sd_upper_q1d_n1000:20261019": {
+  "correct": true,
+  "estimate": 0.001296046,
+  "estimate_mc": 0.0,
+  "interval": [
+   0.000533026,
+   0.002059066
+  ],
+  "interval_is_bernstein": [
+   0.0,
+   1.0
+  ],
+  "interval_is_hoeffding": [
+   0.0,
+   0.961618837
+  ],
+  "sample_count": 50,
+  "verdict": null
+ },
+ "is_final_ou_b_3sd_upper_q1d_n1000:20261020": {
+  "correct": true,
+  "estimate": 0.000922736,
+  "estimate_mc": 0.0,
+  "interval": [
+   0.000410494,
+   0.001434979
+  ],
+  "interval_is_bernstein": [
+   0.0,
+   1.0
+  ],
+  "interval_is_hoeffding": [
+   0.0,
+   0.961245528
+  ],
+  "sample_count": 50,
+  "verdict": null
+ },
  "is_ou_a_3sd_defensive_u3_b0.2_n1000:20261018": {
   "correct": true,
   "estimate": 0.001522909,

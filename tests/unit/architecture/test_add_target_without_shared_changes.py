@@ -223,49 +223,27 @@ def test_a_new_dynamics_model_runs_a_statistical_mode_end_to_end(tmp_path, monke
 
 
 COIN_IS_FILE = '''
-from math import log
-from pathlib import Path
-
 from contracts.execution import TestCase
-from orchestration.fixed_importance_sampling import run_fixed_importance_sampling_comparison
-from orchestration.sampling_plan import load_sampling_plan
-from runtime.repository.importance_sampling_results import ImportanceSamplingResultsRepository
+from contracts.importance_sampling_plugin import PreparedTarget
+from contracts.target_plugin import TargetComponents
+from orchestration.importance.input_law import InputVariables, parse_input_laws
 from targets.coin.plugin import CoinBackend, CoinInterpreter
 
 
 class CoinImportanceSampling:
-    """P: u ~ U(0, 1). Q: 0.5 U(0, 1) + 0.5 U(0, focus), so P/Q <= 2."""
+    """A pure black box: it declares its input u; the shared code draws u from P or Q."""
 
-    def add_arguments(self, parser):
-        parser.add_argument("--focus", type=float, default=0.3)
+    def build_components(self, args):
+        return TargetComponents(backend=CoinBackend(), result_interpreter=CoinInterpreter())
 
-    def run(self, args):
-        import random
+    def prepare(self, plan, config):
+        laws = parse_input_laws(plan.target_measure_definition, plan.proposal_definition,
+                                InputVariables(names=("u",), label="coin"))
+        return PreparedTarget(default_metric="c_heads", input_laws=laws)
 
-        plan = load_sampling_plan(args.sampling_plan)
-        focus = args.focus
-
-        def build_case(run_kind, index):
-            rng = random.Random((args.sampling_seed or 0) * 1_000_000 + index)
-            sampling = {"plan_id": plan.experiment_id, "target_measure_id": plan.target_measure_id}
-            if run_kind == "ordinary":
-                u = rng.random()
-                sampling.update(sampling_mode="uniform", importance_weight_status="not_applicable")
-            else:
-                u = rng.random() if rng.random() < 0.5 else focus * rng.random()
-                log_q = log(0.5 + (0.5 / focus if u < focus else 0.0))
-                sampling.update(sampling_mode="manual_proposal", proposal_id=plan.proposal_id,
-                                importance_weight_status="available", log_p=0.0, log_q=log_q,
-                                log_importance_weight=-log_q, importance_weight_upper_bound=2.0)
-            return TestCase(case_id=f"coin-{run_kind}-{index}", target="coin", case_kind="coin",
-                            input={"u": u, "p_heads": 0.1}, meta={"sampling": sampling})
-
-        return run_fixed_importance_sampling_comparison(
-            backend=CoinBackend(), result_interpreter=CoinInterpreter(),
-            repository=ImportanceSamplingResultsRepository(Path(args.output_root)),
-            max_samples=args.max_samples, build_case=build_case, metric=args.metric or "c_heads",
-            confidence=args.confidence, plan_id=plan.experiment_id,
-        )
+    def build_case(self, request):
+        return TestCase(case_id=f"coin-{request.run_kind}-{request.sample_index}", target="coin", case_kind="coin",
+                        input={**request.inputs, "p_heads": 0.1}, meta={"sampling": dict(request.sampling)})
 '''
 
 
@@ -304,19 +282,20 @@ def coin_target_with_importance_sampling(tmp_path, monkeypatch):
 def test_a_new_target_supports_importance_sampling_from_its_package_only(
     coin_target_with_importance_sampling, tmp_path,
 ) -> None:
-    """targets/coin/ holds the hook and the experiment; the generic CLI needs nothing else."""
+    """targets/coin/ only declares its input and builds cases; the shared runner does the rest."""
     from apps.cli.importance_main import main
 
     plan = tmp_path / "plan.yaml"
     plan.write_text(
         "schema_version: 1\nexperiment_id: coin_is\ntarget: coin\n"
-        "target_measure: {id: coin_p, definition: {}}\n"
-        "proposal: {id: coin_q, mode: manual_proposal, definition: {}}\n",
+        "target_measure: {id: coin_p, definition: {parameters: {u: {distribution: uniform, min: 0, max: 1}}}}\n"
+        "proposal: {id: coin_q, mode: manual_proposal, definition: {parameters: {u: "
+        "{distribution: mixture_uniform_focus, base_weight: 0.5, focus: {min: 0, max: 0.2}}}}}\n",
         encoding="utf-8",
     )
 
     exit_code = main(["--sampling-plan", str(plan), "--output-root", str(tmp_path / "run"),
-                      "--max-samples", "300", "--sampling-seed", "2", "--focus", "0.2"])
+                      "--max-samples", "300", "--root-entropy", "2"])
 
     comparison = json.loads((tmp_path / "run" / "comparison.json").read_text(encoding="utf-8"))
     assert exit_code == 0
@@ -325,6 +304,7 @@ def test_a_new_target_supports_importance_sampling_from_its_package_only(
     assert importance["sample_size"] == 300
     assert importance["lower_bound"] <= 0.1 <= importance["upper_bound"]
     assert comparison["guarantee"]["hoeffding"]["importance"]["max_importance_weight"] == 2.0
+    assert comparison["final_status"] == "complete"  # streams policy: manifest, sample ids, audit
 
 
 # --- AWSIM-type, PRISM-type and container-profile targets --------------------
@@ -507,3 +487,303 @@ def test_a_target_brings_its_own_container_profile(make_target) -> None:
     assert resolve_container_launch_profile("walk_cpu").requires_gpu is False
     args = build_parser().parse_args(["--target", "walk", "--container-profile", "walk_cpu", "--output", "o.jsonl"])
     assert args.container_profile == "walk_cpu"
+
+
+def test_a_black_box_target_stops_sequentially_with_the_shared_runner(
+    coin_target_with_importance_sampling, tmp_path,
+) -> None:
+    from apps.cli.importance_main import main
+
+    plan = tmp_path / "plan.yaml"
+    plan.write_text(
+        "schema_version: 1\nexperiment_id: coin_seq\ntarget: coin\n"
+        "target_measure: {id: coin_p, definition: {parameters: {u: {distribution: uniform, min: 0, max: 1}}}}\n"
+        "proposal: {id: coin_q, mode: manual_proposal, definition: {parameters: {u: "
+        "{distribution: mixture_uniform_focus, base_weight: 0.5, focus: {min: 0, max: 0.2}}}}}\n",
+        encoding="utf-8",
+    )
+
+    exit_code = main(["--sampling-plan", str(plan), "--output-root", str(tmp_path / "run"), "--max-samples", "2000",
+                      "--root-entropy", "5", "--stop-mode", "importance_width", "--target-width", "0.08"])
+
+    result = json.loads((tmp_path / "run" / "comparison.json").read_text(encoding="utf-8"))
+    assert exit_code == 0
+    assert result["stopped_by_rule"] is True and result["sample_count"] < 2000
+    assert result["statistical_report"]["interval"][0] <= 0.1 <= result["statistical_report"]["interval"][1]
+
+
+# --- A target with internal randomness (capability internal_density) ---------
+
+GAUSS_PLUGIN = '''
+import random
+from math import erfc, log, pi, sqrt
+
+from contracts.capabilities import INTERNAL_DENSITY
+from contracts.evaluation import EvaluationRecord, ensure_evaluation_meta
+from contracts.execution import RawRunResult, RunStatus, TestCase
+from contracts.importance_sampling_plugin import InternalProposal, PreparedTarget
+from contracts.sampling import TARGET_COMPONENT
+from contracts.target_plugin import TargetComponents
+
+THRESHOLD = 3.0
+
+
+def _log_normal(x, mean):
+    return -0.5 * (x - mean) ** 2 - 0.5 * log(2.0 * pi)
+
+
+class GaussBackend:
+    """X ~ N(0, 1) under P; event X > 3. Q draws X from a shifted component."""
+
+    def run(self, case):
+        shifts = case.input.get("shifts", [])
+        component = case.input.get("component")
+        mean = 0.0 if component in (None, TARGET_COMPONENT) else shifts[component]
+        x = random.Random(case.input["seed"]).gauss(mean, 1.0)
+        sampling = dict(case.meta.get("sampling") or {})
+        if shifts:
+            sampling["internal"] = {"log_p": _log_normal(x, 0.0), "log_q": [_log_normal(x, s) for s in shifts],
+                                    "sampled_component": component, "support": "positive"}
+        return RawRunResult(case.case_id, "gauss", "gauss", RunStatus.SUCCESS,
+                            meta={"x": x, "sampling": sampling})
+
+
+class GaussInterpreter:
+    def interpret_raw_run_result(self, raw):
+        meta = ensure_evaluation_meta({"sampling": raw.meta["sampling"]}, source_module="targets.gauss.plugin")
+        return EvaluationRecord(raw.case_id, "gauss", "gauss", raw.status,
+                                output={"c_exceed": int(raw.meta["x"] > THRESHOLD)}, meta=meta)
+
+
+class GaussImportanceSampling:
+    random_streams = ("noise",)
+
+    def build_components(self, args):
+        return TargetComponents(backend=GaussBackend(), result_interpreter=GaussInterpreter())
+
+    def prepare(self, plan, config):
+        definition = plan.proposal_definition
+        shifts = [float(value) for value in definition.get("shifts", [])]
+        internal = None
+        if shifts:
+            internal = InternalProposal(
+                components=tuple(f"shift_{value}" for value in shifts),
+                weights=tuple(1.0 / len(shifts) for _ in shifts),
+                definition=shifts, fingerprint_source={"shifts": shifts},
+                defensive_weight=definition.get("defensive_weight"),
+            )
+        return PreparedTarget(default_metric="c_exceed", internal_proposal=internal, random_streams=self.random_streams)
+
+    def build_case(self, request):
+        importance = request.run_kind == "importance"
+        return TestCase(
+            case_id=f"gauss-{request.run_kind}-{request.sample_index}", target="gauss", case_kind="gauss",
+            input={"seed": request.seeds["noise"],
+                   "shifts": list(request.prepared.internal_proposal.definition) if importance else [],
+                   "component": request.component},
+            meta={"sampling": dict(request.sampling)},
+        )
+
+    def exact_probability(self, plan):
+        return 0.5 * erfc(THRESHOLD / sqrt(2.0))
+
+
+class GaussPlugin:
+    name = "gauss"
+    capabilities = frozenset({INTERNAL_DENSITY})
+
+    def build_components(self, args):
+        return TargetComponents(backend=GaussBackend(), result_interpreter=GaussInterpreter())
+
+    @property
+    def importance_sampling(self):
+        return GaussImportanceSampling()
+
+
+PLUGIN = GaussPlugin()
+'''
+
+
+def _gauss_plan(path, *, shifts=(3.0,), defensive_weight=0.2):
+    import yaml
+
+    path.write_text(yaml.safe_dump({
+        "schema_version": 1, "experiment_id": "gauss_tail", "target": "gauss",
+        "target_measure": {"id": "gauss_p", "definition": {}},
+        "proposal": {"id": "gauss_q", "mode": "manual_proposal",
+                     "definition": {"shifts": list(shifts), "defensive_weight": defensive_weight}},
+    }), encoding="utf-8")
+    return path
+
+
+def test_a_target_with_internal_randomness_only_reports_densities(make_target, tmp_path) -> None:
+    """The shared code chooses the component, mixes the densities and bounds the weight by 1/beta."""
+    from apps.cli.importance_main import main
+
+    make_target("gauss", {"plugin.py": GAUSS_PLUGIN})
+    plan = _gauss_plan(tmp_path / "plan.yaml")
+
+    exit_code = main(["--sampling-plan", str(plan), "--output-root", str(tmp_path / "run"),
+                      "--max-samples", "400", "--root-entropy", "9"])
+
+    comparison = json.loads((tmp_path / "run" / "comparison.json").read_text(encoding="utf-8"))
+    truth = 0.0013498980316301
+    assert exit_code == 0
+    assert comparison["final_status"] == "complete"
+    assert comparison["guarantee"]["hoeffding"]["importance"]["max_importance_weight"] == 5.0
+    importance = comparison["diagnostic"]["importance"]
+    assert importance["lower_bound"] <= truth <= importance["upper_bound"]
+    assert abs(importance["estimate"] - truth) < 0.3 * truth
+
+
+def test_shared_tools_validate_a_target_with_internal_randomness(make_target, tmp_path) -> None:
+    """Coverage (with the target's exact probability) and pilot tuning need no shared changes."""
+    from tools.validation.coverage_experiment import Scenario, judge, run_importance_fixed_once
+    from tools.validation.is_tuning import run_trials
+
+    make_target("gauss", {"plugin.py": GAUSS_PLUGIN})
+    plan = _gauss_plan(tmp_path / "plan.yaml")
+    scenario = Scenario("gauss_tail", "importance_fixed", "importance_probability", "gauss tail",
+                        {"plan": str(plan)}, {"max_samples": 200}, truth_key="plan")
+    verdicts = [judge(scenario, run_importance_fixed_once(scenario, seed, tmp_path)) for seed in range(10)]
+    assert all(verdict["correct_is_bernstein"] for verdict in verdicts)
+
+    candidates = tmp_path / "candidates.yaml"
+    candidates.write_text("trials:\n  - {name: one, shifts: [3.0]}\n  - {name: two, shifts: [-3.0, 3.0]}\n",
+                          encoding="utf-8")
+    import yaml
+
+    base = tmp_path / "base.yaml"
+    base.write_text(yaml.safe_dump(yaml.safe_load(plan.read_text(encoding="utf-8"))), encoding="utf-8")
+    record = run_trials(base_plan=base, candidates=candidates, output_dir=tmp_path / "tuning",
+                        samples=100, root_entropy=3)
+    assert [trial["name"] for trial in record["trials"]] == ["one", "two"]
+    assert record["trials"][0]["proposal"] == {"shifts": [3.0], "defensive_weight": 0.2}
+
+
+def test_an_internal_proposal_needs_the_declared_capability(make_target, tmp_path, capsys) -> None:
+    from apps.cli.importance_main import main
+
+    make_target("gauss", {"plugin.py": GAUSS_PLUGIN.replace(
+        "    capabilities = frozenset({INTERNAL_DENSITY})\n", "")})
+    plan = _gauss_plan(tmp_path / "plan.yaml")
+
+    with pytest.raises(SystemExit):
+        main(["--sampling-plan", str(plan), "--output-root", str(tmp_path / "run"), "--max-samples", "5",
+              "--root-entropy", "1"])
+    assert "'gauss' does not declare internal_density" in capsys.readouterr().err
+    assert not (tmp_path / "run" / "importance" / "records.jsonl").exists()
+
+
+# --- A target using the shared GP exploration (exploration plan G4) -----------
+
+SLOPE_PLUGIN = '''
+from contracts.evaluation import EvaluationRecord, ensure_evaluation_meta
+from contracts.execution import RawRunResult, RunStatus
+from contracts.target_plugin import TargetComponents
+
+
+class SlopeBackend:
+    def run(self, case):
+        x, y = float(case.input["x"]), float(case.input["y"])
+        return RawRunResult(case.case_id, "slope", case.case_kind, RunStatus.SUCCESS,
+                            meta={"margin": 1.2 - (x + y)})
+
+
+class SlopeInterpreter:
+    def interpret_raw_run_result(self, raw):
+        margin = raw.meta["margin"]
+        return EvaluationRecord(raw.case_id, "slope", raw.case_kind, raw.status,
+                                output={"c_event": int(margin < 0.0), "margin": margin},
+                                meta=ensure_evaluation_meta({}, source_module="targets.slope.plugin"))
+
+
+class SlopePlugin:
+    name = "slope"
+    default_case_kind = "slope"
+
+    def default_config_module(self, case_kind):
+        return "targets.slope.settings"
+
+    def build_components(self, args):
+        return TargetComponents(backend=SlopeBackend(), result_interpreter=SlopeInterpreter())
+
+    def select_strategy(self, config):
+        return None if config.params else "gp_exploration"
+
+    @property
+    def strategies(self):
+        from orchestration.exploration.builder import build_gp_exploration_strategy, gp_exploration_target_total
+        from orchestration.exploration.spec import ExplorationSpec
+        from orchestration.strategy_registry import StrategySpec
+
+        return {"gp_exploration": StrategySpec(
+            lambda orchestrator, config: build_gp_exploration_strategy(orchestrator, config, spec=ExplorationSpec()),
+            target_total=gp_exploration_target_total,
+        )}
+
+
+PLUGIN = SlopePlugin()
+'''
+
+SLOPE_SETTINGS = '''
+SCENARIO_TYPE = "slope"
+PARAM_RANGES = {"x": (0.0, 1.0), "y": (0.0, 1.0)}
+FIXED_PARAMS = {}
+TARGET_PRIORITIES = ["c_event"]
+INITIAL_EXPLORATION_LIMIT = 10
+BINOMIAL_CI_TARGET = "c_event"
+'''
+
+SLOPE_STATISTICAL = '''
+from contracts.metric_spec import binary, real
+from contracts.statistical_region import PassthroughStatisticalRegionPolicy
+from targets.statistical import StatisticalTargetProfile
+
+STATISTICAL_TARGET_PROFILE = StatisticalTargetProfile(
+    target="slope", binary_metric="c_event", dkw_metric="margin",
+    metric_specs={"c_event": binary(), "margin": real()},
+)
+
+
+def build_statistical_region_policy(*, case_kind, config_module_name=None):
+    return PassthroughStatisticalRegionPolicy()
+'''
+
+
+def _slope_records(output):
+    return [json.loads(line) for line in output.read_text(encoding="utf-8").splitlines()]
+
+
+def test_a_target_uses_the_shared_gp_exploration_from_its_package_only(make_target, tmp_path) -> None:
+    from apps.cli.orchestrator_main import run_orchestrator
+
+    make_target("slope", {"plugin.py": SLOPE_PLUGIN, "settings.py": SLOPE_SETTINGS,
+                          "statistical.py": SLOPE_STATISTICAL})
+    output = tmp_path / "records.jsonl"
+
+    exit_code = run_orchestrator(["--target", "slope", "--mode", "explore", "--max-samples", "40",
+                                  "--output", str(output), "--dataset-csv", str(tmp_path / "dataset.csv")])
+
+    records = _slope_records(output)
+    assert exit_code == 0 and len(records) == 40
+    reasons = [record["meta"]["task_reason"] for record in records]
+    assert any(reason.startswith("STEP2") for reason in reasons)  # the GP phase was reached
+    assert {record["output"]["c_event"] for record in records} == {0, 1}
+
+
+def test_a_target_runs_the_shared_statistical_modes_with_ordered_samples(make_target, tmp_path) -> None:
+    from apps.cli.orchestrator_main import run_orchestrator
+
+    make_target("slope", {"plugin.py": SLOPE_PLUGIN, "settings.py": SLOPE_SETTINGS,
+                          "statistical.py": SLOPE_STATISTICAL})
+    output = tmp_path / "records.jsonl"
+
+    exit_code = run_orchestrator(["--target", "slope", "--mode", "binomial_ci", "--max-samples", "30",
+                                  "--binomial-target-width", "0.9", "--binomial-min-samples", "30",
+                                  "--output", str(output), "--dataset-csv", str(tmp_path / "dataset.csv")])
+
+    records = _slope_records(output)
+    assert exit_code == 0
+    assert [record["input"]["sample_index"] for record in records] == list(range(1, len(records) + 1))
+    assert len({record["input"]["experiment_id"] for record in records}) == 1

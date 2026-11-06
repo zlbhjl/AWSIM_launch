@@ -11,6 +11,7 @@ import pandas as pd
 from contracts.execution import TestCase
 from contracts.statistics import StatisticalReport, StatisticalRequest
 from evaluation.binomial_ci import BinomialCIService
+from evaluation.statistical_sample import prepare_statistical_sample
 
 # The exact model check reports failure *probabilities*
 # (eventual_failure_probability / bounded_failure_probability). Comparing those
@@ -86,6 +87,13 @@ class FixedParameterSamplingStrategy:
         self._model_check_issued = False
         self.exact_model_check: dict[str, object] | None = None
         self.latest_statistical_report: StatisticalReport | None = None
+        # Set by the orchestrator: attempts per sample (the queue retries a
+        # failed case) and the samples the queue gave up as lost.
+        self.max_attempts = 1
+        self.abandoned_sample_indexes: set[int] = set()
+        # Sample numbers handed out by this strategy (numbering need not be dense).
+        self.issued_sample_indexes: set[int] = set()
+        self.latest_sample_summary: dict[str, object] | None = None
 
     def next_test_case(self) -> TestCase | None:
         self.waiting_for_result = False
@@ -111,9 +119,8 @@ class FixedParameterSamplingStrategy:
             self.stop_reason = self._report_stop_reason(report)
             return None
 
-        completed_count = 0 if completed is None else int(len(completed))
         if self._baseline_completed_count is None:
-            self._baseline_completed_count = completed_count
+            self._baseline_completed_count = self._resume_count(completed)
         scheduled_count = self._baseline_completed_count + self.issued_count
         if scheduled_count >= int(self.config.max_samples):
             self.stop_reason = (
@@ -124,6 +131,7 @@ class FixedParameterSamplingStrategy:
 
         self.issued_count += 1
         sample_index = self._baseline_completed_count + self.issued_count
+        self.issued_sample_indexes.add(sample_index)
         prefix = self.config.case_id_prefix or (
             f"{self.config.case_kind}-{self.experiment_id}"
         )
@@ -175,7 +183,54 @@ class FixedParameterSamplingStrategy:
             "experiment_id": self.experiment_id,
             "sampling_signature": self.sampling_signature,
             "exact_model_check": self._exact_comparison_payload(report),
+            "sample": self.latest_sample_summary,
+            **self._unresolved_payload(report),
         }
+
+    def _declaration_violation(self, data: pd.DataFrame | None) -> StatisticalReport | None:
+        """An error report when a value does not fit the target's declared metric (no interval)."""
+        from targets.statistical import target_metric_spec
+
+        metric = self.statistical_request.metric
+        if data is None or data.empty or metric not in data.columns:
+            return None
+        spec = target_metric_spec(self.config.target, metric, self.params)
+        if spec is None:
+            return None
+        frame = data
+        if "status" in frame.columns:
+            frame = frame[frame["status"].fillna("").astype(str).str.lower().eq("success")]
+        values = pd.to_numeric(frame[metric], errors="coerce").dropna()
+        bad = spec.violations(values)
+        if not bad:
+            return None
+        return StatisticalReport(
+            method=self.statistical_request.method, metric=metric, sample_count=int(len(values)),
+            estimate=None, interval=None, sufficient=False, next_action="error",
+            diagnostics={
+                "status": "error",
+                "message": (
+                    f"{bad} value(s) of {metric} do not fit its declaration ({spec.describe()}); "
+                    "no interval is computed (check the target's result interpreter or its metric_specs)"
+                ),
+                "declaration_violations": bad,
+            },
+        )
+
+    def _unresolved_payload(self, report: StatisticalReport) -> dict[str, object]:
+        return unresolved_payload(
+            self.latest_sample_summary, lambda: self._resolved_metric_values(report.metric),
+            confidence=float(getattr(self.statistical_request, "confidence", 0.95) or 0.95),
+        )
+
+    def _resolved_metric_values(self, metric: str) -> list[float] | None:
+        frame = self._load_matching_records("sample")
+        if frame is None or metric not in frame.columns:
+            return None
+        if "status" in frame.columns:
+            frame = frame[frame["status"].fillna("").astype(str).str.lower().eq("success")]
+        values = pd.to_numeric(frame[metric], errors="coerce").dropna()
+        return [float(value) for value in values]
 
     def _load_matching_records(self, record_kind: str) -> pd.DataFrame | None:
         repository = self.dataset_repository
@@ -194,9 +249,26 @@ class FixedParameterSamplingStrategy:
             & signatures.eq(self.sampling_signature)
         ].copy()
         if "record_kind" not in matching.columns:
-            return matching if record_kind == "sample" else matching.iloc[0:0].copy()
-        kinds = matching["record_kind"].fillna("sample").astype(str)
-        return matching[kinds.eq(record_kind)].copy()
+            selected = matching if record_kind == "sample" else matching.iloc[0:0].copy()
+        else:
+            kinds = matching["record_kind"].fillna("sample").astype(str)
+            selected = matching[kinds.eq(record_kind)].copy()
+        if record_kind != "sample":
+            return selected
+        # Sample order, one row per sample, contiguous prefix only.
+        prepared = prepare_statistical_sample(
+            selected, max_attempts=self.max_attempts, abandoned=self.abandoned_sample_indexes,
+            issued=self.issued_sample_indexes,
+        )
+        self.latest_sample_summary = prepared.summary
+        return prepared.frame
+
+    def _resume_count(self, completed: pd.DataFrame | None) -> int:
+        """Samples already issued in an earlier run (new samples continue after them)."""
+        summary = self.latest_sample_summary or {}
+        if summary.get("ordered"):
+            return int(summary["max_sample_index"])
+        return 0 if completed is None else int(len(completed))
 
     def _build_model_check_case(self) -> TestCase:
         prefix = self.config.case_id_prefix or (
@@ -274,6 +346,10 @@ class FixedParameterSamplingStrategy:
     def _evaluate(self, data: pd.DataFrame | None) -> StatisticalReport | None:
         if self.statistical_service is None or self.statistical_request is None:
             return None
+        violation = self._declaration_violation(data)
+        if violation is not None:
+            self.latest_statistical_report = violation
+            return violation
         report = self.statistical_service.evaluate_request(
             data,
             self.statistical_request,
@@ -297,6 +373,45 @@ class FixedParameterSamplingStrategy:
                 f"Statistical evaluation failed for {report.metric}",
             )
         )
+
+
+def unresolved_payload(
+    summary: Mapping[str, object] | None,
+    resolved_values,
+    *,
+    confidence: float,
+) -> dict[str, object]:
+    """When samples stayed unresolved: an approximate guarantee and, for 0/1 metrics,
+    the interval with every unresolved sample counted as 0 and as 1
+    (Horowitz & Manski 2000). Reported only; the stop decision does not use it.
+
+    ``resolved_values`` returns the metric's values of the resolved samples (or None).
+    """
+    summary = summary or {}
+    unresolved = int(summary.get("unresolved_samples", 0) or 0) + int(summary.get("lost_samples", 0) or 0)
+    if not unresolved:
+        return {}
+    payload: dict[str, object] = {
+        "guarantee": "approximate",
+        "guarantee_reason": f"{unresolved} sample(s) stayed unresolved after every attempt and were excluded",
+    }
+    values = resolved_values()
+    if values is not None and set(values) <= {0.0, 1.0}:
+        from evaluation.stopping_rules import clopper_pearson
+
+        successes, observed = int(sum(values)), len(values)
+        total = observed + unresolved
+        delta = 1.0 - confidence
+        low, _ = clopper_pearson(successes, total, delta)
+        _, high = clopper_pearson(successes + unresolved, total, delta)
+        payload["unresolved_bounds"] = {
+            "method": "worst_case_clopper_pearson",
+            "unresolved_samples": unresolved,
+            "estimate_if_all_0": successes / total,
+            "estimate_if_all_1": (successes + unresolved) / total,
+            "interval": [low, high],
+        }
+    return payload
 
 
 def build_sampling_signature(
@@ -329,4 +444,5 @@ __all__ = [
     "FixedParameterSamplingStrategy",
     "FixedParameterSamplingStrategyConfig",
     "build_sampling_signature",
+    "unresolved_payload",
 ]

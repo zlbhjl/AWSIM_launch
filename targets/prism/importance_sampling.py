@@ -1,4 +1,4 @@
-"""Fixed-sample runner comparing ordinary and importance-sampled PRISM paths."""
+"""Importance sampling of PRISM paths: hooks of the shared runner, plus PRISM's proposal suggestions."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -6,11 +6,13 @@ from pathlib import Path
 from typing import Mapping
 
 from contracts.execution import TestCase
+from contracts.importance_sampling_plugin import CaseRequest, PreparedTarget
 from contracts.sampling import ProposalCandidate
 from contracts.statistics import StatisticalRequest
+from contracts.target_plugin import TargetComponents
 from evaluation.importance_sampling import evaluate_standard_importance_sampling_request
-from orchestration.fixed_importance_sampling import run_fixed_importance_sampling_comparison
-from evaluation.weighted_sequential import evaluate_weighted_sequential_request
+from orchestration.importance.runner import ImportanceRunConfig, ImportanceSamplingRunner, report_payload
+from orchestration.importance.weights import compose_internal_weight
 from orchestration.proposal_updates import ProposalUpdateManager
 from orchestration.sampling_plan import SamplingPlan, load_sampling_plan
 from orchestration.seeding import legacy_sample_seed
@@ -19,6 +21,7 @@ from runtime.repository.importance_sampling_results import ImportanceSamplingRes
 from runtime.repository.proposal_history import ProposalHistoryRepository
 from targets.prism.model_catalog import get_model_definition
 from targets.prism.proposal import build_proposal_candidates
+from targets.prism.sampling import internal_proposal
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,121 +46,36 @@ class PrismImportanceSamplingRunConfig:
             raise ValueError("target_width is required for importance_width")
         object.__setattr__(self, "sequential_options", dict(self.sequential_options))
 
+    def shared(self) -> ImportanceRunConfig:
+        return ImportanceRunConfig(
+            sampling_plan_path=self.sampling_plan_path, output_root=self.output_root,
+            max_samples=self.max_samples, metric=self.metric, confidence=self.confidence,
+            seed=self.seed, params=self.params, stop_mode=self.stop_mode,
+            target_width=self.target_width, sequential_options=self.sequential_options,
+        )
+
 
 class PrismImportanceSamplingRunner:
+    """Compatible entry point: the shared runner with the PRISM hooks, and the suggest pilot."""
+
     def __init__(self, *, backend: object, result_interpreter: object):
         self.backend = backend
         self.result_interpreter = result_interpreter
 
-    def run_fixed_samples(self, config: PrismImportanceSamplingRunConfig) -> dict[str, object]:
-        if config.stop_mode != "fixed_samples":
-            raise ValueError("run_fixed_samples requires stop_mode='fixed_samples'")
-        if config.max_samples is None:
-            raise ValueError("max_samples is required for fixed_samples")
-        plan = load_sampling_plan(config.sampling_plan_path)
-        if plan.target != "prism":
-            raise ValueError("sampling plan target must be 'prism'")
-        repository = ImportanceSamplingResultsRepository(config.output_root)
-        return run_fixed_importance_sampling_comparison(
-            backend=self.backend,
-            result_interpreter=self.result_interpreter,
-            repository=repository,
-            max_samples=config.max_samples,
-            build_case=lambda run_kind, index: self._build_case(
-                run_kind=run_kind, index=index, plan=plan, config=config,
-            ),
-            metric=config.metric,
-            confidence=config.confidence,
-            target_width=config.target_width,
-            plan_id=plan.experiment_id,
+    def _shared(self) -> ImportanceSamplingRunner:
+        return ImportanceSamplingRunner(
+            backend=self.backend, result_interpreter=self.result_interpreter, hooks=PrismImportanceSampling(),
         )
+
+    def run_fixed_samples(self, config: PrismImportanceSamplingRunConfig) -> dict[str, object]:
+        return self._shared().run_fixed_samples(config.shared())
 
     def run(self, config: PrismImportanceSamplingRunConfig) -> dict[str, object]:
         """Run a fixed-Q experiment without changing or approving Q."""
-        if config.stop_mode == "fixed_samples":
-            return self.run_fixed_samples(config)
-        return self.run_until_stop(config)
+        return self._shared().run(config.shared())
 
     def run_until_stop(self, config: PrismImportanceSamplingRunConfig) -> dict[str, object]:
-        """Append fixed-Q importance samples until a configured stop rule fires.
-
-        Only the importance run is extended here.  An ordinary baseline is a
-        separate fixed-sample comparison, so its cost cannot silently affect a
-        sequential decision.
-        """
-        if config.max_samples is None:
-            raise ValueError("max_samples is required as a safety cap for stop modes")
-        if config.stop_mode not in {"importance_width", "weighted_sequential"}:
-            raise ValueError("run_until_stop requires a non-fixed stop mode")
-        plan = load_sampling_plan(config.sampling_plan_path)
-        if plan.target != "prism":
-            raise ValueError("sampling plan target must be 'prism'")
-        if plan.sampling_mode != "manual_proposal":
-            raise ValueError(
-                "sequential stop modes require a human-selected fixed Q "
-                "(proposal.mode='manual_proposal')"
-            )
-        repository = ImportanceSamplingResultsRepository(config.output_root)
-        records = repository.load_records("importance")
-        report = self._stop_report(records, config, plan) if records else None
-        while (report is None or not report.sufficient) and len(records) < config.max_samples:
-            self._run_missing(
-                run_kind="importance",
-                existing_count=len(records),
-                max_samples=len(records) + 1,
-                plan=plan,
-                config=config,
-                repository=repository,
-            )
-            records = repository.load_records("importance")
-            report = self._stop_report(records, config, plan)
-        if report is None:
-            raise RuntimeError("stop-mode run did not produce an evaluation report")
-        stopped_by_rule = report.sufficient
-        result = {
-            "plan_id": plan.experiment_id,
-            "stop_mode": config.stop_mode,
-            "sample_count": len(records),
-            "max_samples": config.max_samples,
-            "stopped_by_rule": stopped_by_rule,
-            "stop_reason": report.next_action if stopped_by_rule else "max_samples_reached",
-            "statistical_report": _report_payload(report),
-            "importance_records_path": str(repository.records_path("importance")),
-        }
-        comparison_path = repository.save_comparison(result)
-        result["comparison_path"] = str(comparison_path)
-        return result
-
-    @staticmethod
-    def _stop_report(
-        records,
-        config: PrismImportanceSamplingRunConfig,
-        plan: SamplingPlan,
-    ):
-        if config.stop_mode == "importance_width":
-            return evaluate_standard_importance_sampling_request(
-                records,
-                StatisticalRequest(
-                    method="ordinary_importance_sampling",
-                    metric=config.metric,
-                    confidence=config.confidence,
-                    target_width=config.target_width,
-                ),
-            )
-        configured_options = plan.sequential_decision
-        if configured_options is None:
-            configured_options = {}
-        if not isinstance(configured_options, Mapping):
-            raise ValueError("sequential_decision must be a mapping when weighted_sequential is used")
-        return evaluate_weighted_sequential_request(
-            records,
-            StatisticalRequest(
-                method="weighted_sequential",
-                metric=config.metric,
-                confidence=config.confidence,
-                options={**dict(configured_options), **dict(config.sequential_options)},
-            ),
-        )
+        return self._shared().run_until_stop(config.shared())
 
     def run_suggest_pilot(self, config: PrismImportanceSamplingRunConfig) -> dict[str, object]:
         """Evaluate human-bounded Q candidates without applying any of them."""
@@ -226,26 +144,11 @@ class PrismImportanceSamplingRunner:
                 "proposal_id": candidate.proposal_id,
                 "proposal_version": candidate.proposal_version,
                 "adjustments": list(candidate.diagnostics.get("adjustments", ())),
-                "report": _report_payload(report),
+                "report": report_payload(report),
                 "importance_weight_status_counts": _weight_status_counts(records),
                 "records_path": str(repository.candidate_records_path(candidate.proposal_id)),
             })
         return {"plan_id": plan.experiment_id, "mode": "suggest", "candidates": results}
-
-    def _run_missing(self, *, run_kind: str, existing_count: int, max_samples: int | None = None,
-                     plan: SamplingPlan,
-                     config: PrismImportanceSamplingRunConfig,
-                     repository: ImportanceSamplingResultsRepository) -> None:
-        loop = WorkerLoop(
-            backend=self.backend, result_interpreter=self.result_interpreter,
-            result_sink=lambda record: repository.append_record(run_kind, record),
-        )
-        limit = config.max_samples if max_samples is None else max_samples
-        if limit is None:
-            raise ValueError("max_samples is required")
-        for index in range(existing_count + 1, limit + 1):
-            case = self._build_case(run_kind=run_kind, index=index, plan=plan, config=config)
-            loop.run_once(case)
 
     def _run_missing_candidate(
         self,
@@ -260,65 +163,16 @@ class PrismImportanceSamplingRunner:
         loop = WorkerLoop(
             backend=self.backend,
             result_interpreter=self.result_interpreter,
-            result_sink=lambda record: repository.append_candidate_record(candidate.proposal_id, record),
+            result_sink=lambda record: repository.append_candidate_record(
+                candidate.proposal_id, compose_internal_weight(record, internal_proposal(candidate.definition)),
+            ),
         )
         for index in range(existing_count + 1, max_samples + 1):
-            loop.run_once(self._build_case(
-                run_kind="candidate", index=index, plan=plan, config=config, candidate=candidate,
+            loop.run_once(prism_case(
+                run_kind="candidate", index=index, plan=plan, seed=_sample_seed(config.seed, index),
+                params=config.params, sampling_plan_path=str(Path(config.sampling_plan_path).resolve()),
+                candidate=candidate,
             ))
-
-    @staticmethod
-    def _build_case(*, run_kind: str, index: int, plan: SamplingPlan,
-                    config: PrismImportanceSamplingRunConfig,
-                    candidate: ProposalCandidate | None = None) -> TestCase:
-        input_payload = {
-            **dict(config.params), "execution_kind": "sample_path", "record_kind": "sample",
-            "sample_index": index,
-        }
-        if run_kind == "ordinary" and config.seed is not None:
-            input_payload["sampling_engine"] = "target_adapter"
-            input_payload["sampling_seed"] = _sample_seed(config.seed, index)
-        sampling_meta: dict[str, object] = {
-            "plan_id": plan.experiment_id, "target_measure_id": plan.target_measure_id,
-            "sampling_mode": "uniform" if run_kind == "ordinary" else (
-                "adaptive" if candidate is not None else "manual_proposal"
-            ),
-            "importance_weight_status": "not_applicable" if run_kind == "ordinary" else "unavailable",
-        }
-        if run_kind in {"importance", "candidate"}:
-            input_payload["sampling_plan_path"] = str(Path(config.sampling_plan_path).resolve())
-            if config.seed is not None:
-                input_payload["sampling_seed"] = _sample_seed(config.seed, index)
-            if candidate is None:
-                sampling_meta["proposal_id"] = plan.proposal_id
-            else:
-                input_payload.update({
-                    "proposal_definition": candidate.definition,
-                    "proposal_id": candidate.proposal_id,
-                    "proposal_version": candidate.proposal_version,
-                    "proposal_sampling_mode": "adaptive",
-                })
-                sampling_meta.update({
-                    "proposal_id": candidate.proposal_id,
-                    "proposal_version": candidate.proposal_version,
-                })
-        target_definition = plan.target_measure_definition
-        target_constants = (
-            target_definition.get("constants", {})
-            if isinstance(target_definition, Mapping)
-            else {}
-        )
-        if not isinstance(target_constants, Mapping):
-            raise ValueError("PRISM target_measure.definition.constants must be a mapping")
-        input_payload = {**dict(target_constants), **input_payload}
-        return TestCase(
-            case_id=(
-                f"{plan.experiment_id}-{candidate.proposal_id if candidate else run_kind}-{index:05d}"
-            ), target="prism",
-            case_kind="simple_reliability_dtmc", input=input_payload,
-            reason=f"PRISM_IMPORTANCE_{run_kind.upper()}: {plan.experiment_id} sample={index}",
-            meta={"sampling": sampling_meta, "source_module": "targets.prism.importance_sampling"},
-        )
 
     @staticmethod
     def _target_constants(plan: SamplingPlan) -> Mapping[str, object]:
@@ -354,17 +208,67 @@ class PrismImportanceSamplingRunner:
         )
 
 
-def _report_payload(report) -> dict[str, object]:
-    return {
-        "method": report.method,
-        "metric": report.metric,
-        "sample_count": report.sample_count,
-        "estimate": report.estimate,
-        "interval": list(report.interval) if report.interval is not None else None,
-        "sufficient": report.sufficient,
-        "next_action": report.next_action,
-        "diagnostics": dict(report.diagnostics),
+
+
+def prism_case(
+    *,
+    run_kind: str,
+    index: int,
+    plan: SamplingPlan,
+    seed: int | None,
+    params: Mapping[str, object],
+    sampling_plan_path: str,
+    candidate: ProposalCandidate | None = None,
+) -> TestCase:
+    """One PRISM path: under P (ordinary), the plan's Q (importance) or a candidate Q."""
+    input_payload = {
+        **dict(params), "execution_kind": "sample_path", "record_kind": "sample",
+        "sample_index": index,
     }
+    if run_kind == "ordinary" and seed is not None:
+        input_payload["sampling_engine"] = "target_adapter"
+        input_payload["sampling_seed"] = seed
+    sampling_meta: dict[str, object] = {
+        "plan_id": plan.experiment_id, "target_measure_id": plan.target_measure_id,
+        "sampling_mode": "uniform" if run_kind == "ordinary" else (
+            "adaptive" if candidate is not None else "manual_proposal"
+        ),
+        "importance_weight_status": "not_applicable" if run_kind == "ordinary" else "unavailable",
+    }
+    if run_kind in {"importance", "candidate"}:
+        input_payload["sampling_plan_path"] = sampling_plan_path
+        if seed is not None:
+            input_payload["sampling_seed"] = seed
+        if candidate is None:
+            sampling_meta["proposal_id"] = plan.proposal_id
+        else:
+            input_payload.update({
+                "proposal_definition": candidate.definition,
+                "proposal_id": candidate.proposal_id,
+                "proposal_version": candidate.proposal_version,
+                "proposal_sampling_mode": "adaptive",
+            })
+            sampling_meta.update({
+                "proposal_id": candidate.proposal_id,
+                "proposal_version": candidate.proposal_version,
+            })
+    target_definition = plan.target_measure_definition
+    target_constants = (
+        target_definition.get("constants", {})
+        if isinstance(target_definition, Mapping)
+        else {}
+    )
+    if not isinstance(target_constants, Mapping):
+        raise ValueError("PRISM target_measure.definition.constants must be a mapping")
+    input_payload = {**dict(target_constants), **input_payload}
+    return TestCase(
+        case_id=(
+            f"{plan.experiment_id}-{candidate.proposal_id if candidate else run_kind}-{index:05d}"
+        ), target="prism",
+        case_kind="simple_reliability_dtmc", input=input_payload,
+        reason=f"PRISM_IMPORTANCE_{run_kind.upper()}: {plan.experiment_id} sample={index}",
+        meta={"sampling": sampling_meta, "source_module": "targets.prism.importance_sampling"},
+    )
 
 
 def _weight_status_counts(records) -> dict[str, int]:
@@ -377,56 +281,68 @@ def _weight_status_counts(records) -> dict[str, int]:
     return counts
 
 
-def _sample_seed(experiment_seed: int, sample_index: int) -> int:
+def _sample_seed(experiment_seed: int | None, sample_index: int) -> int | None:
     return legacy_sample_seed(experiment_seed, sample_index)
 
 
-class PrismImportanceSamplingSupport:
-    """Importance-sampling hook of the PRISM plugin (fixed Q, stop modes, suggest pilot)."""
+class PrismImportanceSampling:
+    """Importance-sampling hooks of the PRISM plugin: Q over the transitions of the DTMC paths."""
 
     def add_arguments(self, parser) -> None:
         parser.add_argument("--proposal-mode", choices=("fixed_samples", "suggest"), default="fixed_samples")
-        parser.add_argument(
-            "--stop-mode",
-            choices=("fixed_samples", "importance_width", "weighted_sequential"),
-            default="fixed_samples",
-        )
         parser.add_argument("--steps", type=int, default=20)
-        parser.add_argument("--target-width", type=float, default=None)
-        parser.add_argument("--null-upper", type=float, default=None)
-        parser.add_argument("--alternative-lower", type=float, default=None)
         parser.add_argument("--prism-executable", default="prism")
 
-    def run(self, args) -> dict[str, object]:
+    def build_components(self, args) -> TargetComponents:
         from targets.prism.backend import PrismBackend, PrismBackendConfig
         from targets.prism.result_interpreter import PrismResultInterpreter
 
-        if args.proposal_mode == "fixed_samples" and args.max_samples is None:
-            raise ValueError("--max-samples is required when --proposal-mode=fixed_samples")
-        if args.proposal_mode == "suggest" and args.stop_mode != "fixed_samples":
+        return TargetComponents(
+            backend=PrismBackend(PrismBackendConfig(
+                output_root=Path(args.output_root) / "artifacts", prism_executable=args.prism_executable,
+            )),
+            result_interpreter=PrismResultInterpreter(),
+        )
+
+    def run_options(self, args) -> dict[str, object]:
+        return {"params": {"model": "simple_reliability_dtmc", "steps": args.steps}}
+
+    def alternative_run(self, args) -> dict[str, object] | None:
+        """``--proposal-mode suggest``: evaluate candidate Qs without applying any."""
+        if args.proposal_mode != "suggest":
+            return None
+        if args.stop_mode != "fixed_samples":
             raise ValueError("--stop-mode is available only for fixed-Q experiments")
-        if args.stop_mode == "importance_width" and args.target_width is None:
-            raise ValueError("--target-width is required when --stop-mode=importance_width")
-        backend = PrismBackend(PrismBackendConfig(
-            output_root=Path(args.output_root) / "artifacts", prism_executable=args.prism_executable,
-        ))
-        runner = PrismImportanceSamplingRunner(backend=backend, result_interpreter=PrismResultInterpreter())
-        config = PrismImportanceSamplingRunConfig(
+        components = self.build_components(args)
+        runner = PrismImportanceSamplingRunner(
+            backend=components.backend, result_interpreter=components.result_interpreter,
+        )
+        return runner.run_suggest_pilot(PrismImportanceSamplingRunConfig(
             sampling_plan_path=args.sampling_plan, output_root=args.output_root,
             max_samples=args.max_samples, metric=args.metric or "c_failure", confidence=args.confidence,
-            target_width=args.target_width, stop_mode=args.stop_mode,
-            sequential_options={
-                key: value
-                for key, value in {"null_upper": args.null_upper, "alternative_lower": args.alternative_lower}.items()
-                if value is not None
-            },
-            seed=args.sampling_seed, params={"model": "simple_reliability_dtmc", "steps": args.steps},
+            seed=args.sampling_seed, params=self.run_options(args)["params"],
+        ))
+
+    def prepare(self, plan: SamplingPlan, config) -> PreparedTarget:
+        if plan.target != "prism":
+            raise ValueError("sampling plan target must be 'prism'")
+        return PreparedTarget(
+            default_metric="c_failure",
+            seed_policy="legacy",
+            internal_proposal=internal_proposal(plan.proposal_definition),
         )
-        return runner.run_suggest_pilot(config) if args.proposal_mode == "suggest" else runner.run(config)
+
+    def build_case(self, request: CaseRequest) -> TestCase:
+        return prism_case(
+            run_kind=request.run_kind, index=request.sample_index, plan=request.plan,
+            seed=request.seeds["sample"], params=request.params,
+            sampling_plan_path=request.sampling_plan_path,
+        )
 
 
 __all__ = [
+    "PrismImportanceSampling",
     "PrismImportanceSamplingRunConfig",
     "PrismImportanceSamplingRunner",
-    "PrismImportanceSamplingSupport",
+    "prism_case",
 ]

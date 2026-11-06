@@ -22,7 +22,8 @@ AWSIM_MODES = (
     *STATISTICAL_MODES,
 )
 STRATEGIST_ATTRIBUTES = ("run_mode", "scenario_name", "param_names", "random_seed", "MAX_SAMPLES", "strategy_settings")
-MODE_RUNNERS = ("binomial_mode", "sprt_mode", "ebstop_mode", "dkw_mode")
+REGION_SAMPLING_ATTRIBUTES = ("run_mode", "scenario_name", "param_names", "random_seed", "max_samples", "region",
+                              "pure_smc", "simultaneous", "bounds", "settings", "dkw_target_metric", "dkw_target_metrics")
 SNAPSHOT_PATH = Path(__file__).resolve().parents[2] / "fixtures" / "architecture" / "target_snapshot.json"
 
 
@@ -153,14 +154,11 @@ def _strategy(target: str, mode: str, tmp: Path) -> dict[str, object]:
         }
     if type(strategy).__name__ == "ActiveLearningStrategist":
         summary["strategist"] = {name: _plain(getattr(strategy, name, None)) for name in STRATEGIST_ATTRIBUTES}
-        summary["mode_runners"] = {
-            name: {
-                "class": type(getattr(strategy, name)).__name__,
-                "config": _plain(getattr(getattr(strategy, name), "config", None)),
-            }
-            for name in MODE_RUNNERS
-            if getattr(strategy, name, None) is not None
+    if type(strategy).__name__ == "RegionSamplingStrategy":
+        summary["region_sampling"] = {
+            name: _plain(getattr(strategy, name, None)) for name in REGION_SAMPLING_ATTRIBUTES
         }
+        summary["region_sampling"]["dkw_mode"] = _plain(strategy.dkw_mode.config)
     if replay:
         summary["replay"] = {
             "eligible_count": getattr(strategy, "eligible_count", None),

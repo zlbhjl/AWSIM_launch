@@ -47,14 +47,14 @@ class RandomParameterSamplingStrategy(FixedParameterSamplingStrategy):
         if report is not None and report.next_action in {"stop", "stop_max_samples", "error"}:
             self.stop_reason = self._report_stop_reason(report)
             return None
-        completed_count = 0 if completed is None else int(len(completed))
         if self._baseline_completed_count is None:
-            self._baseline_completed_count = completed_count
+            self._baseline_completed_count = self._resume_count(completed)
         if self._baseline_completed_count + self.issued_count >= int(self.config.max_samples):
             self.stop_reason = f"Statistical sampling reached max_samples={self.config.max_samples}"
             return None
         self.issued_count += 1
         sample_index = self._baseline_completed_count + self.issued_count
+        self.issued_sample_indexes.add(sample_index)
         sampled = self.sample_parameters(sample_index)
         if str(self.params.get("solver_kind", "ode")) == "sde":
             sampled["sde_seed"] = derive_seed(

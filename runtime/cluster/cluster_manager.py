@@ -31,6 +31,8 @@ class ClusterLaunchConfig:
     dataset_csv: str | None = None
     ext_mode: str = "cvm"
     headless: bool = False
+    # Workers start a fresh simulation world for every case (importance sampling).
+    fresh_infra_per_sample: bool = False
     with_host_worker: bool = False
     refresh_interval: int | None = 10
     restart_on_refresh: bool = True
@@ -319,6 +321,8 @@ class ClusterManager:
             worker_argv.append("--restart-on-refresh")
         if config.headless:
             worker_argv.append("--headless")
+        if config.fresh_infra_per_sample:
+            worker_argv.append("--fresh-infra-per-sample")
         if config.shared_store_actor_name:
             worker_argv.extend(
                 [

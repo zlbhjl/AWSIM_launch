@@ -7,10 +7,9 @@ from pathlib import Path
 from typing import Mapping
 
 from contracts.execution import TestCase
-from orchestration.fixed_importance_sampling import run_fixed_importance_sampling_comparison
-from orchestration.sampling_plan import load_sampling_plan
-from orchestration.seeding import legacy_sample_seed
-from runtime.repository.importance_sampling_results import ImportanceSamplingResultsRepository
+from contracts.importance_sampling_plugin import CaseRequest, PreparedTarget
+from orchestration.importance.runner import ImportanceRunConfig, ImportanceSamplingRunner
+from orchestration.sampling_plan import SamplingPlan
 from targets.awsim.sampling import AWSIMInputSampler
 
 
@@ -32,73 +31,26 @@ class AWSIMImportanceSamplingRunConfig:
 
 
 class AWSIMImportanceSamplingRunner:
-    """Execute fixed-size AWSIM ordinary and fixed-Q input samples."""
+    """Compatible entry point: the shared runner with the AWSIM hooks."""
 
     def __init__(self, *, backend: object, result_interpreter: object):
         self.backend = backend
         self.result_interpreter = result_interpreter
 
     def run_fixed_samples(self, config: AWSIMImportanceSamplingRunConfig) -> dict[str, object]:
-        plan = load_sampling_plan(config.sampling_plan_path)
-        sampler = AWSIMInputSampler(plan)
-        repository = ImportanceSamplingResultsRepository(config.output_root)
-        return run_fixed_importance_sampling_comparison(
-            backend=self.backend,
-            result_interpreter=self.result_interpreter,
-            repository=repository,
+        runner = ImportanceSamplingRunner(
+            backend=self.backend, result_interpreter=self.result_interpreter, hooks=AWSIMImportanceSampling(),
+        )
+        return runner.run_fixed_samples(ImportanceRunConfig(
+            sampling_plan_path=config.sampling_plan_path,
+            output_root=config.output_root,
             max_samples=config.max_samples,
-            build_case=lambda run_kind, index: self._build_case(
-                run_kind=run_kind, index=index, sampler=sampler, config=config,
-            ),
             metric=config.metric,
             confidence=config.confidence,
-            plan_id=plan.experiment_id,
-        )
-
-    @staticmethod
-    def _build_case(
-        *,
-        run_kind: str,
-        index: int,
-        sampler: AWSIMInputSampler,
-        config: AWSIMImportanceSamplingRunConfig,
-    ) -> TestCase:
-        seed = _sample_seed(config.seed, index)
-        if run_kind == "ordinary":
-            sampled = sampler.sample_target(seed=seed)
-        elif run_kind == "importance":
-            sampled = sampler.sample_proposal(seed=seed)
-        else:
-            raise ValueError("run_kind must be 'ordinary' or 'importance'")
-        return TestCase(
-            case_id=f"{sampler.plan.experiment_id}-{run_kind}-{index:05d}",
-            target="awsim",
-            case_kind=sampler.case_kind,
-            input={
-                **sampler.fixed_inputs,
-                **config.params,
-                **sampled.values,
-                "execution_kind": "sample_path",
-                "record_kind": "sample",
-                "sample_index": index,
-                "sampling_seed": seed,
-                "sampling_plan_path": str(Path(config.sampling_plan_path).resolve()),
-            },
-            reason=f"AWSIM_IMPORTANCE_{run_kind.upper()}: {sampler.plan.experiment_id} sample={index}",
-            meta={
-                "sampling": sampled.sampling_metadata,
-                "source_module": "targets.awsim.importance_sampling",
-                **(
-                    {"scenario_profile": config.scenario_profile}
-                    if config.scenario_profile is not None
-                    else {}
-                ),
-            },
-        )
-
-
-def _sample_seed(seed: int | None, index: int) -> int | None:
-    return legacy_sample_seed(seed, index)
+            seed=config.seed,
+            params=config.params,
+            options={"scenario_profile": config.scenario_profile},
+        ))
 
 
 def build_target_components(args):
@@ -108,8 +60,8 @@ def build_target_components(args):
     return build(args)
 
 
-class AWSIMImportanceSamplingSupport:
-    """Importance-sampling hook of the AWSIM plugin (U-turn input P/Q)."""
+class AWSIMImportanceSampling:
+    """Importance-sampling hooks of the AWSIM plugin: input P/Q of a U-turn (a pure black box)."""
 
     def add_arguments(self, parser) -> None:
         parser.add_argument("--container-profile", default="autoware171")
@@ -124,15 +76,13 @@ class AWSIMImportanceSamplingSupport:
             ),
         )
 
-    def run(self, args) -> dict[str, object]:
+    def build_components(self, args):
         from types import SimpleNamespace
 
-        if args.max_samples is None:
-            raise ValueError("--max-samples is required")
         # Reuse the normal AWSIM component assembly.  In particular this retains
         # managed infrastructure, readiness probes, and the verified profile
         # settings instead of creating a second container startup path here.
-        components = build_target_components(
+        return build_target_components(
             SimpleNamespace(
                 target="awsim",
                 case_kind="uturn",
@@ -147,30 +97,56 @@ class AWSIMImportanceSamplingSupport:
                 fresh_infra_per_sample=not args.reuse_infra_between_samples,
             )
         )
-        runner = AWSIMImportanceSamplingRunner(
-            backend=components.backend,
-            result_interpreter=components.result_interpreter,
+
+    def cluster_launch_options(self, args) -> dict[str, object]:
+        """How the cluster's AWSIM workers are started (apps/cli/importance_main.py --cluster)."""
+        return {
+            "case_kind": "uturn",
+            "container_profile": args.container_profile,
+            "scenario_profile": args.scenario_profile,
+            "headless": args.headless,
+            "fresh_infra_per_sample": not args.reuse_infra_between_samples,
+        }
+
+    def run_options(self, args) -> dict[str, object]:
+        return {"options": {"scenario_profile": args.scenario_profile}}
+
+    def prepare(self, plan: SamplingPlan, config) -> PreparedTarget:
+        sampler = AWSIMInputSampler(plan)
+        # Plans run before seed policies existed keep the legacy rule; new plans
+        # (and every cluster run) use per-sample streams (``seed_policy: streams``).
+        return PreparedTarget(default_metric="c_collision", seed_policy=plan.seed_policy or "legacy",
+                              input_laws=sampler.laws, state=sampler)
+
+    def build_case(self, request: CaseRequest) -> TestCase:
+        sampler: AWSIMInputSampler = request.prepared.state
+        seed = request.seeds["sample"] if "sample" in request.seeds else request.seeds["input"]
+        scenario_profile = request.options.get("scenario_profile")
+        return TestCase(
+            case_id=f"{sampler.plan.experiment_id}-{request.run_kind}-{request.sample_index:05d}",
+            target="awsim",
+            case_kind=sampler.case_kind,
+            input={
+                **sampler.fixed_inputs,
+                **request.params,
+                **request.inputs,
+                "execution_kind": "sample_path",
+                "record_kind": "sample",
+                "sample_index": request.sample_index,
+                "sampling_seed": seed,
+                "sampling_plan_path": request.sampling_plan_path,
+            },
+            reason=f"AWSIM_IMPORTANCE_{request.run_kind.upper()}: {sampler.plan.experiment_id} sample={request.sample_index}",
+            meta={
+                "sampling": dict(request.sampling or {}),
+                "source_module": "targets.awsim.importance_sampling",
+                **({"scenario_profile": scenario_profile} if scenario_profile is not None else {}),
+            },
         )
-        try:
-            return runner.run_fixed_samples(
-                AWSIMImportanceSamplingRunConfig(
-                    sampling_plan_path=args.sampling_plan,
-                    output_root=args.output_root,
-                    max_samples=args.max_samples,
-                    metric=args.metric or "c_collision",
-                    confidence=args.confidence,
-                    seed=args.sampling_seed,
-                    scenario_profile=args.scenario_profile,
-                )
-            )
-        finally:
-            close = getattr(components.backend, "close", None)
-            if callable(close):
-                close()
 
 
 __all__ = [
+    "AWSIMImportanceSampling",
     "AWSIMImportanceSamplingRunConfig",
     "AWSIMImportanceSamplingRunner",
-    "AWSIMImportanceSamplingSupport",
 ]

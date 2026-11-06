@@ -114,7 +114,8 @@ def test_run_cluster_orchestrator_bootstraps_cluster_and_remote_queue(monkeypatc
     )
 
     assert exit_code == 0
-    assert captured["cluster_config"].queue_actor_name == "TaskQueueActor"
+    # Unique per run, so a worker left from an earlier run cannot reach this run's queue.
+    assert captured["cluster_config"].queue_actor_name.startswith("TaskQueueActor-")
     assert captured["cluster_config"].target == "awsim"
     assert captured["cluster_config"].worker_launch_stagger_sec == 20.0
     assert captured["cluster_config"].worker_queue_connect_retries == 6
@@ -338,7 +339,7 @@ def test_phase8_prism_common_cli_contract(monkeypatch, capsys) -> None:
         "p_degraded_normal": 0.3,
         "p_degraded_failure": 0.1,
     }
-    assert config.shared_store_actor_name == "SharedStoreActor"
+    assert config.shared_store_actor_name.startswith("SharedStoreActor-")
     assert json.loads(capsys.readouterr().out.strip())["completed_count"] == 39
 
 
@@ -612,3 +613,14 @@ def test_run_cluster_orchestrator_reports_ray_gcs_loss(monkeypatch, capsys) -> N
     payload = json.loads(capsys.readouterr().out.strip())
     assert payload["stop_reason"] == "run_failed_ray_gcs_lost"
     assert "Failed to connect to GCS" in payload["reason"]
+
+
+def test_actor_names_differ_between_runs() -> None:
+    """Two runs never share a queue name: a late worker of the first cannot take the second's cases."""
+    from apps.cli.orchestrator_cluster_main import run_actor_tag
+
+    first = run_actor_tag(None, now=1_000_000_000, pid=111)
+    second = run_actor_tag(None, now=1_000_000_000, pid=222)
+    later = run_actor_tag(None, now=1_000_000_060, pid=111)
+    assert len({first, second, later}) == 3
+    assert run_actor_tag("verify v9/prism", now=1_000_000_000, pid=1).startswith("verify-v9-prism-")

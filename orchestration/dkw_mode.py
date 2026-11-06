@@ -21,7 +21,7 @@ from contracts.statistical_region import (
 )
 from runtime.repository.statistical_samples import StatisticalSamplesRepository
 
-import point_extractors
+from evaluation.region_filter import filter_rows
 
 # DKWModeRunner が発行する一様標本の reason に必ず含まれる印 (_select_dataset と同じ基準)。
 SMC_REASON_MARKER = "SMC"
@@ -61,7 +61,14 @@ class DKWModeState:
     bounds: BoundsMap | None = None
     stage: int = 1
     random_index: int = 0
+    # Seed index of the first draw (stable numbering); None: after the highest loop_num seen.
+    draw_base: int | None = None
     dispatched_task_count: int = 0
+    # The stop payload once the run has decided to stop; later calls return it unchanged.
+    final: dict[str, object] | None = None
+
+
+WAIT_COMMAND = "wait"
 
 
 class DKWModeRunner:
@@ -142,9 +149,10 @@ class DKWModeRunner:
         if df_dataset is None or df_dataset.empty:
             return current_bounds
         try:
-            filtered = point_extractors.filter_by_region_and_bounds(
+            filtered = filter_rows(
                 df_dataset,
                 region=self.config.region,
+                vocabulary=self._region_vocabulary(),
             )
         except Exception:
             return current_bounds
@@ -199,6 +207,51 @@ class DKWModeRunner:
         *,
         state: DKWModeState,
         get_random_point: Callable[[int], dict[str, object]],
+        pending: int = 0,
+    ) -> dict[str, object]:
+        """The next sample, a wait, or the stop decision (sequential stages).
+
+        ``pending`` is the number of issued samples whose result has not come
+        back yet. Once every sample is issued, the last evaluation waits for
+        them, so the final stage sees all of them; it is made once, and the
+        decision is kept (verification of 2026-11-03: re-evaluating on each call
+        advanced the stage until its confidence rounded to 1.0).
+        """
+        return self._decide_once(
+            state, pending,
+            lambda: self._handle_sequential(df_dataset, state=state, get_random_point=get_random_point),
+        )
+
+    def handle_fixed(
+        self,
+        df_dataset: pd.DataFrame | None,
+        *,
+        state: DKWModeState,
+        get_random_point: Callable[[int], dict[str, object]],
+        pending: int = 0,
+    ) -> dict[str, object]:
+        """The next sample, a wait, or the stop decision (one evaluation after all samples)."""
+        return self._decide_once(
+            state, pending,
+            lambda: self._handle_fixed(df_dataset, state=state, get_random_point=get_random_point),
+        )
+
+    def _decide_once(self, state: DKWModeState, pending: int, decide) -> dict[str, object]:
+        if state.final is not None:
+            return dict(state.final)
+        if state.dispatched_task_count >= self.config.max_samples and int(pending) > 0:
+            return {"system_command": WAIT_COMMAND, "reason": f"DKW: waiting for {int(pending)} sample(s)"}
+        payload = decide()
+        if payload.get("system_command") == "stop":
+            state.final = dict(payload)
+        return payload
+
+    def _handle_sequential(
+        self,
+        df_dataset: pd.DataFrame | None,
+        *,
+        state: DKWModeState,
+        get_random_point: Callable[[int], dict[str, object]],
     ) -> dict[str, object]:
         # Each stage s is evaluated exactly once, on the first base * s^2 uniform
         # samples, at confidence 1 - delta / 2^s. Since sum_s delta / 2^s < delta,
@@ -231,7 +284,9 @@ class DKWModeRunner:
 
         dkw_dataset = self._select_dataset(df_dataset)
         base_index = (
-            len(dkw_dataset)
+            state.draw_base
+            if state.draw_base is not None
+            else len(dkw_dataset)
             if self.config.pure_smc and dkw_dataset is not None
             else self.max_loop_num(df_dataset)
         )
@@ -326,8 +381,15 @@ class DKWModeRunner:
         is_smc = _smc_mask(dkw_dataset)
         usable = is_smc & self._usable_mask(dkw_dataset)
         smc_rows = dkw_dataset[usable]
-        if "loop_num" in smc_rows.columns:
-            order = pd.to_numeric(smc_rows["loop_num"], errors="coerce")
+        # Issue order: the sample number when every sample has one (stable numbering),
+        # else the loop number.
+        order_column = (
+            "sample_index"
+            if "sample_index" in smc_rows.columns and smc_rows["sample_index"].notna().all() and not smc_rows.empty
+            else "loop_num"
+        )
+        if order_column in smc_rows.columns:
+            order = pd.to_numeric(smc_rows[order_column], errors="coerce")
             smc_rows = smc_rows.assign(_order=order).sort_values("_order", kind="stable").drop(columns="_order")
         size = self.schedule.size(state.stage)
         exhausted = state.dispatched_task_count >= self.config.max_samples
@@ -351,7 +413,7 @@ class DKWModeRunner:
                 mask &= values >= float(self.config.minimum_value)
         return mask
 
-    def handle_fixed(
+    def _handle_fixed(
         self,
         df_dataset: pd.DataFrame | None,
         *,
@@ -367,7 +429,7 @@ class DKWModeRunner:
                     ),
                     get_random_point=get_random_point,
                     random_index=state.random_index,
-                    base_index=self.max_loop_num(df_dataset),
+                    base_index=state.draw_base if state.draw_base is not None else self.max_loop_num(df_dataset),
                     dispatched_task_count=state.dispatched_task_count,
                 )
             )
@@ -440,6 +502,7 @@ class DKWModeRunner:
             options={
                 "q": 0.05,
                 "region": self.config.region,
+                "region_vocabulary": self._region_vocabulary(),
                 "use_kde_weighting": use_kde_weighting,
                 "epsilon": self.config.target_epsilon,
                 "stage_target_samples": stage_target_samples,
@@ -455,6 +518,10 @@ class DKWModeRunner:
         reason_series = df_dataset["reason"].fillna("").astype(str)
         return df_dataset[reason_series.str.contains("SMC", na=False)]
 
+    def _region_vocabulary(self):
+        """The region names the target declares (its region policy's ``vocabulary``)."""
+        return getattr(self.region_policy, "vocabulary", None)
+
     def _build_region_filter_frame(self, point: Mapping[str, object]) -> pd.DataFrame:
         return self.region_policy.build_filter_frame(point)
 
@@ -462,9 +529,10 @@ class DKWModeRunner:
         if self.config.region == "custom":
             return True
         try:
-            filtered = point_extractors.filter_by_region_and_bounds(
+            filtered = filter_rows(
                 self._build_region_filter_frame(point),
                 region=self.config.region,
+                vocabulary=self._region_vocabulary(),
             )
         except Exception:
             return False
@@ -609,6 +677,7 @@ def _has_non_smc_samples(filtered_df: object) -> bool:
 
 
 __all__ = [
+    "WAIT_COMMAND",
     "DKWModeConfig",
     "DKWModeRunner",
     "DKWModeState",

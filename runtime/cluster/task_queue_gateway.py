@@ -6,6 +6,27 @@ from typing import Any, Callable
 from contracts.execution import TestCase
 
 
+# Payload key holding a TestCase's full meta (see case_payload).
+CASE_META_KEY = "case_meta"
+
+
+def case_payload(test_case: TestCase) -> dict[str, Any]:
+    """A queue payload that carries the whole case, meta included (rebuilt by ``fetch_next``)."""
+    payload: dict[str, Any] = {
+        "case_id": test_case.case_id,
+        "target": test_case.target,
+        "case_kind": test_case.case_kind,
+        **dict(test_case.input),
+        "reason": test_case.reason,
+        "tags": list(test_case.tags),
+        CASE_META_KEY: dict(test_case.meta),
+    }
+    for key in ("config_module", "scenario_profile", "container_profile"):
+        if isinstance(test_case.meta.get(key), str) and test_case.meta[key]:
+            payload[key] = test_case.meta[key]
+    return payload
+
+
 @dataclass(frozen=True)
 class TaskQueueGatewayConfig:
     target: str = "awsim"
@@ -106,6 +127,18 @@ class TaskQueueGateway:
     def set_stop_signal(self, reason: str = "Target Reached or Master Stopped") -> Any:
         return self._invoke("set_stop_signal", reason, reason=reason)
 
+    def configure_retries(self, max_attempts: int, case_timeout_sec: float | None = None) -> bool:
+        if not hasattr(self.actor, "configure_retries"):
+            return False
+        self._invoke("configure_retries", max_attempts, case_timeout_sec,
+                     max_attempts=max_attempts, case_timeout_sec=case_timeout_sec)
+        return True
+
+    def requeue_stale_tasks(self) -> list[int]:
+        if not hasattr(self.actor, "requeue_stale_tasks"):
+            return []
+        return list(self._invoke("requeue_stale_tasks") or [])
+
     def cancel_pending_tasks(self) -> int:
         if not hasattr(self.actor, "cancel_pending_tasks"):
             return 0
@@ -125,6 +158,11 @@ class TaskQueueGateway:
         )
         target = str(task.pop("target", self.config.target))
         case_kind = str(task.pop("case_kind", self.config.case_kind))
+        # Reserved key: the case's own meta (for example importance-sampling
+        # provenance), carried whole by payloads that need it.
+        case_meta = task.pop(CASE_META_KEY, None)
+        # Set by the queue when it retries a case (same input, next attempt).
+        retry_meta = {key: task.pop(key) for key in ("attempt_id", "retry_reason") if key in task}
         tags = self._normalize_tags(task.pop("tags", []))
         config_module = task.pop("config_module", None)
         scenario_profile = task.pop("scenario_profile", None)
@@ -153,6 +191,9 @@ class TaskQueueGateway:
         if isinstance(container_profile, str) and container_profile:
             meta["container_profile"] = container_profile
         meta.update(replay_meta)
+        if isinstance(case_meta, dict):
+            meta = {**case_meta, **meta}
+        meta.update(retry_meta)
 
         return TestCase(
             case_id=case_id,

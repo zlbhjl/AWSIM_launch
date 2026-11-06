@@ -181,6 +181,72 @@ def _normalize_and_validate_zero_weight(metadata: dict[str, object]) -> None:
     metadata["log_q"] = float(raw_log_q)
 
 
+# Report section of capability ``internal_density`` (contracts/capabilities.py):
+# meta.sampling.internal = {log_p, log_q: [one per proposal component],
+# sampled_component, support}. The shared code turns it into a weight.
+INTERNAL_REPORT_KEY = "internal"
+TARGET_COMPONENT = "target"
+SUPPORTED_INTERNAL_SUPPORTS = frozenset({"positive", "zero"})
+
+
+def normalize_internal_report(value: object, *, components: int | None = None) -> dict[str, object]:
+    """Validate the ``internal`` report of one sample.
+
+    - ``log_p``: log density of the realised internal draw under P; finite for
+      support ``positive``, None for ``zero`` (the draw lies outside P's support).
+    - ``log_q``: one log density per proposal component, in the order of the
+      proposal definition; finite or ``-inf`` (outside that component).
+    - ``sampled_component``: the index of the component drawn from, or
+      ``"target"`` when P itself was drawn (defensive mixture).
+    - ``support``: ``positive`` or ``zero``.
+
+    ``components`` (if given) is the number of proposal components expected.
+    """
+
+    if not isinstance(value, Mapping):
+        raise SamplingMetadataValidationError("internal report must be a mapping")
+    support = value.get("support", "positive")
+    if support not in SUPPORTED_INTERNAL_SUPPORTS:
+        raise SamplingMetadataValidationError(
+            f"internal report support must be one of {sorted(SUPPORTED_INTERNAL_SUPPORTS)}"
+        )
+    raw_log_q = value.get("log_q")
+    if isinstance(raw_log_q, (str, bytes)) or not isinstance(raw_log_q, (list, tuple)) or not raw_log_q:
+        raise SamplingMetadataValidationError("internal report log_q must be a non-empty list")
+    log_q: list[float] = []
+    for item in raw_log_q:
+        if isinstance(item, bool) or not isinstance(item, (int, float)):
+            raise SamplingMetadataValidationError("internal report log_q entries must be numbers")
+        number = float(item)
+        if number != number or number == float("inf"):
+            raise SamplingMetadataValidationError("internal report log_q entries must be finite or -inf")
+        log_q.append(number)
+    if components is not None and len(log_q) != components:
+        raise SamplingMetadataValidationError(
+            f"internal report log_q has {len(log_q)} entries, expected one per component ({components})"
+        )
+    raw_log_p = value.get("log_p")
+    if support == "zero":
+        if raw_log_p is not None:
+            raise SamplingMetadataValidationError("internal report with support 'zero' must have log_p None")
+        log_p = None
+    else:
+        if isinstance(raw_log_p, bool) or not isinstance(raw_log_p, (int, float)) or not isfinite(float(raw_log_p)):
+            raise SamplingMetadataValidationError("internal report log_p must be a finite number")
+        log_p = float(raw_log_p)
+    sampled = value.get("sampled_component")
+    if sampled == TARGET_COMPONENT:
+        if log_p is None:
+            raise SamplingMetadataValidationError("a draw from P cannot lie outside P's support")
+    elif isinstance(sampled, bool) or not isinstance(sampled, int) or not 0 <= sampled < len(log_q):
+        raise SamplingMetadataValidationError(
+            "internal report sampled_component must be a component index or 'target'"
+        )
+    elif not isfinite(log_q[sampled]):
+        raise SamplingMetadataValidationError("the sampled component must have a finite log density")
+    return {"log_p": log_p, "log_q": log_q, "sampled_component": sampled, "support": support}
+
+
 def sampling_metadata_from_meta(meta: Mapping[str, object]) -> dict[str, object] | None:
     """Return normalized sampling provenance if the record has it."""
 
@@ -204,7 +270,11 @@ def copy_sampling_metadata(
 
 
 __all__ = [
+    "INTERNAL_REPORT_KEY",
     "REQUIRED_SAMPLING_KEYS",
+    "SUPPORTED_INTERNAL_SUPPORTS",
+    "TARGET_COMPONENT",
+    "normalize_internal_report",
     "SAMPLING_META_KEY",
     "ProposalCandidate",
     "SamplingMetadataValidationError",

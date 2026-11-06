@@ -68,11 +68,29 @@ def test_prism_fixed_parameters_get_the_composed_strategy(tmp_path) -> None:
     assert strategy.statistical_request.metric == "steps_to_failure_capped"
 
 
-def test_awsim_strategist_does_not_take_a_stopping_rule_yet(tmp_path) -> None:
-    config = _config(tmp_path, target="awsim", case_kind="uturn", stopping_rule="binomial_ci_fixed_strict")
+@pytest.mark.parametrize(
+    ("rule", "mode", "metric"),
+    [
+        ("binomial_ci_fixed_strict", "binomial_ci", "c_collision"),
+        ("binomial_ci_sequential_anytime", "binomial_ci", "c_collision"),
+        ("dkw_fixed_strict", "dkw_fixed", "z_margin"),
+        ("dkw_sequential_stagewise", "dkw", "z_margin"),
+        ("sprt_wald", "sprt", "c_collision"),
+    ],
+)
+def test_awsim_statistical_modes_get_the_composed_region_sampling(tmp_path, rule, mode, metric) -> None:
+    from orchestration.region_sampling import ComposedRegionSamplingStrategy
 
-    with pytest.raises(ValueError, match="not available"):
-        Orchestrator()._build_strategy(config)
+    config = _config(tmp_path, target="awsim", case_kind="uturn", run_mode=mode, stopping_rule=rule,
+                     config_module="targets.awsim.case_kinds.uturn", max_samples=40)
+
+    strategy = Orchestrator()._build_strategy(config)
+
+    assert isinstance(strategy, ComposedRegionSamplingStrategy)
+    assert strategy.statistical_service.rule.spec.name == rule
+    assert strategy.statistical_service.sample_kind is SampleKind.IID_UNIFORM
+    assert strategy.statistical_request.metric == metric
+    assert Orchestrator()._resolve_target_total(config, 0) is None  # the rule stops the run
 
 
 def test_cli_checks_that_the_rule_matches_the_mode() -> None:

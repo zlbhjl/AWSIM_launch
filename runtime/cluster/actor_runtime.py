@@ -43,6 +43,15 @@ class _TaskQueueActorBackend:
     def set_stop_signal(self, reason: str = "Target Reached or Master Stopped") -> None:
         self.queue.set_stop_signal(reason)
 
+    def cancel_pending_tasks(self) -> int:
+        return self.queue.cancel_pending_tasks()
+
+    def configure_retries(self, max_attempts: int, case_timeout_sec: float | None = None) -> None:
+        self.queue.configure_retries(max_attempts, case_timeout_sec)
+
+    def requeue_stale_tasks(self) -> list[int]:
+        return self.queue.requeue_stale_tasks()
+
 
 class _SharedStoreActorBackend:
     def __init__(

@@ -117,6 +117,8 @@ class UTurnSimulationResult:
     noise_log_p: float = 0.0
     noise_log_q: float = 0.0
     noise_sample_count: int = 0
+    noise_log_q_components: tuple[float, ...] = ()
+    sampled_component: int | str | None = None
 
     @property
     def ego_positions_m(self) -> np.ndarray:
@@ -305,6 +307,8 @@ class UTurnSystem:
             noise_log_p=trajectory.noise_log_p,
             noise_log_q=trajectory.noise_log_q,
             noise_sample_count=trajectory.noise_sample_count,
+            noise_log_q_components=trajectory.noise_log_q_components,
+            sampled_component=trajectory.sampled_component,
         )
 
     # -- guards -----------------------------------------------------------

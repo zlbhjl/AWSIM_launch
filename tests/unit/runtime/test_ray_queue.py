@@ -70,3 +70,52 @@ def test_task_queue_ignores_duplicate_completion() -> None:
 
     assert queue.get_snapshot()["completed_count"] == 1
     assert queue.get_snapshot()["in_flight_count"] == 0
+
+
+def test_a_failed_case_is_queued_again_until_its_attempts_run_out() -> None:
+    queue = TaskQueue()
+    queue.configure_retries(3)
+    queue.add_task({"case_id": "c1", "sample_index": 1})
+    queue.add_task({"case_id": "c2", "sample_index": 2})
+
+    first = queue.get_next_task()
+    queue.report_completion(first["global_loop_num"], "timeout")
+    retry = queue.get_next_task()  # the retry goes first
+    assert retry["case_id"] == "c1" and retry["attempt_id"] == 1 and retry["retry_reason"] == "timeout"
+    queue.report_completion(retry["global_loop_num"], "execution_error")
+    last = queue.get_next_task()
+    assert last["attempt_id"] == 2
+    queue.report_completion(last["global_loop_num"], "execution_error")
+
+    assert queue.get_next_task()["case_id"] == "c2"
+    snapshot = queue.get_snapshot()
+    assert snapshot["retried_count"] == 2
+    assert [task["sample_index"] for task in snapshot["abandoned_tasks"]] == [1]
+
+
+def test_a_case_not_back_in_time_is_queued_again_and_counted_finished() -> None:
+    now = [0.0]
+    queue = TaskQueue(time_func=lambda: now[0])
+    queue.configure_retries(2, case_timeout_sec=100.0)
+    queue.add_task({"case_id": "c1", "sample_index": 1})
+    taken = queue.get_next_task()
+    now[0] = 50.0
+    assert queue.requeue_stale_tasks() == []
+    now[0] = 150.0
+    assert queue.requeue_stale_tasks() == [taken["global_loop_num"]]
+    assert queue.completed_count == queue.dispatched_count == 1
+
+    again = queue.get_next_task()
+    assert again["attempt_id"] == 1 and again["retry_reason"] == "lost"
+    now[0] = 300.0
+    queue.requeue_stale_tasks()
+    assert queue.get_snapshot()["abandoned_tasks"][0]["abandon_reason"] == "lost"
+    assert queue.report_completion(taken["global_loop_num"], "success") is False  # the late report is ignored
+
+
+def test_without_retries_the_queue_behaves_as_before() -> None:
+    queue = TaskQueue()
+    queue.add_task({"case_id": "c1"})
+    task = queue.get_next_task()
+    queue.report_completion(task["global_loop_num"], "timeout")
+    assert queue.get_next_task() is None and queue.get_snapshot()["abandoned_tasks"] == []

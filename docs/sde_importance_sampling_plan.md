@@ -29,7 +29,7 @@ S0〜S4 と S5 の実装を終えました（S0〜S2: `d54ecdf`〜`923e1be`、S3
 | S2 | 完了 | モデルの登録口、スカラー OU（モデル A）と厳密値、v2 プラン、CLI の `--phase` / `--root-entropy` / `--pairing` / `--retry-failed`、被覆率の検証の engine `importance_fixed` |
 | S3 | 完了 | 提案分布の共通 API（step の context、`sample` / `log_density`）、平均の規則（定数・時刻とモードの区分・状態のしきい値・アフィン、区分の入れ子）、チャネル名つきの共分散（Cholesky で検査、正則化しない）。SDE runner をこの API に載せ替え、既存の `gaussian_drift` は同じ乱数・同じ経路のまま |
 | S4 | 完了 | Student-t（尺度行列、または共分散から尺度を決める）、経路単位の混合（P を成分にでき、β で上限 1/β）。混合の分母・β = 1・上限をテストで確認 |
-| S5 | 完了（被覆率の実験は N = 1,000・10,000 とも完了。モデル D の参照との比較は未実施） | モデル B（拡大 OU、厳密値）、モデル C（非線形・状態依存の G、独立な参照 MC）、U ターンの v2 経路（Q = P で v1 と一致）、要約保存（`--artifacts summary`）、調整の記録と最終 Q の固定（`tools/validation/is_tuning.py`）、モデル A・B の候補の生成、参照との比較のツール、Laplace（拡張性の測定） |
+| S5 | 完了（被覆率の実験は N = 1,000・10,000、モデル C・D の参照との比較も完了） | モデル B（拡大 OU、厳密値）、モデル C（非線形・状態依存の G、独立な参照 MC）、U ターンの v2 経路（Q = P で v1 と一致）、要約保存（`--artifacts summary`）、調整の記録と最終 Q の固定（`tools/validation/is_tuning.py`）、モデル A・B の候補の生成、参照との比較のツール、Laplace（拡張性の測定） |
 
 ### 実装で計画書と変えた点（了承済み）
 

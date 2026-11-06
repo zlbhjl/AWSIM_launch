@@ -25,10 +25,16 @@ SCENARIOS = (
     "rule_binomial_fixed_strict_n100_p0.05",
     "rule_sprt_wald_true_p0",
     "is_ou_a_3sd_defensive_u3_b0.2_n1000",
+    "is_final_ou_a_3sd_two_sided_q5_n1000",
+    "is_final_ou_b_3sd_upper_q1d_n1000",
 )
 SEEDS = (20261018, 20261019, 20261020)
 # Smaller settings for slow scenarios; the result keys keep the scenario name.
-CONFIG_OVERRIDES = {"is_ou_a_3sd_defensive_u3_b0.2_n1000": {"max_samples": 50}}
+CONFIG_OVERRIDES = {
+    "is_ou_a_3sd_defensive_u3_b0.2_n1000": {"max_samples": 50},
+    "is_final_ou_a_3sd_two_sided_q5_n1000": {"max_samples": 50},
+    "is_final_ou_b_3sd_upper_q1d_n1000": {"max_samples": 50},
+}
 PINNED_KEYS = {
     "sample_count", "estimate", "interval", "verdict", "correct",
     "estimate_mc", "interval_is_hoeffding", "interval_is_bernstein",

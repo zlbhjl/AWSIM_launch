@@ -111,11 +111,13 @@ def test_importance_sampler_keeps_p_fixed_and_calculates_path_likelihoods(tmp_pa
 
     assert constants == constants_before
     assert sample.sampling_metadata["proposal_id"] == "failure_biased_v1"
-    assert float(sample.sampling_metadata["log_p"]) == math.fsum([expected_log_p])
-    assert float(sample.sampling_metadata["log_q"]) == math.fsum([expected_log_q])
-    assert float(sample.sampling_metadata["log_importance_weight"]) == math.fsum(
-        [expected_log_p - expected_log_q]
-    )
+    # PRISM reports the path densities (capability internal_density); the
+    # shared code composes them with the (unit) input ratio.
+    report = sample.sampling_metadata["internal"]
+    assert report["log_p"] == math.fsum([expected_log_p])
+    assert report["log_q"] == [math.fsum([expected_log_q])]
+    assert report["sampled_component"] == 0
+    assert sample.sampling_metadata["log_importance_weight"] == 0.0
 
 
 def test_target_sampler_generates_reproducible_p_path(tmp_path) -> None:

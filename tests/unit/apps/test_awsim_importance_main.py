@@ -3,6 +3,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import apps.cli.awsim_importance_main as awsim_importance_main
+import apps.cli.importance_main as importance_main
 import targets.awsim.importance_sampling as awsim_importance_sampling
 from apps.cli.awsim_importance_main import build_parser
 
@@ -48,11 +49,11 @@ def test_cli_passes_fresh_infrastructure_default_to_component_assembly(
             captured["closed"] = True
 
     class FakeRunner:
-        def __init__(self, *, backend, result_interpreter) -> None:
+        def __init__(self, *, backend, result_interpreter, hooks) -> None:
             captured["backend"] = backend
             captured["result_interpreter"] = result_interpreter
 
-        def run_fixed_samples(self, config):
+        def run(self, config):
             captured["run_config"] = config
             return {"status": "ok"}
 
@@ -65,7 +66,7 @@ def test_cli_passes_fresh_infrastructure_default_to_component_assembly(
         "build_target_components",
         fake_build_target_components,
     )
-    monkeypatch.setattr(awsim_importance_sampling, "AWSIMImportanceSamplingRunner", FakeRunner)
+    monkeypatch.setattr(importance_main, "ImportanceSamplingRunner", FakeRunner)
 
     exit_code = awsim_importance_main.main(
         [
@@ -94,7 +95,7 @@ def test_cli_can_pass_reuse_opt_in_to_component_assembly(monkeypatch) -> None:
         def __init__(self, **_kwargs) -> None:
             pass
 
-        def run_fixed_samples(self, _config):
+        def run(self, _config):
             return {"status": "ok"}
 
     def fake_build_target_components(args):
@@ -106,7 +107,7 @@ def test_cli_can_pass_reuse_opt_in_to_component_assembly(monkeypatch) -> None:
         "build_target_components",
         fake_build_target_components,
     )
-    monkeypatch.setattr(awsim_importance_sampling, "AWSIMImportanceSamplingRunner", FakeRunner)
+    monkeypatch.setattr(importance_main, "ImportanceSamplingRunner", FakeRunner)
 
     awsim_importance_main.main(
         [

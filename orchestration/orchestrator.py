@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Callable
 
@@ -25,7 +25,10 @@ from runtime.cluster.task_queue_gateway import TaskQueueGateway
 from runtime.repository.strategy_dataset import StrategyDatasetRepository
 from targets.registry import get_target_plugin
 from targets.statistical import (
+    check_metric_method,
+    target_metric_spec,
     load_statistical_target_profile,
+    supports_iid_sampling,
 )
 from orchestration.strategy_registry import (
     is_self_terminating,
@@ -101,6 +104,61 @@ def _iid_statistical_metrics(config: "OrchestratorConfig") -> dict[str, object]:
     }
 
 
+_MODE_METHODS = {"binomial_ci": "binomial_ci", "sprt": "sprt", "ebstop": "ebstop", "dkw": "dkw", "dkw_fixed": "dkw"}
+_DEFAULT_EBSTOP_RANGE = (0.0, 10.0)
+
+
+def _statistical_method_and_metric(config: "OrchestratorConfig") -> tuple[str, str] | None:
+    rule = getattr(config, "stopping_rule", "legacy")
+    if rule and rule != "legacy":
+        method = next((name for name in ("binomial_ci", "sprt", "ebstop", "dkw") if rule.startswith(name)), None)
+    else:
+        method = _MODE_METHODS.get(config.run_mode)
+    if method is None:
+        return None
+    if supports_iid_sampling(config.target):
+        metrics = _iid_statistical_metrics(config)
+        metric = metrics[{"binomial_ci": "binary"}.get(method, method)]
+    else:
+        try:
+            profile = load_statistical_target_profile(config.target)
+        except (ImportError, TypeError, ValueError):
+            return None  # the target declares no statistics profile, so nothing to check
+        metric = {
+            "binomial_ci": config.binomial_target,
+            "sprt": config.sprt_target,
+            "ebstop": profile.resolved_ebstop_metric if config.ebstop_target == "min_ttc" else config.ebstop_target,
+            "dkw": profile.dkw_metric,
+        }[method]
+    return method, str(metric)
+
+
+def _apply_metric_specs(config: "OrchestratorConfig") -> "OrchestratorConfig":
+    """Refuse a method that does not fit the declared metric; take EBStop's range from the declaration.
+
+    The command-line range may only narrow the declared one (widening it would
+    break EBStop's guarantee); the default range counts as not given.
+    """
+    resolved = _statistical_method_and_metric(config)
+    if resolved is None:
+        return config
+    method, metric = resolved
+    check_metric_method(config.target, metric, method, config.params)
+    spec = target_metric_spec(config.target, metric, config.params)
+    if method != "ebstop" or spec is None or spec.value_range is None:
+        return config
+    lower, upper = spec.value_range
+    given = tuple(float(value) for value in config.ebstop_value_range)
+    if given == _DEFAULT_EBSTOP_RANGE:
+        return replace(config, ebstop_value_range=(lower, upper))
+    if given[0] < lower or given[1] > upper:
+        raise ValueError(
+            f"--ebstop-value-range {list(given)} is wider than {metric}'s declared range [{lower}, {upper}]; "
+            "it may only narrow it"
+        )
+    return config
+
+
 @dataclass(frozen=True)
 class OrchestratorConfig:
     output: str
@@ -173,6 +231,12 @@ class OrchestratorConfig:
     shared_store_namespace: str | None = None
     shared_store_address: str | None = None
     worker_count: int | None = None
+    # A case whose status is not success is queued again, up to this many
+    # attempts in total (docs/statistical_modes_hardening_plan.md §3.3).
+    max_attempts: int = 3
+    # External workers: a case not back this many seconds after a worker took
+    # it is treated as lost and queued again (None: the target's default).
+    case_timeout_sec: float | None = None
     queue_high_water: int | None = None
     queue_low_water: int | None = None
     run_inline_worker: bool = True
@@ -324,6 +388,7 @@ class Orchestrator:
             self.worker_runner = worker_runner
 
     def run(self, config: OrchestratorConfig) -> dict[str, object]:
+        config = _apply_metric_specs(config)
         resume_state = self.resume_service.prepare(self._build_resume_config(config))
         self.queue_gateway.set_start_counts(resume_state.last_loop_num)
         strategy = self._build_strategy(config)
@@ -335,6 +400,7 @@ class Orchestrator:
         host_worker_started = False
         maintenance_events: list[dict[str, object]] = []
         target_total = self._resolve_target_total(config, resume_state.last_loop_num)
+        self._configure_retries(config)
         stalled_drain_queue_size: int | None = None
         stalled_drain_started_at: float | None = None
         stalled_drain_last_logged_at: float | None = None
@@ -353,6 +419,8 @@ class Orchestrator:
             )
 
             while True:
+                if not config.run_inline_worker:
+                    self._requeue_stale_tasks()
                 snapshot = self.queue_gateway.get_snapshot()
                 self._emit_progress(snapshot, config)
                 maintenance_events.extend(self._run_maintenance(snapshot, config))
@@ -377,7 +445,10 @@ class Orchestrator:
                     break
 
                 if not config.run_inline_worker:
-                    if queue_size <= self._resolve_queue_low_water(config):
+                    # Once stopping, issue nothing more: the cancel below empties the
+                    # queue, and refilling it would issue and cancel cases at every poll.
+                    stopping = bool(stop_reason) or bool(snapshot["stop_signal"])
+                    if not stopping and queue_size <= self._resolve_queue_low_water(config):
                         enqueued, refill_reason = self._refill_queue(
                             strategy=strategy,
                             config=config,
@@ -388,6 +459,18 @@ class Orchestrator:
                             stop_reason = refill_reason
                     snapshot = self.queue_gateway.get_snapshot()
                     pending_after_stop = int(snapshot["queue_size"])
+                    if stop_reason and pending_after_stop > 0 and snapshot["stop_signal"]:
+                        # After the stop signal the queue hands workers only
+                        # "stop", so queued tasks will never be taken: cancel
+                        # them now instead of waiting for the stalled-drain timeout.
+                        cancelled = self.queue_gateway.cancel_pending_tasks()
+                        print(
+                            "[Orchestrator] stop signal set: cancelling pending tasks "
+                            f"no worker will take: cancelled={cancelled!r}",
+                            flush=True,
+                        )
+                        snapshot = self.queue_gateway.get_snapshot()
+                        pending_after_stop = int(snapshot["queue_size"])
                     if stop_reason and pending_after_stop > 0:
                         # The strategist has decided no more samples are
                         # needed, but tasks are still sitting unclaimed in
@@ -505,6 +588,8 @@ class Orchestrator:
         mode = "local_queue" if config.run_inline_worker else "cluster_queue"
         summary = {
             "mode": mode,
+            "retried_cases": int(snapshot.get("retried_count", 0) or 0),
+            "abandoned_cases": list(snapshot.get("abandoned_tasks", []) or []),
             "enqueued": enqueued,
             "worker_exit_code": worker_exit_code,
             "queue_size": int(snapshot["queue_size"]),
@@ -883,6 +968,35 @@ class Orchestrator:
         payload = payload_builder()
         return dict(payload) if payload is not None else None
 
+    def _configure_retries(self, config: OrchestratorConfig) -> None:
+        timeout = config.case_timeout_sec
+        if timeout is None and not config.run_inline_worker:
+            hook = getattr(_target_plugin(config.target), "default_case_timeout_sec", None)
+            timeout = hook(config.case_kind) if callable(hook) else None
+        # A fixture replays a recorded result, so another attempt gives the same.
+        attempts = 1 if config.fixture is not None else int(config.max_attempts)
+        configure = getattr(self.queue_gateway, "configure_retries", None)
+        if callable(configure):
+            configure(attempts, timeout)
+
+    def _requeue_stale_tasks(self) -> None:
+        requeue = getattr(self.queue_gateway, "requeue_stale_tasks", None)
+        if callable(requeue):
+            requeue()
+
+    @staticmethod
+    def _sync_strategy_retries(strategy: object, config: OrchestratorConfig, snapshot: dict[str, object]) -> None:
+        """Tell a sampling strategy how many attempts a sample gets and which samples were lost."""
+        if not hasattr(strategy, "abandoned_sample_indexes"):
+            return
+        strategy.max_attempts = int(config.max_attempts)
+        experiment_id = getattr(strategy, "experiment_id", None)
+        for task in snapshot.get("abandoned_tasks", []) or []:
+            if experiment_id is not None and task.get("experiment_id") not in (None, experiment_id):
+                continue
+            if task.get("sample_index") is not None:
+                strategy.abandoned_sample_indexes.add(int(task["sample_index"]))
+
     def _refill_queue(
         self,
         *,
@@ -892,11 +1006,14 @@ class Orchestrator:
         enqueued: int,
     ) -> tuple[int, str]:
         if not self._can_request_more_cases(config, enqueued):
-            return enqueued, ""
+            # The case limit is a stop reason too: without it a run with no
+            # fixed total (replay, a self-terminating strategy) never finishes.
+            return enqueued, self._case_limit_reason(config)
 
         queue_size = int(snapshot["queue_size"])
         high_water = self._resolve_queue_high_water(config)
         stop_reason = ""
+        self._sync_strategy_retries(strategy, config, snapshot)
         while queue_size < high_water and self._can_request_more_cases(config, enqueued):
             test_case = strategy.next_test_case()
             if test_case is None:
@@ -926,7 +1043,13 @@ class Orchestrator:
                 )
             ):
                 break
+        if not stop_reason and not self._can_request_more_cases(config, enqueued):
+            stop_reason = self._case_limit_reason(config)
         return enqueued, stop_reason
+
+    @staticmethod
+    def _case_limit_reason(config: OrchestratorConfig) -> str:
+        return f"Reached max_strategy_cases={config.max_strategy_cases}"
 
     def _resolve_target_total(self, config: OrchestratorConfig, last_loop_num: int) -> int | None:
         try:

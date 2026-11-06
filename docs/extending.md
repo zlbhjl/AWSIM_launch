@@ -44,6 +44,46 @@ python3 run_orchestrator_v2.py --target bernoulli \
   --output artifacts/bernoulli/records.jsonl --dataset-csv artifacts/bernoulli/dataset.csv
 ```
 
+### GP 探索を使う
+
+AWSIM の GP 探索（`explore` / `focus` / `margin` など）は共通の探索エンジン（`orchestration/exploration/`）です。
+対象は次を置くだけで使えます（例: アーキテクチャのテストの一時的な対象 `slope`、AWSIM の `targets/awsim/exploration.py`）。
+
+- 設定モジュール（plugin の `default_config_module` が返す名前）: `PARAM_RANGES`（探索する連続の入力と範囲）、`FIXED_PARAMS`、
+  `TARGET_PRIORITIES`（境界を学ぶ 0/1 の指標の候補）、段階の上限など。
+- plugin の `strategies` に、`orchestration/exploration/builder.py` の `build_gp_exploration_strategy` を
+  `ExplorationSpec` とともに登録し、`select_strategy` でその名前を返す。
+- `ExplorationSpec`（`orchestration/exploration/spec.py`）: GP の学習データの規則（`TrainingRules`）、失敗した回の判定
+  （近くの点で探し直す。統計モードでは使わない）、抽出によるモードの規則。どれも無くてよい。
+- 名前つき領域（`--dkw-region` に書ける名前）は、`statistical.py` の `StatisticalTargetProfile.region_vocabulary`
+  （`evaluation/region_filter.py` の `RegionVocabulary`: 名前 → 条件式、必要な列、文字列として比べる列）で宣言します
+  （例: AWSIM の `emp_safe`・`jama_safe`、`targets/awsim/statistical.py`）。共通の統計は対象の名前を知りません。
+  宣言にない名前は実行前にエラーになります。条件式をそのまま書くこともできます。
+- 統計モード（`binomial_ci` / `sprt` / `dkw` / `dkw_fixed` / `ebstop`）は探索エンジンの中では動かず、共通の統計の経路の
+  「範囲から引く標本」（`orchestration/region_sampling.py`）で動きます（`build_gp_exploration_strategy` が渡します）。
+  設定モジュールの範囲から一様に引き、名前つき領域なら探索データのうち領域に入る行から範囲を決めて、領域の外の点は捨てます。
+  標本に番号（`sample_index`）と実行の ID（`experiment_id`）が付き、番号順に欠けずにそろった部分だけで判断します。
+  探索の戦略の `StrategySpec` に `composed_as="composed_region"` を書くと、`--stopping-rule` も使えます（AWSIM はそうしています）。
+
+### 指標の性質を宣言する
+
+`statistical.py` の `StatisticalTargetProfile` の `metric_specs` に、指標ごとの性質を宣言します（`contracts/metric_spec.py`）。
+
+| 種類 | 値 | 使える手法 |
+|---|---|---|
+| `binary()` | 0 か 1 | 二項区間、SPRT、DKW |
+| `bounded(下限, 上限)` | 範囲の中 | EBStop、DKW |
+| `real()` | 実数（無限大も可） | DKW |
+
+共通基盤は、実行前に手法と指標が合うかを確かめます（例: 範囲のない `min_ttc` に EBStop を選ぶとエラー）。EBStop の範囲は宣言から
+取り、コマンドの範囲は狭めることだけができます。評価のたびに宣言の外の値を数え、あれば区間を出さずにエラーで止めます。
+範囲が実行の設定で決まる指標は、設定を受け取る関数で宣言します（例: PRISM の `steps_to_failure_capped` は [0, steps + 1]）。
+宣言しない指標は検査されません。
+
+成功しなかったケース（タイムアウト、実行エラーなど）は、キューが同じ入力で合計 `--max-attempts`（既定 3）回まで実行します。
+外部ワーカーが受け取ってから `--case-timeout` 秒たっても戻らないケースも、失われたとして出し直します。対象は既定の時間を
+plugin の `default_case_timeout_sec(case_kind)` で与えられます（AWSIM: シナリオのタイムアウトと既存の起動・猶予の時間の和）。
+
 ### 共通部分の修正は必要か
 
 **入力を分布から独立に引く対象 (`iid_sampling=True`) は、`targets/<name>/` を追加するだけで使えます。** 共通部分の修正は
@@ -69,12 +109,43 @@ python3 run_orchestrator_v2.py --target bernoulli \
 
 ### 重点サンプリングに対応する
 
-固定 P・固定 Q の重点サンプリングは、`targets/<name>/` だけで対応できます。plugin に属性 `importance_sampling` を持たせ、
-`add_arguments(parser)`（対象専用のオプション）と `run(args)`（実験の実行）を持つオブジェクトを返します
-（`contracts/importance_sampling_plugin.py`）。共通の CLI `python3 -m apps.cli.importance_main` が、プランの `target:` から
-plugin を選び、オプションを足して `run` を呼びます。実行・保存・比較・完了の監査は
-`orchestration/fixed_importance_sampling.py` の関数をそのまま使えます。例は `targets/dynamics/importance_sampling.py` と、
-アーキテクチャのテストの一時的な対象 `coin` です（`targets/coin/` に置いたファイルだけで共通 CLI から実行できることを確かめています）。
+固定 P・固定 Q の重点サンプリングは、`targets/<name>/` だけで対応できます。対象はブラックボックスとして扱い、
+共通の runner（`orchestration/importance/runner.py`）が、入力の分布からの標本化、提案分布の成分の選択、乱数の系列、
+重みの合成と上限、実行・保存・再開・監査、比較、逐次停止を受け持ちます。設計は `docs/blackbox_importance_sampling_plan.md` にあります。
+
+plugin に属性 `importance_sampling` を持たせ、次の口を持つオブジェクトを返します（`contracts/importance_sampling_plugin.py`）。
+
+| 口 | 内容 |
+|---|---|
+| `prepare(plan, config) -> PreparedTarget` | プランを読んで検査する。既定の指標、入力の分布（`orchestration/importance/input_law.py` の `parse_input_laws` に自分の変数名を渡す）、内部の乱数への提案分布（`InternalProposal`）、使う乱数の系列の名前を返す |
+| `build_case(request) -> TestCase` | 共通の runner が決めた入力・seed・成分（`CaseRequest`）から、1 標本のケースを作る |
+| `build_components(args)` | CLI で実行するときの backend と結果の解釈器 |
+| 任意: `add_arguments(parser)`、`run_options(args)` | 対象専用のオプションと、その値の受け渡し |
+| 任意: `exact_probability(plan)` | 真値（被覆率の検証の道具が使う） |
+| 任意: `proposal_keys` | pilot の試行が置き換える `proposal.definition` のキー |
+
+入力を受け取って値を返すだけの対象（AWSIM など）は、これだけで済みます。対象の中に乱数があり、その分布を Q に変える場合は、
+plugin で capability `internal_density` を宣言し（`contracts/capabilities.py`）、重点標本ごとに、引いた乱数の P と各成分での
+対数密度を `meta.sampling.internal` で返します（`contracts/sampling.py` の `normalize_internal_report`）。重みは返しません。
+混合、防御的重み、重みの上限 1/β は共通の runner が計算します。宣言せずに内部の提案分布を指定すると、実行前にエラーになります。
+
+共通の CLI `python3 -m apps.cli.importance_main` と検証の道具（`tools/validation/` の pilot での調整、被覆率、参照との比較、
+通常 MC での参照値）は、プランの `target:` から対象を選びます。例は `targets/dynamics/importance_sampling.py`（内部の乱数）、
+`targets/awsim/importance_sampling.py`（入力だけ）と、アーキテクチャのテストの一時的な対象 `coin`（入力だけ）、
+`gauss`（内部の乱数。被覆率と pilot の道具も確かめる）です。
+
+#### クラスターで実行する
+
+`--cluster` を付けると、ケースを手元ではなくクラスターのワーカー（Ray のキュー）で実行します（`docs/cluster_importance_sampling_plan.md`）。
+対象は口 `cluster_launch_options(args)`（ワーカーの起動の設定。AWSIM は U ターンのワーカーを、標本ごとに世界を作り直す設定で起動する）を
+持ち、プランは `seed_policy: streams`（系列ごとの seed）を使います。記録は標本の番号順に保存するので、ワーカーが終わる順序に
+かかわらず、結果は手元の実行と同じです。ワーカーが受け取ってから `--case-timeout` 秒たっても記録が届かないケースは、同じ入力・同じ seed で
+出し直します（`--max-attempts` まで）。逐次停止は番号順に連続した標本だけで判断し、止めた後に届いた記録は結果に入れません。
+
+```bash
+python3 -m apps.cli.importance_main --sampling-plan PLAN --output-root DIR --max-samples 2000 \
+  --cluster --container-profile autoware190 --scenario-profile autoware190 --headless
+```
 
 ### dynamics にモデルを足す
 
@@ -100,7 +171,7 @@ PRISM の経路を Maude (LTL) で判定します。判定器は `EvaluationReco
 
 追加した規則は `orchestration/composed_strategy.py` の `build_stopping_rule` と `RULE_MODES`、`STOPPING_RULE_NAMES` に名前を加えると、
 `--stopping-rule <名前>` で使えます。入力の引き方 (実験計画) は今の戦略のものをそのまま使い、止め方だけが置き換わります。
-IID 型の対象と PRISM の固定パラメータで使えます。
+IID 型の対象、PRISM の固定パラメータ、範囲から引く対象（AWSIM などの統計モード、`composed_region`）で使えます。
 
 追加した手法は、真の値が分かる `bernoulli` で被覆率を確認してください ([validation/coverage.md](validation/coverage.md))。
 `tools/validation/coverage_experiment.py` の `SCENARIOS` に条件を追加すると、実際の停止判定のコードをそのまま何千回もくり返して、
@@ -163,6 +234,48 @@ python3 run_orchestrator_v2.py --target bernoulli \
   --output artifacts/bernoulli/records.jsonl --dataset-csv artifacts/bernoulli/dataset.csv
 ```
 
+### Using the GP exploration
+
+AWSIM's GP exploration (`explore` / `focus` / `margin`, ...) is a shared engine (`orchestration/exploration/`).
+A target uses it by providing (see the throwaway target `slope` of the architecture test, and AWSIM's `targets/awsim/exploration.py`):
+
+- A settings module (the name its plugin's `default_config_module` returns): `PARAM_RANGES` (continuous inputs to explore and their
+  ranges), `FIXED_PARAMS`, `TARGET_PRIORITIES` (candidate 0/1 metrics whose boundary is learnt), phase limits, ...
+- In the plugin's `strategies`, `build_gp_exploration_strategy` of `orchestration/exploration/builder.py` registered with an
+  `ExplorationSpec`, and that name returned by `select_strategy`.
+- The `ExplorationSpec` (`orchestration/exploration/spec.py`): GP training rules (`TrainingRules`), which rows are failed runs (searched
+  again near the point; not in statistical modes), and the rules of extraction modes. All are optional.
+- Region names (usable in `--dkw-region`) are declared in `StatisticalTargetProfile.region_vocabulary` in `statistical.py`
+  (`RegionVocabulary` of `evaluation/region_filter.py`: name -> condition, required columns, columns compared as strings), for example
+  AWSIM's `emp_safe` / `jama_safe` in `targets/awsim/statistical.py`. The shared statistics know no target's names; an undeclared name
+  fails before running. A condition can also be written directly.
+- The statistical modes (`binomial_ci` / `sprt` / `dkw` / `dkw_fixed` / `ebstop`) do not run in the exploration engine but on the
+  shared statistical path, as region sampling (`orchestration/region_sampling.py`; `build_gp_exploration_strategy` hands them over).
+  Samples are drawn uniformly from the settings module's ranges; with a named region the ranges come from the earlier results inside
+  it, and points outside it are skipped. Samples get a number (`sample_index`) and a run id (`experiment_id`), and decisions use the
+  contiguous prefix of samples in sample order. With `composed_as="composed_region"` in the exploration strategy's `StrategySpec`,
+  `--stopping-rule` works too (AWSIM does this).
+
+### Declaring what values a metric takes
+
+Declare each metric in `metric_specs` of the `StatisticalTargetProfile` in `statistical.py` (`contracts/metric_spec.py`).
+
+| Kind | Values | Methods |
+|---|---|---|
+| `binary()` | 0 or 1 | binomial interval, SPRT, DKW |
+| `bounded(lower, upper)` | within the range | EBStop, DKW |
+| `real()` | real (infinity allowed) | DKW |
+
+Before a run the shared code checks that the method fits the metric (for example EBStop on the unbounded `min_ttc` is an error).
+EBStop takes its range from the declaration; the command line may only narrow it. Every evaluation counts values outside the
+declaration and stops with an error instead of an interval. A metric whose range depends on the run's settings is declared with a
+function of them (for example PRISM's `steps_to_failure_capped` is in [0, steps + 1]). Undeclared metrics are not checked.
+
+A case that does not succeed (timeout, execution error, ...) is run again by the queue with the same input, up to `--max-attempts`
+(default 3) attempts in total. A case not back `--case-timeout` seconds after an external worker took it is treated as lost and
+queued again. A target gives the default time through its plugin's `default_case_timeout_sec(case_kind)` (AWSIM: the scenario
+timeout plus the existing start-up and grace times).
+
 ### Do you need to change the shared code?
 
 **A target whose inputs are drawn independently from a distribution (`iid_sampling=True`) works by adding only `targets/<name>/`.**
@@ -188,12 +301,46 @@ their definitions to `apps/cli/orchestrator_main.py` / `worker_main.py` (checks 
 
 ### Supporting importance sampling
 
-Fixed-P/fixed-Q importance sampling needs code only under `targets/<name>/`. Give the plugin an attribute `importance_sampling`
-that returns an object with `add_arguments(parser)` (the target's options) and `run(args)` (the experiment)
-(`contracts/importance_sampling_plugin.py`). The generic CLI `python3 -m apps.cli.importance_main` selects the plugin from the plan's
-`target:`, adds its options and calls `run`. The functions in `orchestration/fixed_importance_sampling.py` do the running, storage,
-comparison and completion audit. See `targets/dynamics/importance_sampling.py` and the throwaway target `coin` of the architecture
-test (files placed only in `targets/coin/` run through the generic CLI).
+Fixed-P/fixed-Q importance sampling needs code only under `targets/<name>/`. The target is treated as a black box: the shared runner
+(`orchestration/importance/runner.py`) draws inputs from their laws, chooses the proposal component, seeds the random streams,
+composes and bounds the weights, and runs, stores, resumes, audits, compares and stops sequentially. The design is in
+`docs/blackbox_importance_sampling_plan.md`.
+
+Give the plugin an attribute `importance_sampling` that returns an object with these hooks (`contracts/importance_sampling_plugin.py`).
+
+| Hook | What it does |
+|---|---|
+| `prepare(plan, config) -> PreparedTarget` | Reads and checks the plan: the default metric, the input laws (`parse_input_laws` of `orchestration/importance/input_law.py` with the target's variable names), the proposal over its internal randomness (`InternalProposal`), the names of its random streams |
+| `build_case(request) -> TestCase` | Builds one sample's case from the inputs, seeds and component the shared runner chose (`CaseRequest`) |
+| `build_components(args)` | The backend and result interpreter of a CLI run |
+| Optional: `add_arguments(parser)`, `run_options(args)` | The target's own options and how their values are passed on |
+| Optional: `exact_probability(plan)` | The truth, used by the coverage tool |
+| Optional: `proposal_keys` | The keys of `proposal.definition` a pilot trial replaces |
+
+A target that takes inputs and returns values (such as AWSIM) needs nothing more. If the target has internal randomness whose law Q
+changes, its plugin declares the capability `internal_density` (`contracts/capabilities.py`), and each importance sample reports the
+log density of the realised draw under P and under every component in `meta.sampling.internal` (`normalize_internal_report` in
+`contracts/sampling.py`). It does not report a weight: the shared runner forms the mixture, the defensive weight and the bound 1/β.
+An internal proposal without the declared capability fails before anything runs.
+
+The generic CLI `python3 -m apps.cli.importance_main` and the validation tools in `tools/validation/` (pilot tuning, coverage,
+reference comparison, plain-MC reference) choose the target from the plan's `target:`. See `targets/dynamics/importance_sampling.py`
+(internal randomness), `targets/awsim/importance_sampling.py` (inputs only), and the throwaway targets `coin` (inputs only) and
+`gauss` (internal randomness, also checked with the coverage and pilot tools) of the architecture test.
+
+#### Running on the cluster
+
+With `--cluster` the cases run on the cluster's workers (Ray queue) instead of locally (`docs/cluster_importance_sampling_plan.md`).
+The target has the hook `cluster_launch_options(args)` (how its workers start; AWSIM starts U-turn workers with a fresh world per
+sample), and the plan uses `seed_policy: streams`. Records are stored in sample order, so the results equal a local run whatever
+order the workers finish in. A case whose record has not arrived `--case-timeout` seconds after a worker took it is submitted again
+with the same inputs and seeds (up to `--max-attempts`). A sequential stop is decided on the contiguous prefix of samples, and
+records that arrive after the stop are kept out of the results.
+
+```bash
+python3 -m apps.cli.importance_main --sampling-plan PLAN --output-root DIR --max-samples 2000 \
+  --cluster --container-profile autoware190 --scenario-profile autoware190 --headless
+```
 
 ### Adding a dynamics model
 
@@ -221,7 +368,8 @@ Statistical methods are stopping rules (`StoppingRule` in `contracts/experiment.
 
 Adding the rule's name to `build_stopping_rule`, `RULE_MODES`, and `STOPPING_RULE_NAMES` in `orchestration/composed_strategy.py` makes it
 available as `--stopping-rule <name>`. The sampling (experimental design) of the existing strategy stays the same; only the stopping is
-replaced. It works with IID-sampling targets and PRISM fixed parameters.
+replaced. It works with IID-sampling targets, PRISM fixed parameters, and region sampling (the statistical modes of AWSIM and
+similar targets, `composed_region`).
 
 Check the coverage of a new method on `bernoulli`, whose true values are known ([validation/coverage.md](validation/coverage.md)).
 Adding a condition to `SCENARIOS` in `tools/validation/coverage_experiment.py` repeats the production stopping logic thousands of times

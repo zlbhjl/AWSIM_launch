@@ -4,7 +4,8 @@ An adapter builds its ``HybridSystem`` from ``model_params`` and initial inputs
 and calls :func:`resolve_sde_model`, which reads the common inputs:
 
 - ``solver_kind`` (``"sde"``), ``sde_dt_sec``, ``horizon_sec``
-- ``sde_seed`` and optional ``sde_mixture_seed``
+- ``sde_seed`` and optional ``sde_mixture_seed``; optional ``sde_component``
+  (the proposal component chosen by the shared importance-sampling code)
 - ``event`` (see :mod:`targets.dynamics.models.events`)
 - ``noise_path_p`` (P) and ``noise_q`` / ``noise_path_q`` (Q)
 """
@@ -42,6 +43,7 @@ def resolve_sde_model(
     seed = integer(inputs.get("sde_seed"), "sde_seed")
     mixture_seed = inputs.get("sde_mixture_seed")
     mixture_seed = None if mixture_seed is None else integer(mixture_seed, "sde_mixture_seed")
+    component = inputs.get("sde_component")
     noise_target = parse_noise_path_p(inputs.get("noise_path_p"), channels=channels)
     noise_proposal, proposal_definition = resolve_noise_proposal(
         inputs, channels=channels, state_names=state_names
@@ -62,6 +64,7 @@ def resolve_sde_model(
             noise_target=noise_target,
             noise_proposal=noise_proposal,
             mixture_seed=mixture_seed,
+            component=component,
             initial_inputs=initial_inputs,
         ),
         execution_meta={

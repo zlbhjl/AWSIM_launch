@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pandas as pd
 
-import point_extractors
+from evaluation.region_filter import save_dataframe_to_csv
 
 
 class ConsistencyClassificationRepository:
@@ -30,10 +30,10 @@ class ConsistencyClassificationRepository:
         )
 
     def save_consistent(self, df: pd.DataFrame | None) -> bool:
-        return point_extractors.save_dataframe_to_csv(df, str(self.consistent_path))
+        return save_dataframe_to_csv(df, str(self.consistent_path))
 
     def save_stochastic(self, df: pd.DataFrame | None) -> bool:
-        return point_extractors.save_dataframe_to_csv(df, str(self.stochastic_path))
+        return save_dataframe_to_csv(df, str(self.stochastic_path))
 
 
 __all__ = ["ConsistencyClassificationRepository"]

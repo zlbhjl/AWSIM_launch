@@ -786,271 +786,75 @@
   },
   "strategies": {
     "awsim:binomial_ci": {
-      "mode_runners": {
-        "binomial_mode": {
-          "class": "BinomialModeRunner",
-          "config": {
-            "anytime_valid": false,
-            "case_kind": "uturn",
-            "confidence": 0.95,
-            "config_module_name": "targets.awsim.case_kinds.uturn",
-            "max_samples": 10,
-            "method": "wilson",
-            "min_samples": 100,
-            "param_names": [
-              "dx0",
-              "ego_speed",
-              "npc_speed"
-            ],
-            "region": "custom",
-            "target": "c_collision",
-            "target_width": 0.02
-          }
-        },
+      "region_sampling": {
+        "bounds": null,
         "dkw_mode": {
-          "class": "DKWModeRunner",
-          "config": {
-            "base_samples": 50,
-            "case_kind": "uturn",
-            "config_module_name": "targets.awsim.case_kinds.uturn",
-            "max_samples": 10,
-            "minimum_value": 0.0,
-            "param_names": [
-              "dx0",
-              "ego_speed",
-              "npc_speed"
-            ],
-            "pure_smc": false,
-            "region": "custom",
-            "simultaneous": false,
-            "target_epsilon": 0.15,
-            "target_metric": "z_margin",
-            "target_metrics": [
-              "min_ttc",
-              "min_distance"
-            ],
-            "total_delta": 0.05
-          }
+          "base_samples": 50,
+          "case_kind": "uturn",
+          "config_module_name": "targets.awsim.case_kinds.uturn",
+          "max_samples": 10,
+          "minimum_value": 0.0,
+          "param_names": [
+            "dx0",
+            "ego_speed",
+            "npc_speed"
+          ],
+          "pure_smc": false,
+          "region": "custom",
+          "simultaneous": false,
+          "target_epsilon": 0.15,
+          "target_metric": "z_margin",
+          "target_metrics": [
+            "min_ttc",
+            "min_distance"
+          ],
+          "total_delta": 0.05
         },
-        "ebstop_mode": {
-          "class": "EBStopModeRunner",
-          "config": {
-            "case_kind": "uturn",
-            "confidence": 0.95,
-            "config_module_name": "targets.awsim.case_kinds.uturn",
-            "epsilon": 0.1,
-            "max_samples": 2000,
-            "param_names": [
-              "dx0",
-              "ego_speed",
-              "npc_speed"
-            ],
-            "region": "custom",
-            "target": "min_ttc",
-            "value_range": [
-              0.0,
-              10.0
-            ]
-          }
-        },
-        "sprt_mode": {
-          "class": "SPRTModeRunner",
-          "config": {
-            "beta": 0.05,
-            "case_kind": "uturn",
-            "confidence": 0.95,
-            "config_module_name": "targets.awsim.case_kinds.uturn",
-            "max_samples": 10,
-            "min_samples": 0,
-            "p0": 0.1,
-            "p1": 0.01,
-            "param_names": [
-              "dx0",
-              "ego_speed",
-              "npc_speed"
-            ],
-            "region": "custom",
-            "target": "c_collision"
-          }
-        }
-      },
-      "request": null,
-      "strategist": {
-        "MAX_SAMPLES": 10000,
+        "dkw_target_metric": "z_margin",
+        "dkw_target_metrics": [
+          "min_ttc",
+          "min_distance"
+        ],
+        "max_samples": 10,
         "param_names": [
           "dx0",
           "ego_speed",
           "npc_speed"
         ],
+        "pure_smc": false,
         "random_seed": 42,
+        "region": "custom",
         "run_mode": "binomial_ci",
         "scenario_name": "uturn",
-        "strategy_settings": {
-          "binomial_ci_confidence": 0.95,
-          "binomial_ci_method": "wilson",
-          "binomial_ci_min_samples": 100,
-          "binomial_ci_target": "c_collision",
-          "binomial_ci_target_width": 0.02,
-          "dkw_target_metric": "z_margin",
-          "dkw_target_metrics": [
-            "min_ttc",
-            "min_distance"
+        "settings": {
+          "binomial_anytime_valid": false,
+          "binomial_confidence": 0.95,
+          "binomial_method": "wilson",
+          "binomial_min_samples": 100,
+          "binomial_target": "c_collision",
+          "binomial_target_width": 0.02,
+          "ebstop_confidence": 0.95,
+          "ebstop_epsilon": 0.1,
+          "ebstop_max_samples": 2000,
+          "ebstop_target": "min_ttc",
+          "ebstop_value_range": [
+            0.0,
+            10.0
           ],
-          "focus_noise": 0.05,
-          "focus_points": [
-            {
-              "dx0": 10.09,
-              "ego_speed": 37.98,
-              "npc_speed": 14.2
-            },
-            {
-              "dx0": 14.81,
-              "ego_speed": 39.8,
-              "npc_speed": 13.49
-            },
-            {
-              "dx0": 10.23,
-              "ego_speed": 35.96,
-              "npc_speed": 17.8
-            },
-            {
-              "dx0": 13.29,
-              "ego_speed": 39.33,
-              "npc_speed": 13.95
-            },
-            {
-              "dx0": 14.16,
-              "ego_speed": 35.43,
-              "npc_speed": 10.02
-            },
-            {
-              "dx0": 11.17,
-              "ego_speed": 31.9,
-              "npc_speed": 11.91
-            }
-          ],
-          "initial_exploration_limit": 100,
-          "margin_max_uncertainty": 0.05,
-          "margin_range": [
-            0.3,
-            0.48
-          ],
-          "max_samples": 10000,
-          "min_samples": 500,
-          "stability_history_length": 50,
-          "stability_hysteresis": [
-            0.4,
-            0.6
-          ],
-          "stability_reference_points": 2000,
-          "stability_required_streak": 3,
-          "stability_shift_threshold": 0.01,
-          "step2_max_exploration": 500,
-          "target_priorities": [
-            "c_collision",
-            "c_ttc_0.3",
-            "c_ttc_0.5",
-            "c_ttc_0.7",
-            "c_ttc_0.9",
-            "c_ttc_1.1",
-            "c_ttc_1.2",
-            "c_ttc_1.3",
-            "c_ttc_1.5"
-          ]
-        }
+          "sprt_beta": 0.05,
+          "sprt_confidence": 0.95,
+          "sprt_min_samples": 0,
+          "sprt_p0": 0.1,
+          "sprt_p1": 0.01,
+          "sprt_target": "c_collision"
+        },
+        "simultaneous": false
       },
-      "strategy": "targets.awsim.strategies.active_learning.ActiveLearningStrategist",
-      "target_total": 10
+      "request": null,
+      "strategy": "orchestration.region_sampling.RegionSamplingStrategy",
+      "target_total": null
     },
     "awsim:boundary_gap": {
-      "mode_runners": {
-        "binomial_mode": {
-          "class": "BinomialModeRunner",
-          "config": {
-            "anytime_valid": false,
-            "case_kind": "uturn",
-            "confidence": 0.95,
-            "config_module_name": "targets.awsim.case_kinds.uturn",
-            "max_samples": 10,
-            "method": "wilson",
-            "min_samples": 100,
-            "param_names": [
-              "dx0",
-              "ego_speed",
-              "npc_speed"
-            ],
-            "region": "custom",
-            "target": "c_collision",
-            "target_width": 0.02
-          }
-        },
-        "dkw_mode": {
-          "class": "DKWModeRunner",
-          "config": {
-            "base_samples": 50,
-            "case_kind": "uturn",
-            "config_module_name": "targets.awsim.case_kinds.uturn",
-            "max_samples": 10,
-            "minimum_value": 0.0,
-            "param_names": [
-              "dx0",
-              "ego_speed",
-              "npc_speed"
-            ],
-            "pure_smc": false,
-            "region": "custom",
-            "simultaneous": false,
-            "target_epsilon": 0.15,
-            "target_metric": "z_margin",
-            "target_metrics": [
-              "min_ttc",
-              "min_distance"
-            ],
-            "total_delta": 0.05
-          }
-        },
-        "ebstop_mode": {
-          "class": "EBStopModeRunner",
-          "config": {
-            "case_kind": "uturn",
-            "confidence": 0.95,
-            "config_module_name": "targets.awsim.case_kinds.uturn",
-            "epsilon": 0.1,
-            "max_samples": 2000,
-            "param_names": [
-              "dx0",
-              "ego_speed",
-              "npc_speed"
-            ],
-            "region": "custom",
-            "target": "min_ttc",
-            "value_range": [
-              0.0,
-              10.0
-            ]
-          }
-        },
-        "sprt_mode": {
-          "class": "SPRTModeRunner",
-          "config": {
-            "beta": 0.05,
-            "case_kind": "uturn",
-            "confidence": 0.95,
-            "config_module_name": "targets.awsim.case_kinds.uturn",
-            "max_samples": 10,
-            "min_samples": 0,
-            "p0": 0.1,
-            "p1": 0.01,
-            "param_names": [
-              "dx0",
-              "ego_speed",
-              "npc_speed"
-            ],
-            "region": "custom",
-            "target": "c_collision"
-          }
-        }
-      },
       "request": null,
       "strategist": {
         "MAX_SAMPLES": 10000,
@@ -1140,625 +944,213 @@
       "target_total": null
     },
     "awsim:dkw": {
-      "mode_runners": {
-        "binomial_mode": {
-          "class": "BinomialModeRunner",
-          "config": {
-            "anytime_valid": false,
-            "case_kind": "uturn",
-            "confidence": 0.95,
-            "config_module_name": "targets.awsim.case_kinds.uturn",
-            "max_samples": 10,
-            "method": "wilson",
-            "min_samples": 100,
-            "param_names": [
-              "dx0",
-              "ego_speed",
-              "npc_speed"
-            ],
-            "region": "custom",
-            "target": "c_collision",
-            "target_width": 0.02
-          }
-        },
+      "region_sampling": {
+        "bounds": null,
         "dkw_mode": {
-          "class": "DKWModeRunner",
-          "config": {
-            "base_samples": 50,
-            "case_kind": "uturn",
-            "config_module_name": "targets.awsim.case_kinds.uturn",
-            "max_samples": 10,
-            "minimum_value": 0.0,
-            "param_names": [
-              "dx0",
-              "ego_speed",
-              "npc_speed"
-            ],
-            "pure_smc": false,
-            "region": "custom",
-            "simultaneous": false,
-            "target_epsilon": 0.15,
-            "target_metric": "z_margin",
-            "target_metrics": [
-              "min_ttc",
-              "min_distance"
-            ],
-            "total_delta": 0.05
-          }
+          "base_samples": 50,
+          "case_kind": "uturn",
+          "config_module_name": "targets.awsim.case_kinds.uturn",
+          "max_samples": 10,
+          "minimum_value": 0.0,
+          "param_names": [
+            "dx0",
+            "ego_speed",
+            "npc_speed"
+          ],
+          "pure_smc": false,
+          "region": "custom",
+          "simultaneous": false,
+          "target_epsilon": 0.15,
+          "target_metric": "z_margin",
+          "target_metrics": [
+            "min_ttc",
+            "min_distance"
+          ],
+          "total_delta": 0.05
         },
-        "ebstop_mode": {
-          "class": "EBStopModeRunner",
-          "config": {
-            "case_kind": "uturn",
-            "confidence": 0.95,
-            "config_module_name": "targets.awsim.case_kinds.uturn",
-            "epsilon": 0.1,
-            "max_samples": 2000,
-            "param_names": [
-              "dx0",
-              "ego_speed",
-              "npc_speed"
-            ],
-            "region": "custom",
-            "target": "min_ttc",
-            "value_range": [
-              0.0,
-              10.0
-            ]
-          }
-        },
-        "sprt_mode": {
-          "class": "SPRTModeRunner",
-          "config": {
-            "beta": 0.05,
-            "case_kind": "uturn",
-            "confidence": 0.95,
-            "config_module_name": "targets.awsim.case_kinds.uturn",
-            "max_samples": 10,
-            "min_samples": 0,
-            "p0": 0.1,
-            "p1": 0.01,
-            "param_names": [
-              "dx0",
-              "ego_speed",
-              "npc_speed"
-            ],
-            "region": "custom",
-            "target": "c_collision"
-          }
-        }
-      },
-      "request": null,
-      "strategist": {
-        "MAX_SAMPLES": 10000,
+        "dkw_target_metric": "z_margin",
+        "dkw_target_metrics": [
+          "min_ttc",
+          "min_distance"
+        ],
+        "max_samples": 10,
         "param_names": [
           "dx0",
           "ego_speed",
           "npc_speed"
         ],
+        "pure_smc": false,
         "random_seed": 42,
+        "region": "custom",
         "run_mode": "dkw",
         "scenario_name": "uturn",
-        "strategy_settings": {
-          "binomial_ci_confidence": 0.95,
-          "binomial_ci_method": "wilson",
-          "binomial_ci_min_samples": 100,
-          "binomial_ci_target": "c_collision",
-          "binomial_ci_target_width": 0.02,
-          "dkw_target_metric": "z_margin",
-          "dkw_target_metrics": [
-            "min_ttc",
-            "min_distance"
+        "settings": {
+          "binomial_anytime_valid": false,
+          "binomial_confidence": 0.95,
+          "binomial_method": "wilson",
+          "binomial_min_samples": 100,
+          "binomial_target": "c_collision",
+          "binomial_target_width": 0.02,
+          "ebstop_confidence": 0.95,
+          "ebstop_epsilon": 0.1,
+          "ebstop_max_samples": 2000,
+          "ebstop_target": "min_ttc",
+          "ebstop_value_range": [
+            0.0,
+            10.0
           ],
-          "focus_noise": 0.05,
-          "focus_points": [
-            {
-              "dx0": 10.09,
-              "ego_speed": 37.98,
-              "npc_speed": 14.2
-            },
-            {
-              "dx0": 14.81,
-              "ego_speed": 39.8,
-              "npc_speed": 13.49
-            },
-            {
-              "dx0": 10.23,
-              "ego_speed": 35.96,
-              "npc_speed": 17.8
-            },
-            {
-              "dx0": 13.29,
-              "ego_speed": 39.33,
-              "npc_speed": 13.95
-            },
-            {
-              "dx0": 14.16,
-              "ego_speed": 35.43,
-              "npc_speed": 10.02
-            },
-            {
-              "dx0": 11.17,
-              "ego_speed": 31.9,
-              "npc_speed": 11.91
-            }
-          ],
-          "initial_exploration_limit": 100,
-          "margin_max_uncertainty": 0.05,
-          "margin_range": [
-            0.3,
-            0.48
-          ],
-          "max_samples": 10000,
-          "min_samples": 500,
-          "stability_history_length": 50,
-          "stability_hysteresis": [
-            0.4,
-            0.6
-          ],
-          "stability_reference_points": 2000,
-          "stability_required_streak": 3,
-          "stability_shift_threshold": 0.01,
-          "step2_max_exploration": 500,
-          "target_priorities": [
-            "c_collision",
-            "c_ttc_0.3",
-            "c_ttc_0.5",
-            "c_ttc_0.7",
-            "c_ttc_0.9",
-            "c_ttc_1.1",
-            "c_ttc_1.2",
-            "c_ttc_1.3",
-            "c_ttc_1.5"
-          ]
-        }
+          "sprt_beta": 0.05,
+          "sprt_confidence": 0.95,
+          "sprt_min_samples": 0,
+          "sprt_p0": 0.1,
+          "sprt_p1": 0.01,
+          "sprt_target": "c_collision"
+        },
+        "simultaneous": false
       },
-      "strategy": "targets.awsim.strategies.active_learning.ActiveLearningStrategist",
+      "request": null,
+      "strategy": "orchestration.region_sampling.RegionSamplingStrategy",
       "target_total": null
     },
     "awsim:dkw_fixed": {
-      "mode_runners": {
-        "binomial_mode": {
-          "class": "BinomialModeRunner",
-          "config": {
-            "anytime_valid": false,
-            "case_kind": "uturn",
-            "confidence": 0.95,
-            "config_module_name": "targets.awsim.case_kinds.uturn",
-            "max_samples": 10,
-            "method": "wilson",
-            "min_samples": 100,
-            "param_names": [
-              "dx0",
-              "ego_speed",
-              "npc_speed"
-            ],
-            "region": "custom",
-            "target": "c_collision",
-            "target_width": 0.02
-          }
-        },
+      "region_sampling": {
+        "bounds": null,
         "dkw_mode": {
-          "class": "DKWModeRunner",
-          "config": {
-            "base_samples": 50,
-            "case_kind": "uturn",
-            "config_module_name": "targets.awsim.case_kinds.uturn",
-            "max_samples": 10,
-            "minimum_value": 0.0,
-            "param_names": [
-              "dx0",
-              "ego_speed",
-              "npc_speed"
-            ],
-            "pure_smc": false,
-            "region": "custom",
-            "simultaneous": false,
-            "target_epsilon": 0.15,
-            "target_metric": "z_margin",
-            "target_metrics": [
-              "min_ttc",
-              "min_distance"
-            ],
-            "total_delta": 0.05
-          }
+          "base_samples": 50,
+          "case_kind": "uturn",
+          "config_module_name": "targets.awsim.case_kinds.uturn",
+          "max_samples": 10,
+          "minimum_value": 0.0,
+          "param_names": [
+            "dx0",
+            "ego_speed",
+            "npc_speed"
+          ],
+          "pure_smc": false,
+          "region": "custom",
+          "simultaneous": false,
+          "target_epsilon": 0.15,
+          "target_metric": "z_margin",
+          "target_metrics": [
+            "min_ttc",
+            "min_distance"
+          ],
+          "total_delta": 0.05
         },
-        "ebstop_mode": {
-          "class": "EBStopModeRunner",
-          "config": {
-            "case_kind": "uturn",
-            "confidence": 0.95,
-            "config_module_name": "targets.awsim.case_kinds.uturn",
-            "epsilon": 0.1,
-            "max_samples": 2000,
-            "param_names": [
-              "dx0",
-              "ego_speed",
-              "npc_speed"
-            ],
-            "region": "custom",
-            "target": "min_ttc",
-            "value_range": [
-              0.0,
-              10.0
-            ]
-          }
-        },
-        "sprt_mode": {
-          "class": "SPRTModeRunner",
-          "config": {
-            "beta": 0.05,
-            "case_kind": "uturn",
-            "confidence": 0.95,
-            "config_module_name": "targets.awsim.case_kinds.uturn",
-            "max_samples": 10,
-            "min_samples": 0,
-            "p0": 0.1,
-            "p1": 0.01,
-            "param_names": [
-              "dx0",
-              "ego_speed",
-              "npc_speed"
-            ],
-            "region": "custom",
-            "target": "c_collision"
-          }
-        }
-      },
-      "request": null,
-      "strategist": {
-        "MAX_SAMPLES": 10000,
+        "dkw_target_metric": "z_margin",
+        "dkw_target_metrics": [
+          "min_ttc",
+          "min_distance"
+        ],
+        "max_samples": 10,
         "param_names": [
           "dx0",
           "ego_speed",
           "npc_speed"
         ],
+        "pure_smc": false,
         "random_seed": 42,
+        "region": "custom",
         "run_mode": "dkw_fixed",
         "scenario_name": "uturn",
-        "strategy_settings": {
-          "binomial_ci_confidence": 0.95,
-          "binomial_ci_method": "wilson",
-          "binomial_ci_min_samples": 100,
-          "binomial_ci_target": "c_collision",
-          "binomial_ci_target_width": 0.02,
-          "dkw_target_metric": "z_margin",
-          "dkw_target_metrics": [
+        "settings": {
+          "binomial_anytime_valid": false,
+          "binomial_confidence": 0.95,
+          "binomial_method": "wilson",
+          "binomial_min_samples": 100,
+          "binomial_target": "c_collision",
+          "binomial_target_width": 0.02,
+          "ebstop_confidence": 0.95,
+          "ebstop_epsilon": 0.1,
+          "ebstop_max_samples": 2000,
+          "ebstop_target": "min_ttc",
+          "ebstop_value_range": [
+            0.0,
+            10.0
+          ],
+          "sprt_beta": 0.05,
+          "sprt_confidence": 0.95,
+          "sprt_min_samples": 0,
+          "sprt_p0": 0.1,
+          "sprt_p1": 0.01,
+          "sprt_target": "c_collision"
+        },
+        "simultaneous": false
+      },
+      "request": null,
+      "strategy": "orchestration.region_sampling.RegionSamplingStrategy",
+      "target_total": null
+    },
+    "awsim:ebstop": {
+      "region_sampling": {
+        "bounds": null,
+        "dkw_mode": {
+          "base_samples": 50,
+          "case_kind": "uturn",
+          "config_module_name": "targets.awsim.case_kinds.uturn",
+          "max_samples": 10,
+          "minimum_value": 0.0,
+          "param_names": [
+            "dx0",
+            "ego_speed",
+            "npc_speed"
+          ],
+          "pure_smc": false,
+          "region": "custom",
+          "simultaneous": false,
+          "target_epsilon": 0.15,
+          "target_metric": "z_margin",
+          "target_metrics": [
             "min_ttc",
             "min_distance"
           ],
-          "focus_noise": 0.05,
-          "focus_points": [
-            {
-              "dx0": 10.09,
-              "ego_speed": 37.98,
-              "npc_speed": 14.2
-            },
-            {
-              "dx0": 14.81,
-              "ego_speed": 39.8,
-              "npc_speed": 13.49
-            },
-            {
-              "dx0": 10.23,
-              "ego_speed": 35.96,
-              "npc_speed": 17.8
-            },
-            {
-              "dx0": 13.29,
-              "ego_speed": 39.33,
-              "npc_speed": 13.95
-            },
-            {
-              "dx0": 14.16,
-              "ego_speed": 35.43,
-              "npc_speed": 10.02
-            },
-            {
-              "dx0": 11.17,
-              "ego_speed": 31.9,
-              "npc_speed": 11.91
-            }
-          ],
-          "initial_exploration_limit": 100,
-          "margin_max_uncertainty": 0.05,
-          "margin_range": [
-            0.3,
-            0.48
-          ],
-          "max_samples": 10000,
-          "min_samples": 500,
-          "stability_history_length": 50,
-          "stability_hysteresis": [
-            0.4,
-            0.6
-          ],
-          "stability_reference_points": 2000,
-          "stability_required_streak": 3,
-          "stability_shift_threshold": 0.01,
-          "step2_max_exploration": 500,
-          "target_priorities": [
-            "c_collision",
-            "c_ttc_0.3",
-            "c_ttc_0.5",
-            "c_ttc_0.7",
-            "c_ttc_0.9",
-            "c_ttc_1.1",
-            "c_ttc_1.2",
-            "c_ttc_1.3",
-            "c_ttc_1.5"
-          ]
-        }
-      },
-      "strategy": "targets.awsim.strategies.active_learning.ActiveLearningStrategist",
-      "target_total": 10
-    },
-    "awsim:ebstop": {
-      "mode_runners": {
-        "binomial_mode": {
-          "class": "BinomialModeRunner",
-          "config": {
-            "anytime_valid": false,
-            "case_kind": "uturn",
-            "confidence": 0.95,
-            "config_module_name": "targets.awsim.case_kinds.uturn",
-            "max_samples": 10,
-            "method": "wilson",
-            "min_samples": 100,
-            "param_names": [
-              "dx0",
-              "ego_speed",
-              "npc_speed"
-            ],
-            "region": "custom",
-            "target": "c_collision",
-            "target_width": 0.02
-          }
+          "total_delta": 0.05
         },
-        "dkw_mode": {
-          "class": "DKWModeRunner",
-          "config": {
-            "base_samples": 50,
-            "case_kind": "uturn",
-            "config_module_name": "targets.awsim.case_kinds.uturn",
-            "max_samples": 10,
-            "minimum_value": 0.0,
-            "param_names": [
-              "dx0",
-              "ego_speed",
-              "npc_speed"
-            ],
-            "pure_smc": false,
-            "region": "custom",
-            "simultaneous": false,
-            "target_epsilon": 0.15,
-            "target_metric": "z_margin",
-            "target_metrics": [
-              "min_ttc",
-              "min_distance"
-            ],
-            "total_delta": 0.05
-          }
-        },
-        "ebstop_mode": {
-          "class": "EBStopModeRunner",
-          "config": {
-            "case_kind": "uturn",
-            "confidence": 0.95,
-            "config_module_name": "targets.awsim.case_kinds.uturn",
-            "epsilon": 0.1,
-            "max_samples": 2000,
-            "param_names": [
-              "dx0",
-              "ego_speed",
-              "npc_speed"
-            ],
-            "region": "custom",
-            "target": "min_ttc",
-            "value_range": [
-              0.0,
-              10.0
-            ]
-          }
-        },
-        "sprt_mode": {
-          "class": "SPRTModeRunner",
-          "config": {
-            "beta": 0.05,
-            "case_kind": "uturn",
-            "confidence": 0.95,
-            "config_module_name": "targets.awsim.case_kinds.uturn",
-            "max_samples": 10,
-            "min_samples": 0,
-            "p0": 0.1,
-            "p1": 0.01,
-            "param_names": [
-              "dx0",
-              "ego_speed",
-              "npc_speed"
-            ],
-            "region": "custom",
-            "target": "c_collision"
-          }
-        }
-      },
-      "request": null,
-      "strategist": {
-        "MAX_SAMPLES": 10000,
+        "dkw_target_metric": "z_margin",
+        "dkw_target_metrics": [
+          "min_ttc",
+          "min_distance"
+        ],
+        "max_samples": 10,
         "param_names": [
           "dx0",
           "ego_speed",
           "npc_speed"
         ],
+        "pure_smc": false,
         "random_seed": 42,
+        "region": "custom",
         "run_mode": "ebstop",
         "scenario_name": "uturn",
-        "strategy_settings": {
-          "binomial_ci_confidence": 0.95,
-          "binomial_ci_method": "wilson",
-          "binomial_ci_min_samples": 100,
-          "binomial_ci_target": "c_collision",
-          "binomial_ci_target_width": 0.02,
-          "dkw_target_metric": "z_margin",
-          "dkw_target_metrics": [
-            "min_ttc",
-            "min_distance"
+        "settings": {
+          "binomial_anytime_valid": false,
+          "binomial_confidence": 0.95,
+          "binomial_method": "wilson",
+          "binomial_min_samples": 100,
+          "binomial_target": "c_collision",
+          "binomial_target_width": 0.02,
+          "ebstop_confidence": 0.95,
+          "ebstop_epsilon": 0.1,
+          "ebstop_max_samples": 2000,
+          "ebstop_target": "min_ttc",
+          "ebstop_value_range": [
+            0.0,
+            10.0
           ],
-          "focus_noise": 0.05,
-          "focus_points": [
-            {
-              "dx0": 10.09,
-              "ego_speed": 37.98,
-              "npc_speed": 14.2
-            },
-            {
-              "dx0": 14.81,
-              "ego_speed": 39.8,
-              "npc_speed": 13.49
-            },
-            {
-              "dx0": 10.23,
-              "ego_speed": 35.96,
-              "npc_speed": 17.8
-            },
-            {
-              "dx0": 13.29,
-              "ego_speed": 39.33,
-              "npc_speed": 13.95
-            },
-            {
-              "dx0": 14.16,
-              "ego_speed": 35.43,
-              "npc_speed": 10.02
-            },
-            {
-              "dx0": 11.17,
-              "ego_speed": 31.9,
-              "npc_speed": 11.91
-            }
-          ],
-          "initial_exploration_limit": 100,
-          "margin_max_uncertainty": 0.05,
-          "margin_range": [
-            0.3,
-            0.48
-          ],
-          "max_samples": 10000,
-          "min_samples": 500,
-          "stability_history_length": 50,
-          "stability_hysteresis": [
-            0.4,
-            0.6
-          ],
-          "stability_reference_points": 2000,
-          "stability_required_streak": 3,
-          "stability_shift_threshold": 0.01,
-          "step2_max_exploration": 500,
-          "target_priorities": [
-            "c_collision",
-            "c_ttc_0.3",
-            "c_ttc_0.5",
-            "c_ttc_0.7",
-            "c_ttc_0.9",
-            "c_ttc_1.1",
-            "c_ttc_1.2",
-            "c_ttc_1.3",
-            "c_ttc_1.5"
-          ]
-        }
+          "sprt_beta": 0.05,
+          "sprt_confidence": 0.95,
+          "sprt_min_samples": 0,
+          "sprt_p0": 0.1,
+          "sprt_p1": 0.01,
+          "sprt_target": "c_collision"
+        },
+        "simultaneous": false
       },
-      "strategy": "targets.awsim.strategies.active_learning.ActiveLearningStrategist",
-      "target_total": 10
+      "request": null,
+      "strategy": "orchestration.region_sampling.RegionSamplingStrategy",
+      "target_total": null
     },
     "awsim:explore": {
-      "mode_runners": {
-        "binomial_mode": {
-          "class": "BinomialModeRunner",
-          "config": {
-            "anytime_valid": false,
-            "case_kind": "uturn",
-            "confidence": 0.95,
-            "config_module_name": "targets.awsim.case_kinds.uturn",
-            "max_samples": 10,
-            "method": "wilson",
-            "min_samples": 100,
-            "param_names": [
-              "dx0",
-              "ego_speed",
-              "npc_speed"
-            ],
-            "region": "custom",
-            "target": "c_collision",
-            "target_width": 0.02
-          }
-        },
-        "dkw_mode": {
-          "class": "DKWModeRunner",
-          "config": {
-            "base_samples": 50,
-            "case_kind": "uturn",
-            "config_module_name": "targets.awsim.case_kinds.uturn",
-            "max_samples": 10,
-            "minimum_value": 0.0,
-            "param_names": [
-              "dx0",
-              "ego_speed",
-              "npc_speed"
-            ],
-            "pure_smc": false,
-            "region": "custom",
-            "simultaneous": false,
-            "target_epsilon": 0.15,
-            "target_metric": "z_margin",
-            "target_metrics": [
-              "min_ttc",
-              "min_distance"
-            ],
-            "total_delta": 0.05
-          }
-        },
-        "ebstop_mode": {
-          "class": "EBStopModeRunner",
-          "config": {
-            "case_kind": "uturn",
-            "confidence": 0.95,
-            "config_module_name": "targets.awsim.case_kinds.uturn",
-            "epsilon": 0.1,
-            "max_samples": 2000,
-            "param_names": [
-              "dx0",
-              "ego_speed",
-              "npc_speed"
-            ],
-            "region": "custom",
-            "target": "min_ttc",
-            "value_range": [
-              0.0,
-              10.0
-            ]
-          }
-        },
-        "sprt_mode": {
-          "class": "SPRTModeRunner",
-          "config": {
-            "beta": 0.05,
-            "case_kind": "uturn",
-            "confidence": 0.95,
-            "config_module_name": "targets.awsim.case_kinds.uturn",
-            "max_samples": 10,
-            "min_samples": 0,
-            "p0": 0.1,
-            "p1": 0.01,
-            "param_names": [
-              "dx0",
-              "ego_speed",
-              "npc_speed"
-            ],
-            "region": "custom",
-            "target": "c_collision"
-          }
-        }
-      },
       "request": null,
       "strategist": {
         "MAX_SAMPLES": 10000,
@@ -1848,94 +1240,6 @@
       "target_total": 10
     },
     "awsim:focus": {
-      "mode_runners": {
-        "binomial_mode": {
-          "class": "BinomialModeRunner",
-          "config": {
-            "anytime_valid": false,
-            "case_kind": "uturn",
-            "confidence": 0.95,
-            "config_module_name": "targets.awsim.case_kinds.uturn",
-            "max_samples": 10,
-            "method": "wilson",
-            "min_samples": 100,
-            "param_names": [
-              "dx0",
-              "ego_speed",
-              "npc_speed"
-            ],
-            "region": "custom",
-            "target": "c_collision",
-            "target_width": 0.02
-          }
-        },
-        "dkw_mode": {
-          "class": "DKWModeRunner",
-          "config": {
-            "base_samples": 50,
-            "case_kind": "uturn",
-            "config_module_name": "targets.awsim.case_kinds.uturn",
-            "max_samples": 10,
-            "minimum_value": 0.0,
-            "param_names": [
-              "dx0",
-              "ego_speed",
-              "npc_speed"
-            ],
-            "pure_smc": false,
-            "region": "custom",
-            "simultaneous": false,
-            "target_epsilon": 0.15,
-            "target_metric": "z_margin",
-            "target_metrics": [
-              "min_ttc",
-              "min_distance"
-            ],
-            "total_delta": 0.05
-          }
-        },
-        "ebstop_mode": {
-          "class": "EBStopModeRunner",
-          "config": {
-            "case_kind": "uturn",
-            "confidence": 0.95,
-            "config_module_name": "targets.awsim.case_kinds.uturn",
-            "epsilon": 0.1,
-            "max_samples": 2000,
-            "param_names": [
-              "dx0",
-              "ego_speed",
-              "npc_speed"
-            ],
-            "region": "custom",
-            "target": "min_ttc",
-            "value_range": [
-              0.0,
-              10.0
-            ]
-          }
-        },
-        "sprt_mode": {
-          "class": "SPRTModeRunner",
-          "config": {
-            "beta": 0.05,
-            "case_kind": "uturn",
-            "confidence": 0.95,
-            "config_module_name": "targets.awsim.case_kinds.uturn",
-            "max_samples": 10,
-            "min_samples": 0,
-            "p0": 0.1,
-            "p1": 0.01,
-            "param_names": [
-              "dx0",
-              "ego_speed",
-              "npc_speed"
-            ],
-            "region": "custom",
-            "target": "c_collision"
-          }
-        }
-      },
       "request": null,
       "strategist": {
         "MAX_SAMPLES": 10000,
@@ -2025,94 +1329,6 @@
       "target_total": 10
     },
     "awsim:jama_edge": {
-      "mode_runners": {
-        "binomial_mode": {
-          "class": "BinomialModeRunner",
-          "config": {
-            "anytime_valid": false,
-            "case_kind": "uturn",
-            "confidence": 0.95,
-            "config_module_name": "targets.awsim.case_kinds.uturn",
-            "max_samples": 10,
-            "method": "wilson",
-            "min_samples": 100,
-            "param_names": [
-              "dx0",
-              "ego_speed",
-              "npc_speed"
-            ],
-            "region": "custom",
-            "target": "c_collision",
-            "target_width": 0.02
-          }
-        },
-        "dkw_mode": {
-          "class": "DKWModeRunner",
-          "config": {
-            "base_samples": 50,
-            "case_kind": "uturn",
-            "config_module_name": "targets.awsim.case_kinds.uturn",
-            "max_samples": 10,
-            "minimum_value": 0.0,
-            "param_names": [
-              "dx0",
-              "ego_speed",
-              "npc_speed"
-            ],
-            "pure_smc": false,
-            "region": "custom",
-            "simultaneous": false,
-            "target_epsilon": 0.15,
-            "target_metric": "z_margin",
-            "target_metrics": [
-              "min_ttc",
-              "min_distance"
-            ],
-            "total_delta": 0.05
-          }
-        },
-        "ebstop_mode": {
-          "class": "EBStopModeRunner",
-          "config": {
-            "case_kind": "uturn",
-            "confidence": 0.95,
-            "config_module_name": "targets.awsim.case_kinds.uturn",
-            "epsilon": 0.1,
-            "max_samples": 2000,
-            "param_names": [
-              "dx0",
-              "ego_speed",
-              "npc_speed"
-            ],
-            "region": "custom",
-            "target": "min_ttc",
-            "value_range": [
-              0.0,
-              10.0
-            ]
-          }
-        },
-        "sprt_mode": {
-          "class": "SPRTModeRunner",
-          "config": {
-            "beta": 0.05,
-            "case_kind": "uturn",
-            "confidence": 0.95,
-            "config_module_name": "targets.awsim.case_kinds.uturn",
-            "max_samples": 10,
-            "min_samples": 0,
-            "p0": 0.1,
-            "p1": 0.01,
-            "param_names": [
-              "dx0",
-              "ego_speed",
-              "npc_speed"
-            ],
-            "region": "custom",
-            "target": "c_collision"
-          }
-        }
-      },
       "request": null,
       "strategist": {
         "MAX_SAMPLES": 10000,
@@ -2202,94 +1418,6 @@
       "target_total": 10
     },
     "awsim:margin": {
-      "mode_runners": {
-        "binomial_mode": {
-          "class": "BinomialModeRunner",
-          "config": {
-            "anytime_valid": false,
-            "case_kind": "uturn",
-            "confidence": 0.95,
-            "config_module_name": "targets.awsim.case_kinds.uturn",
-            "max_samples": 10,
-            "method": "wilson",
-            "min_samples": 100,
-            "param_names": [
-              "dx0",
-              "ego_speed",
-              "npc_speed"
-            ],
-            "region": "custom",
-            "target": "c_collision",
-            "target_width": 0.02
-          }
-        },
-        "dkw_mode": {
-          "class": "DKWModeRunner",
-          "config": {
-            "base_samples": 50,
-            "case_kind": "uturn",
-            "config_module_name": "targets.awsim.case_kinds.uturn",
-            "max_samples": 10,
-            "minimum_value": 0.0,
-            "param_names": [
-              "dx0",
-              "ego_speed",
-              "npc_speed"
-            ],
-            "pure_smc": false,
-            "region": "custom",
-            "simultaneous": false,
-            "target_epsilon": 0.15,
-            "target_metric": "z_margin",
-            "target_metrics": [
-              "min_ttc",
-              "min_distance"
-            ],
-            "total_delta": 0.05
-          }
-        },
-        "ebstop_mode": {
-          "class": "EBStopModeRunner",
-          "config": {
-            "case_kind": "uturn",
-            "confidence": 0.95,
-            "config_module_name": "targets.awsim.case_kinds.uturn",
-            "epsilon": 0.1,
-            "max_samples": 2000,
-            "param_names": [
-              "dx0",
-              "ego_speed",
-              "npc_speed"
-            ],
-            "region": "custom",
-            "target": "min_ttc",
-            "value_range": [
-              0.0,
-              10.0
-            ]
-          }
-        },
-        "sprt_mode": {
-          "class": "SPRTModeRunner",
-          "config": {
-            "beta": 0.05,
-            "case_kind": "uturn",
-            "confidence": 0.95,
-            "config_module_name": "targets.awsim.case_kinds.uturn",
-            "max_samples": 10,
-            "min_samples": 0,
-            "p0": 0.1,
-            "p1": 0.01,
-            "param_names": [
-              "dx0",
-              "ego_speed",
-              "npc_speed"
-            ],
-            "region": "custom",
-            "target": "c_collision"
-          }
-        }
-      },
       "request": null,
       "strategist": {
         "MAX_SAMPLES": 10000,
@@ -2445,271 +1573,75 @@
       "target_total": null
     },
     "awsim:sprt": {
-      "mode_runners": {
-        "binomial_mode": {
-          "class": "BinomialModeRunner",
-          "config": {
-            "anytime_valid": false,
-            "case_kind": "uturn",
-            "confidence": 0.95,
-            "config_module_name": "targets.awsim.case_kinds.uturn",
-            "max_samples": 10,
-            "method": "wilson",
-            "min_samples": 100,
-            "param_names": [
-              "dx0",
-              "ego_speed",
-              "npc_speed"
-            ],
-            "region": "custom",
-            "target": "c_collision",
-            "target_width": 0.02
-          }
-        },
+      "region_sampling": {
+        "bounds": null,
         "dkw_mode": {
-          "class": "DKWModeRunner",
-          "config": {
-            "base_samples": 50,
-            "case_kind": "uturn",
-            "config_module_name": "targets.awsim.case_kinds.uturn",
-            "max_samples": 10,
-            "minimum_value": 0.0,
-            "param_names": [
-              "dx0",
-              "ego_speed",
-              "npc_speed"
-            ],
-            "pure_smc": false,
-            "region": "custom",
-            "simultaneous": false,
-            "target_epsilon": 0.15,
-            "target_metric": "z_margin",
-            "target_metrics": [
-              "min_ttc",
-              "min_distance"
-            ],
-            "total_delta": 0.05
-          }
+          "base_samples": 50,
+          "case_kind": "uturn",
+          "config_module_name": "targets.awsim.case_kinds.uturn",
+          "max_samples": 10,
+          "minimum_value": 0.0,
+          "param_names": [
+            "dx0",
+            "ego_speed",
+            "npc_speed"
+          ],
+          "pure_smc": false,
+          "region": "custom",
+          "simultaneous": false,
+          "target_epsilon": 0.15,
+          "target_metric": "z_margin",
+          "target_metrics": [
+            "min_ttc",
+            "min_distance"
+          ],
+          "total_delta": 0.05
         },
-        "ebstop_mode": {
-          "class": "EBStopModeRunner",
-          "config": {
-            "case_kind": "uturn",
-            "confidence": 0.95,
-            "config_module_name": "targets.awsim.case_kinds.uturn",
-            "epsilon": 0.1,
-            "max_samples": 2000,
-            "param_names": [
-              "dx0",
-              "ego_speed",
-              "npc_speed"
-            ],
-            "region": "custom",
-            "target": "min_ttc",
-            "value_range": [
-              0.0,
-              10.0
-            ]
-          }
-        },
-        "sprt_mode": {
-          "class": "SPRTModeRunner",
-          "config": {
-            "beta": 0.05,
-            "case_kind": "uturn",
-            "confidence": 0.95,
-            "config_module_name": "targets.awsim.case_kinds.uturn",
-            "max_samples": 10,
-            "min_samples": 0,
-            "p0": 0.1,
-            "p1": 0.01,
-            "param_names": [
-              "dx0",
-              "ego_speed",
-              "npc_speed"
-            ],
-            "region": "custom",
-            "target": "c_collision"
-          }
-        }
-      },
-      "request": null,
-      "strategist": {
-        "MAX_SAMPLES": 10000,
+        "dkw_target_metric": "z_margin",
+        "dkw_target_metrics": [
+          "min_ttc",
+          "min_distance"
+        ],
+        "max_samples": 10,
         "param_names": [
           "dx0",
           "ego_speed",
           "npc_speed"
         ],
+        "pure_smc": false,
         "random_seed": 42,
+        "region": "custom",
         "run_mode": "sprt",
         "scenario_name": "uturn",
-        "strategy_settings": {
-          "binomial_ci_confidence": 0.95,
-          "binomial_ci_method": "wilson",
-          "binomial_ci_min_samples": 100,
-          "binomial_ci_target": "c_collision",
-          "binomial_ci_target_width": 0.02,
-          "dkw_target_metric": "z_margin",
-          "dkw_target_metrics": [
-            "min_ttc",
-            "min_distance"
+        "settings": {
+          "binomial_anytime_valid": false,
+          "binomial_confidence": 0.95,
+          "binomial_method": "wilson",
+          "binomial_min_samples": 100,
+          "binomial_target": "c_collision",
+          "binomial_target_width": 0.02,
+          "ebstop_confidence": 0.95,
+          "ebstop_epsilon": 0.1,
+          "ebstop_max_samples": 2000,
+          "ebstop_target": "min_ttc",
+          "ebstop_value_range": [
+            0.0,
+            10.0
           ],
-          "focus_noise": 0.05,
-          "focus_points": [
-            {
-              "dx0": 10.09,
-              "ego_speed": 37.98,
-              "npc_speed": 14.2
-            },
-            {
-              "dx0": 14.81,
-              "ego_speed": 39.8,
-              "npc_speed": 13.49
-            },
-            {
-              "dx0": 10.23,
-              "ego_speed": 35.96,
-              "npc_speed": 17.8
-            },
-            {
-              "dx0": 13.29,
-              "ego_speed": 39.33,
-              "npc_speed": 13.95
-            },
-            {
-              "dx0": 14.16,
-              "ego_speed": 35.43,
-              "npc_speed": 10.02
-            },
-            {
-              "dx0": 11.17,
-              "ego_speed": 31.9,
-              "npc_speed": 11.91
-            }
-          ],
-          "initial_exploration_limit": 100,
-          "margin_max_uncertainty": 0.05,
-          "margin_range": [
-            0.3,
-            0.48
-          ],
-          "max_samples": 10000,
-          "min_samples": 500,
-          "stability_history_length": 50,
-          "stability_hysteresis": [
-            0.4,
-            0.6
-          ],
-          "stability_reference_points": 2000,
-          "stability_required_streak": 3,
-          "stability_shift_threshold": 0.01,
-          "step2_max_exploration": 500,
-          "target_priorities": [
-            "c_collision",
-            "c_ttc_0.3",
-            "c_ttc_0.5",
-            "c_ttc_0.7",
-            "c_ttc_0.9",
-            "c_ttc_1.1",
-            "c_ttc_1.2",
-            "c_ttc_1.3",
-            "c_ttc_1.5"
-          ]
-        }
+          "sprt_beta": 0.05,
+          "sprt_confidence": 0.95,
+          "sprt_min_samples": 0,
+          "sprt_p0": 0.1,
+          "sprt_p1": 0.01,
+          "sprt_target": "c_collision"
+        },
+        "simultaneous": false
       },
-      "strategy": "targets.awsim.strategies.active_learning.ActiveLearningStrategist",
-      "target_total": 10
+      "request": null,
+      "strategy": "orchestration.region_sampling.RegionSamplingStrategy",
+      "target_total": null
     },
     "awsim:ttc_edge": {
-      "mode_runners": {
-        "binomial_mode": {
-          "class": "BinomialModeRunner",
-          "config": {
-            "anytime_valid": false,
-            "case_kind": "uturn",
-            "confidence": 0.95,
-            "config_module_name": "targets.awsim.case_kinds.uturn",
-            "max_samples": 10,
-            "method": "wilson",
-            "min_samples": 100,
-            "param_names": [
-              "dx0",
-              "ego_speed",
-              "npc_speed"
-            ],
-            "region": "custom",
-            "target": "c_collision",
-            "target_width": 0.02
-          }
-        },
-        "dkw_mode": {
-          "class": "DKWModeRunner",
-          "config": {
-            "base_samples": 50,
-            "case_kind": "uturn",
-            "config_module_name": "targets.awsim.case_kinds.uturn",
-            "max_samples": 10,
-            "minimum_value": 0.0,
-            "param_names": [
-              "dx0",
-              "ego_speed",
-              "npc_speed"
-            ],
-            "pure_smc": false,
-            "region": "custom",
-            "simultaneous": false,
-            "target_epsilon": 0.15,
-            "target_metric": "z_margin",
-            "target_metrics": [
-              "min_ttc",
-              "min_distance"
-            ],
-            "total_delta": 0.05
-          }
-        },
-        "ebstop_mode": {
-          "class": "EBStopModeRunner",
-          "config": {
-            "case_kind": "uturn",
-            "confidence": 0.95,
-            "config_module_name": "targets.awsim.case_kinds.uturn",
-            "epsilon": 0.1,
-            "max_samples": 2000,
-            "param_names": [
-              "dx0",
-              "ego_speed",
-              "npc_speed"
-            ],
-            "region": "custom",
-            "target": "min_ttc",
-            "value_range": [
-              0.0,
-              10.0
-            ]
-          }
-        },
-        "sprt_mode": {
-          "class": "SPRTModeRunner",
-          "config": {
-            "beta": 0.05,
-            "case_kind": "uturn",
-            "confidence": 0.95,
-            "config_module_name": "targets.awsim.case_kinds.uturn",
-            "max_samples": 10,
-            "min_samples": 0,
-            "p0": 0.1,
-            "p1": 0.01,
-            "param_names": [
-              "dx0",
-              "ego_speed",
-              "npc_speed"
-            ],
-            "region": "custom",
-            "target": "c_collision"
-          }
-        }
-      },
       "request": null,
       "strategist": {
         "MAX_SAMPLES": 10000,
@@ -2799,94 +1731,6 @@
       "target_total": 10
     },
     "awsim:verify_consistency": {
-      "mode_runners": {
-        "binomial_mode": {
-          "class": "BinomialModeRunner",
-          "config": {
-            "anytime_valid": false,
-            "case_kind": "uturn",
-            "confidence": 0.95,
-            "config_module_name": "targets.awsim.case_kinds.uturn",
-            "max_samples": 10,
-            "method": "wilson",
-            "min_samples": 100,
-            "param_names": [
-              "dx0",
-              "ego_speed",
-              "npc_speed"
-            ],
-            "region": "custom",
-            "target": "c_collision",
-            "target_width": 0.02
-          }
-        },
-        "dkw_mode": {
-          "class": "DKWModeRunner",
-          "config": {
-            "base_samples": 50,
-            "case_kind": "uturn",
-            "config_module_name": "targets.awsim.case_kinds.uturn",
-            "max_samples": 10,
-            "minimum_value": 0.0,
-            "param_names": [
-              "dx0",
-              "ego_speed",
-              "npc_speed"
-            ],
-            "pure_smc": false,
-            "region": "custom",
-            "simultaneous": false,
-            "target_epsilon": 0.15,
-            "target_metric": "z_margin",
-            "target_metrics": [
-              "min_ttc",
-              "min_distance"
-            ],
-            "total_delta": 0.05
-          }
-        },
-        "ebstop_mode": {
-          "class": "EBStopModeRunner",
-          "config": {
-            "case_kind": "uturn",
-            "confidence": 0.95,
-            "config_module_name": "targets.awsim.case_kinds.uturn",
-            "epsilon": 0.1,
-            "max_samples": 2000,
-            "param_names": [
-              "dx0",
-              "ego_speed",
-              "npc_speed"
-            ],
-            "region": "custom",
-            "target": "min_ttc",
-            "value_range": [
-              0.0,
-              10.0
-            ]
-          }
-        },
-        "sprt_mode": {
-          "class": "SPRTModeRunner",
-          "config": {
-            "beta": 0.05,
-            "case_kind": "uturn",
-            "confidence": 0.95,
-            "config_module_name": "targets.awsim.case_kinds.uturn",
-            "max_samples": 10,
-            "min_samples": 0,
-            "p0": 0.1,
-            "p1": 0.01,
-            "param_names": [
-              "dx0",
-              "ego_speed",
-              "npc_speed"
-            ],
-            "region": "custom",
-            "target": "c_collision"
-          }
-        }
-      },
       "request": null,
       "strategist": {
         "MAX_SAMPLES": 10000,
@@ -2976,94 +1820,6 @@
       "target_total": null
     },
     "awsim:worst_ttc": {
-      "mode_runners": {
-        "binomial_mode": {
-          "class": "BinomialModeRunner",
-          "config": {
-            "anytime_valid": false,
-            "case_kind": "uturn",
-            "confidence": 0.95,
-            "config_module_name": "targets.awsim.case_kinds.uturn",
-            "max_samples": 10,
-            "method": "wilson",
-            "min_samples": 100,
-            "param_names": [
-              "dx0",
-              "ego_speed",
-              "npc_speed"
-            ],
-            "region": "custom",
-            "target": "c_collision",
-            "target_width": 0.02
-          }
-        },
-        "dkw_mode": {
-          "class": "DKWModeRunner",
-          "config": {
-            "base_samples": 50,
-            "case_kind": "uturn",
-            "config_module_name": "targets.awsim.case_kinds.uturn",
-            "max_samples": 10,
-            "minimum_value": 0.0,
-            "param_names": [
-              "dx0",
-              "ego_speed",
-              "npc_speed"
-            ],
-            "pure_smc": false,
-            "region": "custom",
-            "simultaneous": false,
-            "target_epsilon": 0.15,
-            "target_metric": "z_margin",
-            "target_metrics": [
-              "min_ttc",
-              "min_distance"
-            ],
-            "total_delta": 0.05
-          }
-        },
-        "ebstop_mode": {
-          "class": "EBStopModeRunner",
-          "config": {
-            "case_kind": "uturn",
-            "confidence": 0.95,
-            "config_module_name": "targets.awsim.case_kinds.uturn",
-            "epsilon": 0.1,
-            "max_samples": 2000,
-            "param_names": [
-              "dx0",
-              "ego_speed",
-              "npc_speed"
-            ],
-            "region": "custom",
-            "target": "min_ttc",
-            "value_range": [
-              0.0,
-              10.0
-            ]
-          }
-        },
-        "sprt_mode": {
-          "class": "SPRTModeRunner",
-          "config": {
-            "beta": 0.05,
-            "case_kind": "uturn",
-            "confidence": 0.95,
-            "config_module_name": "targets.awsim.case_kinds.uturn",
-            "max_samples": 10,
-            "min_samples": 0,
-            "p0": 0.1,
-            "p1": 0.01,
-            "param_names": [
-              "dx0",
-              "ego_speed",
-              "npc_speed"
-            ],
-            "region": "custom",
-            "target": "c_collision"
-          }
-        }
-      },
       "request": null,
       "strategist": {
         "MAX_SAMPLES": 10000,

@@ -8,7 +8,7 @@ import pandas as pd
 from contracts.evaluation import EvaluationRecord
 from contracts.statistics import StatisticalReport, StatisticalRequest
 from evaluation.dkw import records_to_data_frame
-import point_extractors
+from evaluation.region_filter import RegionVocabulary, filter_rows
 
 
 def sprt_decide(
@@ -92,6 +92,7 @@ def calculate_sprt_decision(
     beta: float,
     bounds: dict[str, tuple[float, float]] | None = None,
     region: str = "custom",
+    vocabulary: RegionVocabulary | None = None,
     reason_pattern: str | None = None,
 ) -> dict[str, object] | None:
     if df is None or df.empty or target_column not in df.columns:
@@ -106,9 +107,10 @@ def calculate_sprt_decision(
         working_df = working_df[reason_series.str.contains(reason_pattern, na=False)]
 
     try:
-        working_df = point_extractors.filter_by_region_and_bounds(
+        working_df = filter_rows(
             working_df,
             region=region,
+            vocabulary=vocabulary,
             bounds=bounds,
         )
     except Exception:
@@ -157,6 +159,7 @@ def _resolve_two_sided_decision(
     gamma: float,
     bounds: dict[str, tuple[float, float]] | None,
     region: str,
+    vocabulary: RegionVocabulary | None = None,
     reason_pattern: str | None,
 ) -> dict[str, object] | None:
     """Younes (2006) sec. 5: two simultaneous one-sided SPRTs with an
@@ -172,6 +175,7 @@ def _resolve_two_sided_decision(
         beta=gamma,
         bounds=bounds,
         region=region,
+        vocabulary=vocabulary,
         reason_pattern=reason_pattern,
     )
     minus = calculate_sprt_decision(
@@ -183,6 +187,7 @@ def _resolve_two_sided_decision(
         beta=beta,
         bounds=bounds,
         region=region,
+        vocabulary=vocabulary,
         reason_pattern=reason_pattern,
     )
     if plus is None or minus is None:
@@ -223,6 +228,7 @@ class SPRTService:
         request: StatisticalRequest,
     ) -> StatisticalReport:
         region = str(request.options.get("region", "custom"))
+        vocabulary = request.options.get("region_vocabulary")
         min_samples = int(request.options.get("min_samples", 0))
         max_samples = request.options.get("max_samples")
         resolved_max_samples = int(max_samples) if max_samples is not None else None
@@ -250,6 +256,7 @@ class SPRTService:
                 gamma=float(gamma),
                 bounds=request.bounds,
                 region=region,
+                vocabulary=vocabulary,
                 reason_pattern=reason_pattern,
             )
             decided_verdicts = {"true", "false", "undecided"}
@@ -266,6 +273,7 @@ class SPRTService:
                 beta=beta,
                 bounds=request.bounds,
                 region=region,
+                vocabulary=vocabulary,
                 reason_pattern=reason_pattern,
             )
             decided_verdicts = {"h0", "h1"}

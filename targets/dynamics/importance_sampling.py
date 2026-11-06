@@ -11,30 +11,16 @@ Two plan formats are supported:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Mapping
 
 from contracts.execution import TestCase
-from orchestration.fixed_importance_sampling import (
-    run_fixed_importance_sampling_comparison,
-    run_strict_fixed_importance_sampling_comparison,
-)
-from orchestration.sampling_plan import SamplingPlan, load_sampling_plan
-from orchestration.seeding import (
-    PAIRINGS,
-    PHASES,
-    RNG_POLICY_VERSION,
-    legacy_sample_seed,
-    new_root_entropy,
-    stream_seed,
-)
-from runtime.repository.importance_experiment_manifest import (
-    ExperimentManifest,
-    load_manifest,
-    save_or_verify_manifest,
-)
-from runtime.repository.importance_sampling_results import ImportanceSamplingResultsRepository
+from contracts.importance_sampling_plugin import CaseRequest, PreparedTarget
+from contracts.target_plugin import TargetComponents
+from orchestration.importance.runner import ImportanceRunConfig, ImportanceSamplingRunner
+from orchestration.sampling_plan import SamplingPlan
+from orchestration.seeding import PAIRINGS, PHASES
 from targets.dynamics.sampling import DynamicsInputSampler, DynamicsModelSampler, is_dynamics_schema_v2
 
 
@@ -53,6 +39,8 @@ class DynamicsImportanceSamplingRunConfig:
     root_entropy: int | None = None
     pairing: str = "independent"
     retry_failed: bool = False
+    # Attempts per sample in total: a failed sample is run again (same streams).
+    max_attempts: int = 3
 
     def __post_init__(self) -> None:
         if self.max_samples < 1:
@@ -65,11 +53,12 @@ class DynamicsImportanceSamplingRunConfig:
 
 
 class DynamicsImportanceSamplingRunner:
-    """Compare IID P inputs with a human-configured, fixed input proposal Q.
+    """Compatible entry point: the shared runner with the dynamics hooks.
 
-    This runner intentionally does not adjust Q, modify the dynamics model, or
-    add a sequential stop rule.  Those concerns remain outside the initial
-    input-distribution importance-sampling scope.
+    v1 plans (U-turn inputs): legacy seeds ``seed * 1_000_000 + index``, shared
+    by the ordinary and importance runs, count-based resume. v2 plans
+    (registered models): manifest, per-sample streams, resume by sample id and
+    a completion audit (docs/sde_importance_sampling_plan.md §7).
     """
 
     def __init__(self, *, backend: object, result_interpreter: object):
@@ -77,225 +66,160 @@ class DynamicsImportanceSamplingRunner:
         self.result_interpreter = result_interpreter
 
     def run_fixed_samples(self, config: DynamicsImportanceSamplingRunConfig) -> dict[str, object]:
-        plan = load_sampling_plan(config.sampling_plan_path)
-        if is_dynamics_schema_v2(plan):
-            return self._run_v2(plan, config)
-        if config.metric is None:
-            config = replace(config, metric="c_collision")
-        sampler = DynamicsInputSampler(plan)
-        repository = ImportanceSamplingResultsRepository(config.output_root)
-        seed_generated = config.seed is None
-        if seed_generated:
-            # Without an outer seed every case would keep the plan's fixed
-            # sde_seed, so all SDE paths would share one noise realisation.
-            config = replace(config, seed=new_root_entropy() % (1 << 31))
-        result = run_fixed_importance_sampling_comparison(
-            backend=self.backend,
-            result_interpreter=self.result_interpreter,
-            repository=repository,
+        runner = ImportanceSamplingRunner(
+            backend=self.backend, result_interpreter=self.result_interpreter, hooks=DynamicsImportanceSampling(),
+        )
+        return runner.run_fixed_samples(ImportanceRunConfig(
+            sampling_plan_path=config.sampling_plan_path,
+            output_root=config.output_root,
             max_samples=config.max_samples,
-            build_case=lambda run_kind, index: self._build_case(
-                run_kind=run_kind, index=index, sampler=sampler, config=config,
-            ),
             metric=config.metric,
             confidence=config.confidence,
-            plan_id=plan.experiment_id,
-        )
-        result["comparison"].update({"sampling_seed": config.seed, "sampling_seed_generated": seed_generated})
-        repository.save_comparison(result["comparison"])
-        return result
-
-    def _run_v2(self, plan: SamplingPlan, config: DynamicsImportanceSamplingRunConfig) -> dict[str, object]:
-        sampler = DynamicsModelSampler(plan)
-        metric = config.metric or sampler.adapter.default_binary_metric
-        root_entropy = config.root_entropy
-        if root_entropy is None:
-            stored = load_manifest(config.output_root)
-            root_entropy = int(stored.rng["root_entropy"]) if stored is not None else new_root_entropy()
-        manifest = save_or_verify_manifest(
-            config.output_root,
-            ExperimentManifest(
-                experiment_id=plan.experiment_id,
-                target_definition={
-                    "target_measure_id": plan.target_measure_id,
-                    "definition": sampler.target_definition,
-                    "params_override": dict(config.params),
-                },
-                proposal_definition={
-                    "proposal_id": plan.proposal_id,
-                    "definition": sampler.proposal_definition,
-                },
-                numerics=sampler.numerics,
-                rng={
-                    "policy_version": RNG_POLICY_VERSION,
-                    "root_entropy": str(root_entropy),
-                    "phase": config.phase,
-                    "pairing": config.pairing,
-                },
-                planned_samples=config.max_samples,
-                metric=metric,
-            ),
-        )
-        return run_strict_fixed_importance_sampling_comparison(
-            backend=self.backend,
-            result_interpreter=self.result_interpreter,
-            repository=ImportanceSamplingResultsRepository(config.output_root),
-            manifest=manifest,
-            build_case=lambda run_kind, index: self._build_case_v2(
-                run_kind=run_kind, index=index, sampler=sampler, config=config,
-                root_entropy=root_entropy,
-            ),
-            metric=metric,
-            confidence=config.confidence,
+            seed=config.seed,
+            params=config.params,
+            phase=config.phase,
+            root_entropy=config.root_entropy,
+            pairing=config.pairing,
             retry_failed=config.retry_failed,
+            max_attempts=config.max_attempts,
+        ))
+
+
+class DynamicsImportanceSampling:
+    """Importance-sampling hooks of the dynamics plugin (contracts/importance_sampling_plugin.py)."""
+
+    # The keys of proposal.definition that make up a Brownian-path proposal (pilot trials replace them).
+    proposal_keys = ("noise", "noise_path_q")
+
+    def exact_probability(self, plan: SamplingPlan) -> float:
+        """The exact probability of the event of a v2 plan, for the models that have one (A and B)."""
+        from targets.dynamics.models.exact import (
+            ou_augmented_terminal_exceedance_probability,
+            ou_terminal_exceedance_probability,
         )
 
-    @staticmethod
-    def _build_case_v2(
-        *,
-        run_kind: str,
-        index: int,
-        sampler: DynamicsModelSampler,
-        config: DynamicsImportanceSamplingRunConfig,
-        root_entropy: int,
-    ) -> TestCase:
-        if run_kind not in {"ordinary", "importance"}:
-            raise ValueError("run_kind must be 'ordinary' or 'importance'")
-
-        def seed_for(stream: str) -> int:
-            return stream_seed(
-                root_entropy, phase=config.phase, run_kind=run_kind, sample_index=index,
-                stream=stream, pairing=config.pairing,
+        definition = plan.target_measure_definition
+        solver, event, params = definition["solver"], definition["event"], definition["model_params"]
+        steps = round(float(solver["horizon_sec"]) / float(solver["dt_sec"]))
+        if definition["model_id"] == "ou_scalar":
+            return ou_terminal_exceedance_probability(
+                theta=params["theta"], sigma=params["sigma"], h=solver["dt_sec"], steps=steps,
+                threshold=event["threshold"], side=event.get("side", "upper"),
+                x0=float(definition["initial_law"]["value"][0]),
             )
-
-        importance = run_kind == "importance"
-        return TestCase(
-            case_id=f"{sampler.plan.experiment_id}-{run_kind}-{index:06d}",
-            target="dynamics",
-            case_kind=sampler.case_kind,
-            input={
-                **sampler.execution_inputs,
-                **config.params,
-                **(sampler.proposal_inputs if importance else {}),
-                "sde_seed": seed_for("innovation"),
-                "sde_mixture_seed": seed_for("mixture_choice"),
-                "execution_kind": "sample_path",
-                "record_kind": "sample",
-                "sample_index": index,
-                "sampling_plan_path": str(Path(config.sampling_plan_path).resolve()),
-            },
-            reason=f"DYNAMICS_IMPORTANCE_{run_kind.upper()}: {sampler.plan.experiment_id} sample={index}",
-            meta={
-                "sampling": sampler.proposal_metadata() if importance else sampler.target_metadata(),
-                "source_module": "targets.dynamics.importance_sampling",
-            },
-        )
-
-    @staticmethod
-    def _build_case(
-        *,
-        run_kind: str,
-        index: int,
-        sampler: DynamicsInputSampler,
-        config: DynamicsImportanceSamplingRunConfig,
-    ) -> TestCase:
-        sample_seed = _sample_seed(config.seed, index)
-        if run_kind == "ordinary":
-            sampled = sampler.sample_target(seed=sample_seed)
-        elif run_kind == "importance":
-            sampled = sampler.sample_proposal(seed=sample_seed)
-        else:
-            raise ValueError("run_kind must be 'ordinary' or 'importance'")
-        return TestCase(
-            case_id=f"{sampler.plan.experiment_id}-{run_kind}-{index:05d}",
-            target="dynamics",
-            case_kind=sampler.case_kind,
-            input={
-                **sampler.execution_inputs,
-                **config.params,
-                **(
-                    {"noise_path_q": sampler.sde_noise_proposal}
-                    if run_kind == "importance" and sampler.sde_noise_proposal is not None
-                    else {}
-                ),
-                **(
-                    {"sde_seed": sample_seed}
-                    if sampler.execution_inputs.get("solver_kind") == "sde" and sample_seed is not None
-                    else {}
-                ),
-                "model_id": sampler.model_id,
-                **sampled.values,
-                "execution_kind": "sample_path",
-                "record_kind": "sample",
-                "sample_index": index,
-                "sampling_seed": sample_seed,
-                "sampling_plan_path": str(Path(config.sampling_plan_path).resolve()),
-            },
-            reason=f"DYNAMICS_IMPORTANCE_{run_kind.upper()}: {sampler.plan.experiment_id} sample={index}",
-            meta={
-                "sampling": sampled.sampling_metadata,
-                "source_module": "targets.dynamics.importance_sampling",
-            },
-        )
-
-
-def _sample_seed(seed: int | None, index: int) -> int | None:
-    return legacy_sample_seed(seed, index)
-
-
-class DynamicsImportanceSamplingSupport:
-    """Importance-sampling hook of the dynamics plugin (v1 U-turn inputs, v2 registered models)."""
+        if definition["model_id"] == "ou_augmented":
+            c0, x0 = (float(value) for value in definition["initial_law"]["value"])
+            return ou_augmented_terminal_exceedance_probability(
+                **params, h=solver["dt_sec"], steps=steps, threshold=event["threshold"],
+                side=event.get("side", "upper"), state=event.get("state", "c"), c0=c0, x0=x0,
+            )
+        raise ValueError(f"no exact probability for model {definition['model_id']!r}")
 
     def add_arguments(self, parser) -> None:
-        parser.add_argument(
-            "--phase", choices=sorted(PHASES), default="final",
-            help="v2: random-stream phase; pilot runs never share streams with final runs",
-        )
-        parser.add_argument(
-            "--root-entropy", type=int, default=None,
-            help="v2: 128-bit root of all random streams; default: reuse the manifest's, or draw a new one",
-        )
-        parser.add_argument(
-            "--pairing", choices=list(PAIRINGS), default="independent",
-            help="v2: 'paired' uses the same streams for the ordinary and importance runs",
-        )
         parser.add_argument(
             "--artifacts", choices=["files", "summary"], default="files",
             help="registered models: 'summary' keeps trajectories in memory and stores only the judged records",
         )
-        parser.add_argument(
-            "--retry-failed", action="store_true",
-            help="v2: retry samples whose latest attempt failed, with the same inputs and streams",
-        )
 
-    def run(self, args) -> dict[str, object]:
+    def build_components(self, args) -> TargetComponents:
         from targets.dynamics.backend import DynamicsBackend, DynamicsBackendConfig
         from targets.dynamics.result_interpreter import DynamicsResultInterpreter
 
-        if args.max_samples is None:
-            raise ValueError("--max-samples is required")
-        backend = DynamicsBackend(DynamicsBackendConfig(
-            output_root=Path(args.output_root) / "artifacts", artifact_policy=args.artifacts,
-        ))
-        runner = DynamicsImportanceSamplingRunner(backend=backend, result_interpreter=DynamicsResultInterpreter())
-        return runner.run_fixed_samples(
-            DynamicsImportanceSamplingRunConfig(
-                sampling_plan_path=args.sampling_plan,
-                output_root=args.output_root,
-                max_samples=args.max_samples,
-                metric=args.metric,
-                confidence=args.confidence,
-                seed=args.sampling_seed,
-                phase=args.phase,
-                root_entropy=args.root_entropy,
-                pairing=args.pairing,
-                retry_failed=args.retry_failed,
-            )
+        return TargetComponents(
+            backend=DynamicsBackend(DynamicsBackendConfig(
+                output_root=Path(args.output_root) / "artifacts", artifact_policy=args.artifacts,
+            )),
+            result_interpreter=DynamicsResultInterpreter(),
         )
+
+    def prepare(self, plan: SamplingPlan, config) -> PreparedTarget:
+        if is_dynamics_schema_v2(plan):
+            model = DynamicsModelSampler(plan)
+            return PreparedTarget(
+                default_metric=model.adapter.default_binary_metric,
+                seed_policy="streams",
+                internal_proposal=model.internal_proposal,
+                random_streams=("innovation", "mixture_choice"),
+                target_definition=model.target_definition,
+                proposal_definition=model.proposal_definition,
+                numerics=model.numerics,
+                state=model,
+            )
+        sampler = DynamicsInputSampler(plan)
+        return PreparedTarget(
+            default_metric="c_collision",
+            seed_policy="legacy",
+            input_laws=sampler.laws,
+            internal_proposal=sampler.internal_proposal,
+            draw_seed_when_missing=True,
+            state=sampler,
+        )
+
+    def build_case(self, request: CaseRequest) -> TestCase:
+        if isinstance(request.prepared.state, DynamicsModelSampler):
+            return _build_case_v2(request, request.prepared.state)
+        return _build_case_v1(request, request.prepared.state)
+
+
+def _build_case_v2(request: CaseRequest, model: DynamicsModelSampler) -> TestCase:
+    importance = request.run_kind == "importance"
+    return TestCase(
+        case_id=f"{model.plan.experiment_id}-{request.run_kind}-{request.sample_index:06d}",
+        target="dynamics",
+        case_kind=model.case_kind,
+        input={
+            **model.execution_inputs,
+            **request.params,
+            **(model.proposal_inputs if importance else {}),
+            "sde_seed": request.seeds["innovation"],
+            "sde_mixture_seed": request.seeds["mixture_choice"],
+            # The proposal component chosen by the shared code.
+            **({"sde_component": request.component} if request.component is not None else {}),
+            "execution_kind": "sample_path",
+            "record_kind": "sample",
+            "sample_index": request.sample_index,
+            "sampling_plan_path": request.sampling_plan_path,
+        },
+        reason=f"DYNAMICS_IMPORTANCE_{request.run_kind.upper()}: {model.plan.experiment_id} sample={request.sample_index}",
+        meta={"sampling": dict(request.sampling or {}), "source_module": "targets.dynamics.importance_sampling"},
+    )
+
+
+def _build_case_v1(request: CaseRequest, sampler: DynamicsInputSampler) -> TestCase:
+    sample_seed = request.seeds["sample"]
+    importance = request.run_kind == "importance"
+    return TestCase(
+        case_id=f"{sampler.plan.experiment_id}-{request.run_kind}-{request.sample_index:05d}",
+        target="dynamics",
+        case_kind=sampler.case_kind,
+        input={
+            **sampler.execution_inputs,
+            **request.params,
+            **(
+                {"noise_path_q": sampler.sde_noise_proposal}
+                if importance and sampler.sde_noise_proposal is not None
+                else {}
+            ),
+            **(
+                {"sde_seed": sample_seed}
+                if sampler.execution_inputs.get("solver_kind") == "sde" and sample_seed is not None
+                else {}
+            ),
+            "model_id": sampler.model_id,
+            **request.inputs,
+            "execution_kind": "sample_path",
+            "record_kind": "sample",
+            "sample_index": request.sample_index,
+            "sampling_seed": sample_seed,
+            "sampling_plan_path": request.sampling_plan_path,
+        },
+        reason=f"DYNAMICS_IMPORTANCE_{request.run_kind.upper()}: {sampler.plan.experiment_id} sample={request.sample_index}",
+        meta={"sampling": dict(request.sampling or {}), "source_module": "targets.dynamics.importance_sampling"},
+    )
 
 
 __all__ = [
+    "DynamicsImportanceSampling",
     "DynamicsImportanceSamplingRunConfig",
     "DynamicsImportanceSamplingRunner",
-    "DynamicsImportanceSamplingSupport",
 ]

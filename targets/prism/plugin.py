@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from contracts.capabilities import INTERNAL_DENSITY
 from contracts.target_plugin import TargetComponents
 from targets.prism.backend import PrismBackend, PrismBackendConfig
 from targets.prism.result_interpreter import PrismResultInterpreter
@@ -10,6 +11,8 @@ from targets.prism.result_interpreter import PrismResultInterpreter
 
 class PrismPlugin:
     name = "prism"
+    # Importance-sampled paths report their density under P and Q (contracts/capabilities.py).
+    capabilities = frozenset({INTERNAL_DENSITY})
     fixed_parameter_reason_prefix = "PRISM_FIXED_SAMPLING"
     # Each experiment first computes the exact probability by model checking.
     run_model_check_once = True
@@ -90,9 +93,9 @@ class PrismPlugin:
     @property
     def importance_sampling(self):
         """Importance-sampling hook (contracts/importance_sampling_plugin.py); imported on use."""
-        from targets.prism.importance_sampling import PrismImportanceSamplingSupport
+        from targets.prism.importance_sampling import PrismImportanceSampling
 
-        return PrismImportanceSamplingSupport()
+        return PrismImportanceSampling()
 
 
 PLUGIN = PrismPlugin()

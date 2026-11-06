@@ -203,6 +203,7 @@ class UTurnAdapter:
                 noise_target=sde.noise_target,
                 noise_proposal=proposal,
                 mixture_seed=None if mixture_seed is None else int(mixture_seed),
+                component=inputs.get("sde_component"),
                 initial_inputs={name: inputs[name] for name in self.initial_input_names() if name in inputs},
             ),
             execution_meta={

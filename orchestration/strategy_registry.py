@@ -32,6 +32,7 @@ STATISTICAL_MODES = frozenset({"binomial_ci", "sprt", "dkw", "dkw_fixed", "ebsto
 # has no fixed number of cases to wait for.
 SELF_TERMINATING_STRATEGIES = frozenset({
     "iid_sampling", "fixed_parameter_sampling", "fixed_parameter_dkw", "composed_iid", "composed_fixed_parameter",
+    "composed_region",
 })
 LEGACY_STOPPING_RULE = "legacy"
 # A --stopping-rule replaces the stopping logic of these strategies; the sampling stays the same.
@@ -147,8 +148,8 @@ def select_strategy_name(config: "OrchestratorConfig", *, include_fixture: bool 
     if composed is None:
         raise ValueError(
             f"--stopping-rule {stopping_rule} is not available for target={config.target} "
-            f"--mode {config.run_mode} (strategy {name!r}); it works with IID-sampling targets and "
-            "fixed-parameter sampling"
+            f"--mode {config.run_mode} (strategy {name!r}); it works with IID-sampling targets, "
+            "fixed-parameter sampling and region sampling"
         )
     return composed
 
@@ -182,6 +183,16 @@ def _composed(builder_name: str) -> StrategyBuilder:
 
 register_strategy("composed_iid", _composed("build_composed_iid_strategy"))
 register_strategy("composed_fixed_parameter", _composed("build_composed_fixed_parameter_strategy"))
+
+
+def _build_composed_region(orchestrator: "Orchestrator", config: "OrchestratorConfig") -> object:
+    from orchestration.region_sampling import build_composed_region_strategy
+
+    return build_composed_region_strategy(orchestrator, config)
+
+
+# Region sampling (the statistical modes of targets with input ranges) under --stopping-rule.
+register_strategy("composed_region", _build_composed_region)
 
 
 __all__ = [

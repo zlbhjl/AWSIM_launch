@@ -359,6 +359,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="Run the host-side worker in headless mode.",
     )
     parser.add_argument(
+        "--max-attempts",
+        type=int,
+        default=3,
+        help="Attempts per case in total: a case whose status is not success is queued again (same input).",
+    )
+    parser.add_argument(
+        "--case-timeout",
+        type=float,
+        default=None,
+        help="External workers: seconds after a worker took a case before it counts as lost and is queued "
+             "again (default: the target's, e.g. AWSIM's scenario timeout plus its start-up and grace times).",
+    )
+    parser.add_argument(
         "--worker-count",
         type=int,
         default=None,
@@ -1012,6 +1025,8 @@ def build_orchestrator_config(args: argparse.Namespace) -> OrchestratorConfig:
         with_host_worker=getattr(args, "with_host_worker", False),
         headless_host=getattr(args, "headless_host", False),
         worker_count=getattr(args, "worker_count", None),
+        max_attempts=getattr(args, "max_attempts", 3),
+        case_timeout_sec=getattr(args, "case_timeout", None),
         cache_size=getattr(args, "cache_size", None),
         queue_high_water=getattr(args, "queue_high_water", None),
         queue_low_water=getattr(args, "queue_low_water", None),

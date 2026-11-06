@@ -2,6 +2,8 @@ from types import SimpleNamespace
 
 import pandas as pd
 
+from targets.awsim.statistical import AWSIM_REGION_VOCABULARY
+
 from contracts.statistics import StatisticalReport
 from orchestration.dkw_mode import DKWModeRunner, DKWModeState
 
@@ -67,7 +69,11 @@ def _make_runner(**overrides) -> DKWModeRunner:
 
 
 def test_dkw_mode_runner_auto_derives_bounds_from_region() -> None:
-    runner = _make_runner(region="intersect_safe")
+    from types import SimpleNamespace
+
+    runner = _make_runner(region="intersect_safe",
+                          region_policy=SimpleNamespace(vocabulary=AWSIM_REGION_VOCABULARY,
+                                                        build_filter_frame=lambda point: pd.DataFrame([point])))
 
     bounds = runner.initialize_bounds(
         pd.DataFrame(
@@ -110,6 +116,8 @@ def test_dkw_mode_runner_auto_derives_bounds_from_region() -> None:
 
 def test_dkw_mode_runner_rejects_points_outside_region() -> None:
     class ThresholdRegionPolicy:
+        vocabulary = AWSIM_REGION_VOCABULARY  # the region names (jama_safe, ...) are AWSIM's
+
         def build_filter_frame(self, point):
             row = dict(point)
             row["theory_margin_a_human"] = (

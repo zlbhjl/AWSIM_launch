@@ -158,7 +158,7 @@ PRISMの反復実験では、厳密モデル検査とランダム経路生成を
 | AWSIM | `c_collision` | `min_ttc` | `targets/awsim/`でtheory列を生成 |
 | PRISM | `c_failure` | `steps_to_failure_capped` | `custom`（追加処理なし） |
 
-`orchestration/binomial_mode.py`と`orchestration/dkw_mode.py`はAWSIM theoryをimportせず、注入されたregion policyだけを使用します。
+`orchestration/region_sampling.py`と`orchestration/dkw_mode.py`はAWSIM theoryをimportせず、注入されたregion policyだけを使用します。
 
 PRISM targetとMaude verifierは、同じ`prism_maude`コンテナ内で動作します。ディレクトリの分離はコンテナ分割ではなく、Pythonモジュールの責務分離です。
 
@@ -389,7 +389,7 @@ Statistical metrics and region handling switch according to the target profile.
 | AWSIM | `c_collision` | `min_ttc` | Theory columns are generated in `targets/awsim/` |
 | PRISM | `c_failure` | `steps_to_failure_capped` | `custom` (no extra processing) |
 
-`orchestration/binomial_mode.py` and `orchestration/dkw_mode.py` do not import the AWSIM theory; they only use the injected region
+`orchestration/region_sampling.py` and `orchestration/dkw_mode.py` do not import the AWSIM theory; they only use the injected region
 policy.
 
 The PRISM target and the Maude verifier run in the same `prism_maude` container. The directory split is a separation of Python module

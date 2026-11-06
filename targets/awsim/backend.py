@@ -36,6 +36,8 @@ RESERVED_INPUT_KEYS = {
     "record_kind",
     "sample_index",
     "sampling_seed",
+    "sampling_draw_index",
+    "experiment_id",
     "sampling_plan_path",
 }
 
@@ -210,6 +212,11 @@ class AWSIMBackend:
                     self._refresh_managed_infra()
                 else:
                     self._shutdown_managed_infra()
+                    # Fresh infra per case: this case's launch (its Xvfb) is not the
+                    # persistent one, so close it here. Left open, the next case kills it
+                    # from outside and the unreaped Xvfb keeps its display lock, so the
+                    # new Xvfb exits and AWSIM crashes with no display (verification V8).
+                    self.container_launcher.close_launch(prepared_launch)
             else:
                 self.container_launcher.close_launch(prepared_launch)
 

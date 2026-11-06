@@ -41,6 +41,8 @@ class SamplingPlan:
     sequential_decision: object | None = None
     # Kept while existing plans still use the previous spelling.
     adaptive_update: object | None = None
+    # "streams" or "legacy" (contracts/importance_sampling_plugin.py); None: the target's default.
+    seed_policy: str | None = None
 
 
 def load_sampling_plan(path: str | Path) -> SamplingPlan:
@@ -96,7 +98,16 @@ def sampling_plan_from_mapping(raw: object) -> SamplingPlan:
         proposal_update=deepcopy(plan.get("proposal_update")),
         sequential_decision=deepcopy(plan.get("sequential_decision")),
         adaptive_update=deepcopy(plan.get("adaptive_update")),
+        seed_policy=_seed_policy(plan.get("seed_policy")),
     )
+
+
+def _seed_policy(value: object) -> str | None:
+    if value is None:
+        return None
+    if value not in {"streams", "legacy"}:
+        raise SamplingPlanValidationError("seed_policy must be 'streams' or 'legacy'")
+    return str(value)
 
 
 def _require_mapping(value: object, context: str) -> Mapping[str, object]:

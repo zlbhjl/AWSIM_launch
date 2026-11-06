@@ -182,10 +182,20 @@ def test_fixed_mode_dispatches_all_samples_before_evaluating() -> None:
     assert all(case is not None for case in cases)
     assert dkw_service.calls == 0
 
+    # Every sample is issued, but no result is back yet: wait instead of
+    # evaluating on nothing (verification of 2026-11-03).
+    assert strategy.next_test_case() is None
+    assert strategy.waiting_for_result is True
+    assert dkw_service.calls == 0
+
+    repository.frame = _sample_rows(strategy, cases)
     result = strategy.next_test_case()
     assert result is None
     assert dkw_service.calls == 1
     assert "Fixed Sampling + DKW Complete" in strategy.stop_reason
+    # The decision is kept: asking again does not evaluate again.
+    assert strategy.next_test_case() is None
+    assert dkw_service.calls == 1
 
 
 def test_model_check_is_issued_once_before_dkw_sampling_begins() -> None:

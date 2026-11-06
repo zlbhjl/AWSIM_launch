@@ -101,6 +101,10 @@ class HybridTrajectory:
     noise_log_p: float = 0.0
     noise_log_q: float = 0.0
     noise_sample_count: int = 0
+    # Report section ``internal`` (capability internal_density): the log density
+    # of the realised path under every proposal component, and the component drawn.
+    noise_log_q_components: tuple[float, ...] = ()
+    sampled_component: int | str | None = None
 
 
 __all__ = ["Guard", "HybridSystem", "HybridTrajectory", "Reset", "Transition"]

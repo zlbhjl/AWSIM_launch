@@ -118,6 +118,10 @@ OMP_NUM_THREADS=1 python3 -m tools.validation.coverage_experiment --reps 2000 --
 ## 制約
 
 - 評価は標本ごとに行う場合 (最も不利な場合) で測っています。クラスターでの評価の間隔や遅れの影響は測っていません。
+- クラスターでは、ワーカーが終える順に記録が届きます。早く終わる回 (AWSIM で衝突した回など) が先に判断に入らないよう、
+  2026-11-01 以降、IID 型・固定パラメータ型の戦略は、標本の番号順に、欠けずにそろった部分だけで判断します
+  ([statistical_modes_hardening_plan.md](../statistical_modes_hardening_plan.md))。手元で 1 件ずつ実行する場合は届く順が番号順なので、
+  上の結果は変わりません。AWSIM の GP 探索のモードには、まだこの扱いを入れていません (保証は「なし」と表示されます)。
 - 探索データの偏りは 1 種類 (`u_time = v²`) だけです。KDE の効き方は偏り方によって変わります。
 - 対象は単純な分布です。分布の形によって、特に有限標本での被覆率は変わりえます。
 
@@ -457,6 +461,11 @@ Per-condition results are saved in `artifacts/coverage/summary.json` and per-rep
 
 - Evaluation after every sample (the least favorable case) was measured; the effect of the evaluation interval and delays on a cluster
   was not.
+- On a cluster, records arrive in the order workers finish. So that runs which end early (for example AWSIM runs that end in a collision)
+  do not enter the decision first, since 2026-11-01 the IID and fixed-parameter strategies decide on the contiguous prefix of samples in
+  sample order ([statistical_modes_hardening_plan.md](../statistical_modes_hardening_plan.md)). Run locally one case at a time, records
+  arrive in sample order, so the results above do not change. The AWSIM GP-exploration modes do not use this yet (their guarantee is
+  reported as "none").
 - Only one form of exploration bias (`u_time = v²`) was used; how well KDE works depends on the bias.
 - The target uses simple distributions; finite-sample coverage can depend on the shape of the distribution.
 

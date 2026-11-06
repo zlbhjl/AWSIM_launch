@@ -22,13 +22,17 @@ AWSIM_launch/
 │   ├── dynamics_importance_main.py # ODE入力の固定P・固定Q重点標本比較CLI。
 │   └── awsim_importance_main.py    # AWSIM入力の固定P・固定Q重点標本CLI。
 ├── contracts/                     # target 間で共通のデータ型 (TestCase, RawRunResult, EvaluationRecord, StatisticalReport など)。
+│                                  #   capabilities.py: 対象ができることの宣言。importance_sampling_plugin.py: 重点サンプリングの対象側の口。
 ├── orchestration/                 # target に依存しない制御ロジック
 │   ├── orchestrator.py            # 司令塔本体。戦略に従ってケースを発行し、停止条件を判定する。
 │   ├── strategy_registry.py       # 戦略の選択と登録。対象の plugin が自分の戦略 (StrategySpec) を足せる。
 │   ├── strategy.py                # 共通の 1 件実行の戦略 (fixture / --param)。
-│   ├── binomial_mode.py / dkw_mode.py / sprt_mode.py / ebstop_mode.py # 統計モードごとの停止判定。
+│   ├── region_sampling.py         # 範囲から引く統計モード (AWSIM などの binomial_ci / sprt / ebstop / dkw / dkw_fixed)。
+│   ├── dkw_mode.py                # DKW の段階の評価 (範囲から引く標本と固定パラメータの DKW が使う)。
+│   ├── composed_strategy.py       # --stopping-rule の停止規則を各戦略に差し込む。
 │   ├── fixed_parameter_dkw.py     # 固定パラメータのくり返しでの DKW (PRISM 型の対象が使う)。
 │   ├── random_parameter_sampling.py / fixed_parameter_sampling.py # 入力サンプリング。
+│   ├── importance/                # 重点サンプリングの共通 runner、入力の分布 P・Q、混合と重みの合成。
 │   └── worker_loop.py             # ワーカー側のループ (取得 → 実行 → 解釈 → 保存 → 完了報告)。
 ├── evaluation/                    # 統計計算 (binomial_ci, dkw, sprt, ebstop, importance_sampling, alpha_spending, gp_boundary) と FT4D サービス。
 ├── runtime/
@@ -76,8 +80,8 @@ AWSIM_launch/
     続いて `runtime/cluster/cluster_manager.py` が `redis_cluster/cluster_config.py` の各号機へ SSH し、
     コード同期・GPU preflight の後、`container_profile` に従って worker container を起動します。
 2.  **タスク生成**: `orchestration/orchestrator.py` が、モードに応じた戦略 (共通の戦略、または対象の plugin が登録した
-    `targets/awsim/strategies/` の GP 探索・replay など。統計モードの停止判定は `binomial_mode.py` / `dkw_mode.py` /
-    `sprt_mode.py` / `ebstop_mode.py`) から次のケースを決め、キューに積みます。
+    `targets/awsim/strategies/` の GP 探索・replay など。統計モードは `region_sampling.py` などの共通の統計の戦略)
+    から次のケースを決め、キューに積みます。
 3.  **タスク実行**: 各 container では process supervisor が PID 1 で動き、その子 process の `run_worker_v2.py` が
     Ray Client (`ray://<master-ip>:10001`) でキューからケースを取ります。`orchestration/worker_loop.py` が
     `targets/registry.py` で選んだ target の backend (AWSIM なら `targets/awsim/backend.py`) を呼び、
@@ -129,13 +133,17 @@ AWSIM_launch/
 │   ├── dynamics_importance_main.py # CLI comparing ODE-input importance samples with fixed P and fixed Q.
 │   └── awsim_importance_main.py    # CLI for AWSIM-input importance samples with fixed P and fixed Q.
 ├── contracts/                     # Data types shared by targets (TestCase, RawRunResult, EvaluationRecord, StatisticalReport, ...).
+│                                  #   capabilities.py: what a target can do. importance_sampling_plugin.py: the target side of importance sampling.
 ├── orchestration/                 # Target-independent control logic
 │   ├── orchestrator.py            # The orchestrator. Issues cases according to the strategy and checks stopping conditions.
 │   ├── strategy_registry.py       # Strategy selection and registration; target plugins can add their own (StrategySpec).
 │   ├── strategy.py                # Shared single-case strategies (fixture / --param).
-│   ├── binomial_mode.py / dkw_mode.py / sprt_mode.py / ebstop_mode.py # Stopping decisions per statistical mode.
+│   ├── region_sampling.py         # Statistical modes that sample input ranges (binomial_ci / sprt / ebstop / dkw / dkw_fixed of AWSIM and similar targets).
+│   ├── dkw_mode.py                # DKW stage evaluation (used by region sampling and fixed-parameter DKW).
+│   ├── composed_strategy.py       # Plugs the --stopping-rule rules into the strategies.
 │   ├── fixed_parameter_dkw.py     # DKW over repeated fixed parameters (used by PRISM-like targets).
 │   ├── random_parameter_sampling.py / fixed_parameter_sampling.py # Input sampling.
+│   ├── importance/                # The shared importance-sampling runner, input laws P/Q, mixtures and weight composition.
 │   └── worker_loop.py             # The worker loop (take → run → interpret → store → report completion).
 ├── evaluation/                    # Statistics (binomial_ci, dkw, sprt, ebstop, importance_sampling, alpha_spending, gp_boundary) and the FT4D service.
 ├── runtime/
@@ -183,8 +191,8 @@ The following is the v2 flow (`run_orchestrator_cluster_v2.py`).
     Then `runtime/cluster/cluster_manager.py` connects to each node in `redis_cluster/cluster_config.py` over SSH, syncs the code,
     runs a GPU preflight check, and starts worker containers according to the `container_profile`.
 2.  **Task generation**: `orchestration/orchestrator.py` decides the next case from the strategy for the mode (a shared strategy, or
-    one a target plugin registered, such as the GP exploration and replay in `targets/awsim/strategies/`; the statistical stopping is in
-    `binomial_mode.py` / `dkw_mode.py` / `sprt_mode.py` / `ebstop_mode.py`) and puts it on the queue.
+    one a target plugin registered, such as the GP exploration and replay in `targets/awsim/strategies/`; the statistical modes run on
+    shared statistical strategies such as `region_sampling.py`) and puts it on the queue.
 3.  **Task execution**: in each container the process supervisor runs as PID 1, and its child process `run_worker_v2.py` takes cases
     from the queue over Ray Client (`ray://<master-ip>:10001`). `orchestration/worker_loop.py` calls the backend of the target chosen by
     `targets/registry.py` (for AWSIM, `targets/awsim/backend.py`), which starts AWSIM, Autoware, the Runtime Monitor, and the scenario

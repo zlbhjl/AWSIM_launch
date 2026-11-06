@@ -3,7 +3,7 @@ from __future__ import annotations
 from contracts.execution import TestCase
 from contracts.statistics import StatisticalReport
 from evaluation.dkw import DKWService
-from orchestration.dkw_mode import DKWModeRunner, DKWModeState
+from orchestration.dkw_mode import WAIT_COMMAND, DKWModeRunner, DKWModeState
 from orchestration.fixed_parameter_sampling import (
     FixedParameterSamplingStrategy,
     FixedParameterSamplingStrategyConfig,
@@ -71,6 +71,13 @@ class FixedParameterDkwStrategy(FixedParameterSamplingStrategy):
         self.sequential = sequential
         self.dkw_state = DKWModeState()
 
+    def _pending_samples(self, samples) -> int:
+        """Issued samples without a final result yet (they cut the ordered prefix)."""
+        if samples is None or samples.empty:
+            return len(self.issued_sample_indexes)
+        cut = (self.latest_sample_summary or {}).get("cut_at_sample_index")
+        return 0 if cut is None else sum(1 for index in self.issued_sample_indexes if index >= int(cut))
+
     def next_test_case(self) -> TestCase | None:
         self.waiting_for_result = False
         if self.config.run_model_check_once:
@@ -119,7 +126,12 @@ class FixedParameterDkwStrategy(FixedParameterSamplingStrategy):
                 df_dataset,
                 state=self.dkw_state,
                 get_random_point=self._get_fixed_point,
+                pending=self._pending_samples(df_dataset),
             )
+        if payload.get("system_command") == WAIT_COMMAND:
+            # Every sample is issued; the last results are still coming.
+            self.waiting_for_result = True
+            return None
         if payload.get("system_command") == "stop":
             self.latest_statistical_report = getattr(
                 self.dkw_mode_runner.dkw_service, "last_report", None
@@ -131,6 +143,7 @@ class FixedParameterDkwStrategy(FixedParameterSamplingStrategy):
             self.dkw_mode_runner.dkw_service, "last_report", None
         )
         sample_index = int(payload["sample_index"])
+        self.issued_sample_indexes.add(sample_index)
         prefix = self.config.case_id_prefix or (
             f"{self.config.case_kind}-{self.experiment_id}"
         )

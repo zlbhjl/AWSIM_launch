@@ -59,10 +59,6 @@ from scipy.stats import beta as beta_distribution
 from contracts.execution import TestCase
 from evaluation.dkw import DKWService
 from orchestration.dkw_mode import DKWModeRunner, DKWModeState
-from targets.dynamics.importance_sampling import (
-    DynamicsImportanceSamplingRunConfig,
-    DynamicsImportanceSamplingRunner,
-)
 from orchestration.orchestrator import Orchestrator, OrchestratorConfig
 from orchestration.seeding import INPUT_STREAM, derive_seed
 from targets.bernoulli.backend import BernoulliBackend
@@ -74,13 +70,10 @@ from targets.bernoulli.model import (
     time_to_failure_quantile,
 )
 from targets.bernoulli.result_interpreter import BernoulliResultInterpreter
-from targets.dynamics.backend import DynamicsBackend, DynamicsBackendConfig
-from targets.dynamics.models.exact import (
-    ou_augmented_terminal_exceedance_probability,
-    ou_euler_terminal_variance,
-    ou_terminal_exceedance_probability,
-)
-from targets.dynamics.result_interpreter import DynamicsResultInterpreter
+# The synthetic OU scenarios (is_ou_a_*) define dynamics plans and their exact truth here;
+# the engines themselves run any target through the shared runner.
+from targets.dynamics.models.exact import ou_euler_terminal_variance, ou_terminal_exceedance_probability
+from tools.validation.importance_runs import exact_probability, run_plan_fixed
 
 DKW_QUANTILE = 0.05  # q used by every DKW request in the framework
 OU_MODEL_A = {"theta": 1.0, "sigma": 1.0, "dt_sec": 0.01, "horizon_sec": 1.0, "threshold_sd": 3.0, "side": "upper"}
@@ -447,23 +440,8 @@ def _ou_terminal_truth(parameters: Mapping[str, object]) -> float:
 
 
 def _plan_truth(parameters: Mapping[str, object]) -> float:
-    """Exact probability of the numerical model named by a fixed v2 plan (models A and B)."""
-    definition = yaml.safe_load(Path(str(parameters["plan"])).read_text(encoding="utf-8"))["target_measure"]["definition"]
-    solver, event, params = definition["solver"], definition["event"], definition["model_params"]
-    steps = round(float(solver["horizon_sec"]) / float(solver["dt_sec"]))
-    if definition["model_id"] == "ou_scalar":
-        return ou_terminal_exceedance_probability(
-            theta=params["theta"], sigma=params["sigma"], h=solver["dt_sec"], steps=steps,
-            threshold=event["threshold"], side=event.get("side", "upper"),
-            x0=float(definition["initial_law"]["value"][0]),
-        )
-    if definition["model_id"] == "ou_augmented":
-        c0, x0 = (float(value) for value in definition["initial_law"]["value"])
-        return ou_augmented_terminal_exceedance_probability(
-            **params, h=solver["dt_sec"], steps=steps, threshold=event["threshold"],
-            side=event.get("side", "upper"), state=event.get("state", "c"), c0=c0, x0=x0,
-        )
-    raise ValueError(f"no exact probability for model {definition['model_id']!r}")
+    """Exact probability of the event of a fixed plan, from its target (hook exact_probability)."""
+    return exact_probability(Path(str(parameters["plan"])))
 
 
 TRUTHS: dict[str, Callable[[Mapping[str, object]], float]] = {
@@ -514,20 +492,11 @@ def run_importance_fixed_once(scenario: Scenario, seed: int, workdir: Path) -> d
     else:
         plan_path = workdir / "plan.yaml"
         plan_path.write_text(yaml.safe_dump(_ou_plan(scenario), sort_keys=False), encoding="utf-8")
-    runner = DynamicsImportanceSamplingRunner(
-        backend=DynamicsBackend(DynamicsBackendConfig(output_root=workdir / "artifacts", artifact_policy="summary")),
-        result_interpreter=DynamicsResultInterpreter(),
-    )
     started = time.perf_counter()
-    comparison = runner.run_fixed_samples(
-        DynamicsImportanceSamplingRunConfig(
-            sampling_plan_path=plan_path,
-            output_root=workdir / "run",
-            max_samples=int(scenario.config["max_samples"]),
-            root_entropy=int(seed),
-            phase="final",
-        )
-    )["comparison"]
+    comparison = run_plan_fixed(
+        plan_path, workdir=workdir, max_samples=int(scenario.config["max_samples"]),
+        root_entropy=int(seed), phase="final",
+    )
     elapsed = time.perf_counter() - started
     diagnostic = comparison.get("diagnostic", {})
     guarantee = comparison.get("guarantee", {})

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import argparse
 import json
 import sys
 import time
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from typing import Sequence
 
 from apps.cli.orchestrator_main import (
@@ -68,6 +69,89 @@ def _render_progress(snapshot: dict[str, object], config: OrchestratorConfig) ->
     sys.stdout.flush()
 
 
+@dataclass
+class ClusterSession:
+    """A started cluster: the Ray head, the task-queue actor and the launched workers."""
+
+    head_address: str
+    ray_module: object
+    queue_actor: object
+    cluster_summary: object
+
+
+def start_cluster(
+    cluster_manager: ClusterManager,
+    cluster_launch_config: ClusterLaunchConfig,
+    *,
+    shared_store_actor_name: str | None,
+    shared_store_namespace: str,
+    shared_store_address: str | None,
+    dataset_csv_path: str | None,
+    records_jsonl_path: str | None,
+) -> ClusterSession:
+    """Start the Ray head, the queue (and shared-store) actors, then the worker containers."""
+    head_address = cluster_manager.start_head(cluster_launch_config)
+    actor_runtime = ActorRuntime()
+    queue_config = DetachedActorConfig(
+        name=cluster_launch_config.queue_actor_name,
+        namespace=cluster_launch_config.queue_namespace,
+        address=head_address,
+    )
+    ray_module = actor_runtime.connect(queue_config)
+    task_queue_actor = actor_runtime.ensure_task_queue_actor(queue_config)
+    if shared_store_actor_name and dataset_csv_path:
+        actor_runtime.ensure_shared_store_actor(
+            DetachedActorConfig(
+                name=shared_store_actor_name,
+                namespace=shared_store_namespace,
+                address=shared_store_address or head_address,
+            ),
+            dataset_csv_path=dataset_csv_path,
+            records_jsonl_path=records_jsonl_path,
+        )
+    cluster_summary = cluster_manager.launch_workers(cluster_launch_config, head_address=head_address)
+    return ClusterSession(head_address, ray_module, task_queue_actor, cluster_summary)
+
+
+def build_worker_restarter(
+    args: argparse.Namespace,
+    cluster_manager: ClusterManager,
+    cluster_launch_config: ClusterLaunchConfig,
+    head_address: str,
+    *,
+    gpu_recovery_enabled: bool,
+):
+    """The watchdog that restarts stale, missing or GPU-failed workers (None if disabled)."""
+    if not any(
+        (
+            bool(getattr(args, "auto_restart_stale_workers", False)),
+            bool(getattr(args, "auto_restart_missing_workers", False)),
+            gpu_recovery_enabled,
+        )
+    ):
+        return None
+    worker_restarter = StaleWorkerRestarter(
+        cluster_manager=cluster_manager,
+        cluster_config=cluster_launch_config,
+        head_address=head_address,
+        policy=WorkerRestartPolicy(
+            enabled=bool(getattr(args, "auto_restart_stale_workers", False)),
+            restart_missing_workers=bool(getattr(args, "auto_restart_missing_workers", False)),
+            restart_gpu_workers=gpu_recovery_enabled,
+            stale_timeout_sec=float(getattr(args, "stale_worker_timeout_sec", 600.0)),
+            check_interval_loops=int(getattr(args, "stale_worker_check_interval_loops", 5)),
+            restart_cooldown_sec=float(getattr(args, "stale_worker_restart_cooldown_sec", 600.0)),
+            max_restart_count=int(getattr(args, "worker_restart_max_count", 2)),
+            log_tail_lines=int(getattr(args, "worker_restart_log_tail_lines", 100)),
+            gpu_max_restarts_per_24h=int(getattr(args, "gpu_worker_max_restarts_per_24h", 5)),
+            gpu_max_consecutive_failures=int(getattr(args, "gpu_worker_max_consecutive_failures", 3)),
+            gpu_stable_reset_sec=float(getattr(args, "gpu_worker_stable_reset_sec", 1800.0)),
+            gpu_probe_timeout_sec=float(getattr(args, "gpu_worker_probe_timeout_sec", 5.0)),
+        ),
+    )
+    return worker_restarter.check
+
+
 def run_cluster_orchestrator(argv: Sequence[str] | None = None) -> int:
     argv_list = list(argv) if argv is not None else list(sys.argv[1:])
     parser = build_parser()
@@ -92,15 +176,20 @@ def run_cluster_orchestrator(argv: Sequence[str] | None = None) -> int:
         getattr(args, "auto_restart_gpu_workers", False)
     ) and requires_gpu
 
+    # Actor names are unique per run unless given: a worker left from an earlier
+    # run (for example one that started after a short run had ended) reconnects
+    # to the new Ray head and looks its queue up by name; with a shared name it
+    # took the next run's cases (verification of 2026-11-05).
+    run_tag = run_actor_tag(getattr(args, "run_id", None))
     queue_actor_name = (
         args.queue_actor_name
         if getattr(args, "queue_actor_name", "local_task_queue") != "local_task_queue"
-        else "TaskQueueActor"
+        else f"TaskQueueActor-{run_tag}"
     )
     queue_namespace = getattr(args, "queue_namespace", None) or "awsim_cluster"
     shared_store_actor_name = getattr(args, "shared_store_actor_name", None)
     if shared_store_actor_name is None and getattr(args, "dataset_csv", None):
-        shared_store_actor_name = "SharedStoreActor"
+        shared_store_actor_name = f"SharedStoreActor-{run_tag}"
 
     base_config = build_orchestrator_config(args)
     if base_config.replay_csv is not None:
@@ -159,38 +248,21 @@ def run_cluster_orchestrator(argv: Sequence[str] | None = None) -> int:
             getattr(args, "gpu_worker_probe_timeout_sec", 5.0)
         ),
     )
-    head_address = cluster_manager.start_head(cluster_launch_config)
-
-    actor_runtime = ActorRuntime()
-    ray_module = actor_runtime.connect(
-        DetachedActorConfig(
-            name=queue_actor_name,
-            namespace=queue_namespace,
-            address=head_address,
-        )
-    )
-    task_queue_actor = actor_runtime.ensure_task_queue_actor(
-        DetachedActorConfig(
-            name=queue_actor_name,
-            namespace=queue_namespace,
-            address=head_address,
-        )
-    )
-    if shared_store_actor_name and getattr(args, "dataset_csv", None):
-        actor_runtime.ensure_shared_store_actor(
-            DetachedActorConfig(
-                name=shared_store_actor_name,
-                namespace=getattr(args, "shared_store_namespace", None) or queue_namespace,
-                address=getattr(args, "shared_store_address", None) or head_address,
-            ),
-            dataset_csv_path=args.dataset_csv,
-            records_jsonl_path=args.output,
-        )
-
-    cluster_summary = cluster_manager.launch_workers(
+    session = start_cluster(
+        cluster_manager,
         cluster_launch_config,
-        head_address=head_address,
+        shared_store_actor_name=(
+            shared_store_actor_name if shared_store_actor_name and getattr(args, "dataset_csv", None) else None
+        ),
+        shared_store_namespace=getattr(args, "shared_store_namespace", None) or queue_namespace,
+        shared_store_address=getattr(args, "shared_store_address", None),
+        dataset_csv_path=getattr(args, "dataset_csv", None),
+        records_jsonl_path=args.output,
     )
+    head_address = session.head_address
+    ray_module = session.ray_module
+    task_queue_actor = session.queue_actor
+    cluster_summary = session.cluster_summary
 
     worker_count = max(
         int(getattr(args, "worker_count", 0) or 0),
@@ -208,48 +280,9 @@ def run_cluster_orchestrator(argv: Sequence[str] | None = None) -> int:
         worker_count=worker_count,
         run_inline_worker=False,
     )
-    maintenance_callback = None
-    if any(
-        (
-            bool(getattr(args, "auto_restart_stale_workers", False)),
-            bool(getattr(args, "auto_restart_missing_workers", False)),
-            gpu_recovery_enabled,
-        )
-    ):
-        worker_restarter = StaleWorkerRestarter(
-            cluster_manager=cluster_manager,
-            cluster_config=cluster_launch_config,
-            head_address=head_address,
-            policy=WorkerRestartPolicy(
-                enabled=bool(getattr(args, "auto_restart_stale_workers", False)),
-                restart_missing_workers=bool(
-                    getattr(args, "auto_restart_missing_workers", False)
-                ),
-                restart_gpu_workers=gpu_recovery_enabled,
-                stale_timeout_sec=float(getattr(args, "stale_worker_timeout_sec", 600.0)),
-                check_interval_loops=int(
-                    getattr(args, "stale_worker_check_interval_loops", 5)
-                ),
-                restart_cooldown_sec=float(
-                    getattr(args, "stale_worker_restart_cooldown_sec", 600.0)
-                ),
-                max_restart_count=int(getattr(args, "worker_restart_max_count", 2)),
-                log_tail_lines=int(getattr(args, "worker_restart_log_tail_lines", 100)),
-                gpu_max_restarts_per_24h=int(
-                    getattr(args, "gpu_worker_max_restarts_per_24h", 5)
-                ),
-                gpu_max_consecutive_failures=int(
-                    getattr(args, "gpu_worker_max_consecutive_failures", 3)
-                ),
-                gpu_stable_reset_sec=float(
-                    getattr(args, "gpu_worker_stable_reset_sec", 1800.0)
-                ),
-                gpu_probe_timeout_sec=float(
-                    getattr(args, "gpu_worker_probe_timeout_sec", 5.0)
-                ),
-            ),
-        )
-        maintenance_callback = worker_restarter.check
+    maintenance_callback = build_worker_restarter(
+        args, cluster_manager, cluster_launch_config, head_address, gpu_recovery_enabled=gpu_recovery_enabled,
+    )
 
     orchestrator_kwargs = {
         "queue_gateway": TaskQueueGateway(actor=task_queue_actor, ray_get=ray_module.get),
@@ -293,6 +326,17 @@ def run_cluster_orchestrator(argv: Sequence[str] | None = None) -> int:
     )
     print(json.dumps(summary, ensure_ascii=False, default=_json_default))
     return int(summary["worker_exit_code"])
+
+
+def run_actor_tag(run_id: str | None = None, *, now=None, pid: int | None = None) -> str:
+    """A tag that makes a run's actor names unique: run id (if any), time and process id."""
+    import os
+    import re
+    import time
+
+    stamp = time.strftime("%Y%m%d%H%M%S", time.localtime(now))
+    parts = [part for part in (run_id, stamp, str(os.getpid() if pid is None else pid)) if part]
+    return re.sub(r"[^A-Za-z0-9_.-]+", "-", "-".join(parts))
 
 
 def main(argv: Sequence[str] | None = None) -> int:

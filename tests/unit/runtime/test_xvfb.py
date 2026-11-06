@@ -28,6 +28,7 @@ def test_xvfb_controller_start_sets_env_and_launches_process() -> None:
         system_runner=lambda command: commands.append(command) or 0,
         sleeper=lambda seconds: sleeper_calls.append(seconds),
         env=env,
+        lock_dir=None,
     )
 
     session = controller.start(XvfbConfig(enabled=True))
@@ -119,6 +120,7 @@ def test_xvfb_controller_uses_process_supervisor() -> None:
         env={"HOME": "/home/passd"},
         sleeper=lambda _seconds: None,
         supervisor_client=FakeSupervisor(),  # type: ignore[arg-type]
+        lock_dir=None,
     )
     session = controller.start(XvfbConfig(enabled=True))
     controller.stop(session)
@@ -130,3 +132,46 @@ def test_xvfb_controller_uses_process_supervisor() -> None:
     )
     assert calls[2] == ("signal", ("xvfb-1", signal.SIGKILL))
     assert calls[3] == ("release", "xvfb-1")
+
+
+def _controller_with_lock(tmp_path, owner_state, *, sleeps=None):
+    (tmp_path / ".X11-unix").mkdir()
+    (tmp_path / ".X199-lock").write_text("      4242\n")
+    (tmp_path / ".X11-unix" / "X199").write_text("")
+    states = list(owner_state)
+    return XvfbController(
+        popen_factory=lambda *_a, **_k: FakeProcess(pid=1),
+        system_runner=lambda _command: 0,
+        sleeper=lambda seconds: (sleeps if sleeps is not None else []).append(seconds),
+        env={},
+        lock_dir=tmp_path,
+        process_state=lambda pid: states.pop(0) if len(states) > 1 else states[0],
+    )
+
+
+def test_a_lock_held_by_an_unreaped_xvfb_is_freed_before_starting(tmp_path) -> None:
+    """A killed Xvfb its parent has not reaped (a zombie) kept the lock, so the new Xvfb
+    exited and AWSIM started with no display (verification V8, 2026-11-06)."""
+    controller = _controller_with_lock(tmp_path, ["Z"])
+
+    assert controller.start(XvfbConfig(enabled=True)) is not None
+    assert not (tmp_path / ".X199-lock").exists()
+    assert not (tmp_path / ".X11-unix" / "X199").exists()
+
+
+def test_a_lock_of_a_dead_owner_is_freed(tmp_path) -> None:
+    controller = _controller_with_lock(tmp_path, [None])
+
+    controller.start(XvfbConfig(enabled=True))
+
+    assert not (tmp_path / ".X199-lock").exists()
+
+
+def test_a_dying_owner_is_waited_for(tmp_path) -> None:
+    sleeps: list[float] = []
+    controller = _controller_with_lock(tmp_path, ["S", "S", None], sleeps=sleeps)
+
+    controller.start(XvfbConfig(enabled=True))
+
+    assert sleeps[:2] == [0.2, 0.2]  # waited twice, then the owner was gone
+    assert not (tmp_path / ".X199-lock").exists()

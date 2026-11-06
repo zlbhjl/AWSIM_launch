@@ -21,6 +21,8 @@ class WorkerLoopContext:
     worker_id: str = "worker_v2"
     source_module: str = "orchestration.worker_loop"
     schema_version: int = DEFAULT_EVALUATION_SCHEMA_VERSION
+    # The target this worker runs; a case of another target is handed back, not run.
+    target: str | None = None
 
 
 @dataclass(frozen=True)
@@ -313,12 +315,36 @@ class WorkerLoop:
         self._ensure_pre_fetch_health()
         self._notify_worker_status("waiting")
         if hasattr(self.task_source, "get_next"):
-            return self._capture_stop_iteration(self.task_source.get_next)
-        if hasattr(self.task_source, "fetch_next"):
-            return self._capture_stop_iteration(self.task_source.fetch_next)
-        if callable(self.task_source):
-            return self._capture_stop_iteration(self.task_source)
-        raise TypeError("task_source must expose get_next(), fetch_next(), or be callable")
+            fetched = self._capture_stop_iteration(self.task_source.get_next)
+        elif hasattr(self.task_source, "fetch_next"):
+            fetched = self._capture_stop_iteration(self.task_source.fetch_next)
+        elif callable(self.task_source):
+            fetched = self._capture_stop_iteration(self.task_source)
+        else:
+            raise TypeError("task_source must expose get_next(), fetch_next(), or be callable")
+        self._refuse_other_target(fetched)
+        return fetched
+
+    def _refuse_other_target(self, test_case: TestCase | None) -> None:
+        """Hand back a case of another target and stop this worker.
+
+        A worker belongs to one run; a case of another target means it reached
+        another run's queue (for example a worker that started after a short run
+        had ended). Its result must not enter that run, so the case is reported
+        back (the queue issues it again) and the worker stops.
+        """
+        expected = self.context.target
+        if test_case is None or not expected or not test_case.target or test_case.target == expected:
+            return
+        loop_num = self._resolve_history_loop_num(test_case)
+        if loop_num is not None:
+            self._report_completion(loop_num, "wrong_target")
+        self.last_stop_reason = (
+            f"case {test_case.case_id} is for target={test_case.target}, this worker runs target={expected}; "
+            "handed back and stopped"
+        )
+        print(f"[Worker] {self.last_stop_reason}", flush=True)
+        raise StopIteration(self.last_stop_reason)
 
     def _ensure_pre_fetch_health(self) -> None:
         if self.pre_fetch_health_check is None:

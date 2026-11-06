@@ -11,7 +11,7 @@ from sklearn.preprocessing import StandardScaler
 from contracts.evaluation import EvaluationRecord
 from contracts.statistics import StatisticalReport, StatisticalRequest
 from evaluation.stopping_rules import dkw_quantile_interval, empirical_quantile
-import point_extractors
+from evaluation.region_filter import RegionVocabulary, filter_rows
 
 
 def records_to_data_frame(
@@ -77,6 +77,7 @@ class DKWService:
         q = float(request.options.get("q", 0.05))
         use_kde_weighting = bool(request.options.get("use_kde_weighting", False))
         region = str(request.options.get("region", "custom"))
+        vocabulary = request.options.get("region_vocabulary")
         stage_target_samples = request.options.get("stage_target_samples")
         resolved_stage_target_samples = (
             int(stage_target_samples) if stage_target_samples is not None else None
@@ -100,6 +101,7 @@ class DKWService:
             delta=1.0 - request.confidence,
             bounds=request.bounds,
             region=region,
+            vocabulary=vocabulary,
             use_kde_weighting=use_kde_weighting,
             feature_names=self.feature_names,
             minimum_value=resolved_minimum_value,
@@ -292,6 +294,7 @@ def calculate_dkw_bounds(
     delta: float = 0.05,
     bounds: dict[str, tuple[float, float]] | None = None,
     region: str = "custom",
+    vocabulary: RegionVocabulary | None = None,
     use_kde_weighting: bool = False,
     feature_names: Sequence[str] | None = None,
     minimum_value: float | None = None,
@@ -300,9 +303,10 @@ def calculate_dkw_bounds(
         return None
 
     try:
-        filtered_df = point_extractors.filter_by_region_and_bounds(
+        filtered_df = filter_rows(
             df.copy(),
             region=region,
+            vocabulary=vocabulary,
             bounds=bounds,
         )
     except Exception:
@@ -392,6 +396,7 @@ def calculate_quantile_with_dkw(
     delta: float = 0.05,
     bounds: dict[str, tuple[float, float]] | None = None,
     region: str = "custom",
+    vocabulary: RegionVocabulary | None = None,
     use_kde_weighting: bool = False,
     feature_names: Sequence[str] | None = None,
     minimum_value: float | None = None,
@@ -402,6 +407,7 @@ def calculate_quantile_with_dkw(
         delta=delta,
         bounds=bounds,
         region=region,
+        vocabulary=vocabulary,
         use_kde_weighting=use_kde_weighting,
         feature_names=feature_names,
         minimum_value=minimum_value,
@@ -487,6 +493,7 @@ def evaluate_and_summarize_dkw_multiple(
     epsilon: float = 0.15,
     use_kde_weighting: bool = False,
     region: str = "custom",
+    vocabulary: RegionVocabulary | None = None,
     bounds: dict[str, tuple[float, float]] | None = None,
     feature_names: Sequence[str] | None = None,
 ) -> dict[str, object]:
@@ -505,6 +512,7 @@ def evaluate_and_summarize_dkw_multiple(
             delta=delta_i,
             use_kde_weighting=use_kde_weighting,
             region=region,
+            vocabulary=vocabulary,
             bounds=bounds,
             feature_names=feature_names,
         )

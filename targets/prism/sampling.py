@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping
 
+from contracts.importance_sampling_plugin import InternalProposal
 from orchestration.sampling_plan import SamplingPlan, load_sampling_plan
 
 from .model_catalog import PrismModelDefinition
@@ -83,9 +84,13 @@ def run_importance_sample_path(
         "sampling_mode": sampling_mode or plan.sampling_mode,
         "proposal_id": proposal_id or plan.proposal_id,
         "importance_weight_status": "available",
-        "log_p": log_p,
-        "log_q": log_q,
-        "log_importance_weight": log_p - log_q,
+        # No input law: the input ratio is 1. The path ratio is reported in the
+        # section ``internal`` (capability internal_density) and composed by the
+        # shared code (orchestration/importance/weights.py).
+        "log_p": 0.0,
+        "log_q": 0.0,
+        "log_importance_weight": 0.0,
+        "internal": {"log_p": log_p, "log_q": [log_q], "sampled_component": 0, "support": "positive"},
         "importance_weight_upper_bound": _max_path_importance_weight(
             p_transitions, q_transitions, horizon=horizon
         ),
@@ -93,6 +98,16 @@ def run_importance_sample_path(
     if proposal_version is not None:
         sampling_metadata["proposal_version"] = proposal_version
     return PrismImportanceSampleArtifacts(trace_csv=trace_csv, sampling_metadata=sampling_metadata)
+
+
+def internal_proposal(definition: object) -> InternalProposal:
+    """A fixed transition-probability Q as seen by the shared code (one component)."""
+    return InternalProposal(
+        components=("transition_probabilities",),
+        weights=(1.0,),
+        definition=definition,
+        fingerprint_source={"proposal": definition},
+    )
 
 
 def _sample_trace(*, transitions: Mapping[int, Mapping[int, float]], horizon: int,

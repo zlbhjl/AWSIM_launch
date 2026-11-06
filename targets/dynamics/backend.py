@@ -11,7 +11,7 @@ from pathlib import Path
 import numpy as np
 
 from contracts.execution import RawRunResult, RunStatus, TestCase
-from contracts.sampling import copy_sampling_metadata, sampling_metadata_from_meta
+from contracts.sampling import INTERNAL_REPORT_KEY, copy_sampling_metadata, sampling_metadata_from_meta
 
 from .models.base import HybridTrajectory
 from .models.registry import DynamicsModelAdapter, ResolvedModelRun, get_model_adapter
@@ -276,24 +276,25 @@ def _merge_noise_weight(
     *,
     has_proposal: bool,
 ) -> dict[str, object]:
-    """Add the realised Brownian-path log ratio to the input sampler's ratio.
+    """Report the realised Brownian path densities (capability ``internal_density``).
 
-    The input sampler supplied its P_input/Q_input ratio.  When this run also
-    changed the Brownian path law, append its exact realised Euler--Maruyama
-    path likelihood ratio.
+    The input sampler supplied its P_input/Q_input ratio. When this run also
+    changed the Brownian path law, the report section ``internal`` gives the
+    exact Euler--Maruyama path log density under P and under every proposal
+    component; the shared code (orchestration/importance/weights.py) forms the
+    mixture density and adds the path ratio to the input ratio.
     """
     sampling = sampling_metadata_from_meta(test_case.meta)
     if sampling is None or sampling.get("importance_weight_status") != "available":
         return meta
     if not has_proposal:
         return meta
-    if sampling.get("weight_kind") == "zero":
-        # p = 0 already; only q changes.
-        sampling["log_q"] = float(sampling["log_q"]) + result.noise_log_q
-        return copy_sampling_metadata({"sampling": sampling}, meta)
-    sampling["log_p"] = float(sampling["log_p"]) + result.noise_log_p
-    sampling["log_q"] = float(sampling["log_q"]) + result.noise_log_q
-    sampling["log_importance_weight"] = float(sampling["log_p"]) - float(sampling["log_q"])
+    sampling[INTERNAL_REPORT_KEY] = {
+        "log_p": result.noise_log_p,
+        "log_q": list(result.noise_log_q_components),
+        "sampled_component": result.sampled_component,
+        "support": "positive",
+    }
     return copy_sampling_metadata({"sampling": sampling}, meta)
 
 

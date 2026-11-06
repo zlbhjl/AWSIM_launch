@@ -7,7 +7,7 @@ import pytest
 import yaml
 
 from orchestration.sampling_plan import load_sampling_plan
-from tools.validation.is_tuning import fix_trial, load_candidates, run_trials
+from tools.validation.is_tuning import check_trials, fix_trial, load_candidates, run_trials
 from tools.validation.ou_proposal_designs import candidates, studies, write
 
 BASE = Path("configs/dynamics_importance_ou_baseline.yaml")
@@ -49,8 +49,10 @@ def test_budget_and_names_are_enforced(tmp_path: Path) -> None:
         load_candidates(_candidates(tmp_path, [trial, {**trial, "name": "b"}], budget=1))
     with pytest.raises(ValueError, match="unique name"):
         load_candidates(_candidates(tmp_path, [trial, trial]))
+    # The target checks the trial plans before anything runs.
+    _, trials = load_candidates(_candidates(tmp_path, [{**trial, "noise_path_q": {"distribution": "gaussian_drift"}}]))
     with pytest.raises(ValueError, match="not both"):
-        load_candidates(_candidates(tmp_path, [{**trial, "noise_path_q": {"distribution": "gaussian_drift"}}]))
+        check_trials(yaml.safe_load(BASE.read_text(encoding="utf-8")), trials)
 
 
 def test_generated_designs_parse_for_every_study(tmp_path: Path) -> None:

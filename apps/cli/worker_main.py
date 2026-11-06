@@ -313,6 +313,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Run AWSIM simulation mode with Xvfb-based headless display setup.",
     )
     parser.add_argument(
+        "--fresh-infra-per-sample",
+        action="store_true",
+        help=(
+            "Start a fresh simulation world for every case (AWSIM). Importance-sampling runs on the "
+            "cluster use it so that a rejected trace cannot affect the next sample."
+        ),
+    )
+    parser.add_argument(
         "--container-profile",
         choices=list_container_profiles(),
         default=None,
@@ -733,7 +741,7 @@ def run_worker_with_summary(
         result_interpreter=interpreter_impl,
         result_sink=sink_impl,
         task_source=task_source_impl,
-        context=WorkerLoopContext(worker_id=args.worker_id),
+        context=WorkerLoopContext(worker_id=args.worker_id, target=getattr(args, "target", None)),
         heartbeat_interval_sec=(
             float(getattr(args, "queue_heartbeat_interval", 0.0))
             if task_source_impl is not None

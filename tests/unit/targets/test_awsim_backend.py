@@ -687,3 +687,57 @@ def test_awsim_backend_raises_after_exhausting_readiness_probe_retries(
         "start_infra_processes",
         "refresh_non_resident_infra",
     ]
+
+
+def test_fresh_infra_per_case_closes_each_case_xvfb(tmp_path: Path) -> None:
+    """With fresh infra per case, each case's Xvfb is closed after the case. Left open,
+    the next case killed it from outside, the unreaped Xvfb kept its display lock and
+    AWSIM crashed with no display from the second case on (verification V8, 2026-11-06)."""
+    calls: list[str] = []
+
+    class FakeXvfbController:
+        def start(self, config):
+            calls.append("xvfb_start")
+            return object()
+
+        def apply_environment(self, config, *, env):
+            return dict(env)
+
+        def stop(self, session):
+            calls.append("xvfb_stop")
+
+    class FakeProcessManager:
+        def start_infra_processes(self, tasks, *, sim_num, output_dir, source_setup_script, env):
+            calls.append("start_infra")
+
+        def launch_client(self, command, *, work_dir, source_setup_script, output_dir, log_filename, env):
+            for name in ("uturn_test_sim1.json", "uturn_test_sim2.json"):
+                (tmp_path / name).write_text("{}", encoding="utf-8")
+            return type("Managed", (), {"process": type("Proc", (), {"poll": lambda self: 0})()})()
+
+        def shutdown_all(self):
+            calls.append("shutdown_all")
+
+    class ReadyProbe:
+        def probe(self, *, cwd, env, source_setup_script, config):
+            return AWSIMReadinessResult(ready=True, attempts=1, checked_services=config.required_services,
+                                        message="ready")
+
+    backend = AWSIMBackend(
+        config=AWSIMBackendConfig(
+            runtime_profile=build_runtime_profile(case_kind="uturn", source_setup_script=None, headless=True),
+            output_dir=tmp_path, timeout_sec=0.1, poll_interval_sec=0.0, settle_time_sec=0.0,
+            manage_infra=True, reuse_infra_between_runs=False, initial_warmup_sec=0.0,
+            extra_refresh_warmup_sec=0.0,
+        ),
+        process_manager=FakeProcessManager(),
+        readiness_probe=ReadyProbe(),
+        xvfb_controller=FakeXvfbController(),
+    )
+
+    for loop in (1, 2):
+        backend.run(TestCase(case_id=f"fresh_{loop}", target="awsim", case_kind="uturn",
+                             input={"dx0": 15.0, "ego_speed": 35.0, "npc_speed": 14.0},
+                             meta={"global_loop_num": loop}))
+
+    assert calls == ["xvfb_start", "start_infra", "shutdown_all", "xvfb_stop"] * 2

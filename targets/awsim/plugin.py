@@ -10,6 +10,13 @@ from targets.awsim.result_interpreter import InterpretationContext, ResultInterp
 from targets.awsim.theory import build_theory_metrics
 
 
+# Start-up and grace times of an AWSIM run (hand-tested values, used by build_components).
+INITIAL_WARMUP_SEC = 40.0
+EXTRA_REFRESH_WARMUP_SEC = 15.0
+STARTUP_PROBE_TIMEOUT_SEC = 30.0
+REFRESH_PROBE_TIMEOUT_SEC = 45.0
+
+
 class AWSIMPlugin:
     name = "awsim"
     default_case_kind = "uturn"
@@ -18,6 +25,7 @@ class AWSIMPlugin:
     # Options of the shared CLIs that only AWSIM accepts, with the message for other targets.
     exclusive_options = (
         (("headless",), "--headless is only supported for target=awsim"),
+        (("fresh_infra_per_sample",), "--fresh-infra-per-sample is only supported for target=awsim"),
         (("replay_csv",), "--replay-csv is only supported for target=awsim"),
         (
             ("scenario_type", "simulation_output_dir", "expected_trace_path", "local_loop_num",
@@ -36,6 +44,22 @@ class AWSIMPlugin:
 
     def default_config_module(self, case_kind: str) -> str:
         return f"targets.awsim.case_kinds.{case_kind}"
+
+    def default_case_timeout_sec(self, case_kind: str) -> float:
+        """When a case taken by a worker counts as lost (docs/statistical_modes_hardening_plan.md §3.4).
+
+        No new margin: the scenario's own TIMEOUT_SEC plus the existing start-up
+        (warm-up, refresh warm-up, refresh probe) and post-timeout grace times,
+        since the clock starts when the worker takes the case (U-turn: 410 s).
+        """
+        from targets.awsim.backend import AWSIMBackendConfig
+        from targets.awsim.case_kinds import load_timeout_sec
+
+        return (
+            load_timeout_sec(case_kind=case_kind)
+            + INITIAL_WARMUP_SEC + EXTRA_REFRESH_WARMUP_SEC + REFRESH_PROBE_TIMEOUT_SEC
+            + AWSIMBackendConfig.post_timeout_grace_sec
+        )
 
     @property
     def scenario_profiles(self) -> tuple[str, ...]:
@@ -110,7 +134,10 @@ class AWSIMPlugin:
         )
 
         return {
-            "active_learning": StrategySpec(build_active_learning_strategy, target_total=active_learning_target_total),
+            # The statistical modes run on the shared region sampling; under --stopping-rule
+            # its composed form (orchestration/region_sampling.py).
+            "active_learning": StrategySpec(build_active_learning_strategy, target_total=active_learning_target_total,
+                                            composed_as="composed_region"),
             "replay": StrategySpec(build_replay_strategy, target_total=replay_target_total),
         }
 
@@ -136,12 +163,12 @@ class AWSIMPlugin:
                 reuse_infra_between_runs=not bool(
                     getattr(args, "fresh_infra_per_sample", False)
                 ),
-                initial_warmup_sec=40.0,
-                extra_refresh_warmup_sec=15.0,
+                initial_warmup_sec=INITIAL_WARMUP_SEC,
+                extra_refresh_warmup_sec=EXTRA_REFRESH_WARMUP_SEC,
                 infra_ext_mode=getattr(args, "ext_mode", "cvm"),
                 include_awchecker=False,
-                startup_probe_timeout_sec=30.0,
-                refresh_probe_timeout_sec=45.0,
+                startup_probe_timeout_sec=STARTUP_PROBE_TIMEOUT_SEC,
+                refresh_probe_timeout_sec=REFRESH_PROBE_TIMEOUT_SEC,
                 probe_service_timeout_sec=2.0,
                 startup_probe_stability_checks=2,
                 refresh_probe_stability_checks=3,
@@ -175,9 +202,9 @@ class AWSIMPlugin:
     @property
     def importance_sampling(self):
         """Importance-sampling hook (contracts/importance_sampling_plugin.py); imported on use."""
-        from targets.awsim.importance_sampling import AWSIMImportanceSamplingSupport
+        from targets.awsim.importance_sampling import AWSIMImportanceSampling
 
-        return AWSIMImportanceSamplingSupport()
+        return AWSIMImportanceSampling()
 
 
 PLUGIN = AWSIMPlugin()

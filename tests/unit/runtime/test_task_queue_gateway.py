@@ -166,3 +166,27 @@ def test_task_queue_gateway_uses_keywords_for_remote_actor_calls() -> None:
     assert actor.add_task.calls == [{"task": {"case_id": "case_1"}}]
     assert actor.set_start_counts.calls == [{"count": 7}]
     assert actor.set_stop_signal.calls == [{"reason": "done"}]
+
+
+def test_a_case_payload_carries_the_whole_meta_through_the_queue() -> None:
+    from contracts.execution import TestCase
+    from runtime.cluster.ray_queue import TaskQueue
+    from runtime.cluster.task_queue_gateway import TaskQueueGateway, case_payload
+
+    case = TestCase(
+        case_id="is-importance-000001", target="dynamics", case_kind="ou_scalar",
+        input={"sde_seed": 7, "sample_index": 1}, tags=["is"], reason="IS",
+        meta={"sampling": {"sample_id": "importance-000001", "log_p": -1.5}, "attempt_id": 2,
+              "scenario_profile": "autoware171"},
+    )
+    queue = TaskQueue()
+    gateway = TaskQueueGateway(actor=queue)
+    queue.add_task(case_payload(case))
+
+    rebuilt = gateway.fetch_next()
+
+    assert rebuilt.case_id == case.case_id and rebuilt.input == case.input and rebuilt.tags == ["is"]
+    assert rebuilt.meta["sampling"] == case.meta["sampling"]
+    assert rebuilt.meta["attempt_id"] == 2 and rebuilt.meta["scenario_profile"] == "autoware171"
+    assert rebuilt.meta["global_loop_num"] == 1
+    assert "case_meta" not in rebuilt.input

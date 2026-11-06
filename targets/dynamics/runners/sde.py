@@ -25,6 +25,8 @@ import numpy as np
 from ..models.base import HybridSystem, HybridTrajectory
 from ..proposals.base import ProposalContext
 from ..proposals.gaussian import DriftPathLaw
+from contracts.sampling import TARGET_COMPONENT
+
 from ..proposals.path import TARGET, PathProposal
 from .ode import ODESolverSettings, solve_hybrid_ode
 
@@ -40,6 +42,9 @@ class SDESolverSettings:
     # Seed for the one per-path draw that picks a mixture component. None keeps
     # the legacy behaviour: the draw comes first from the innovation stream.
     mixture_seed: int | None = None
+    # The component to draw from, chosen by the shared importance-sampling code
+    # (an index or "target"); None: draw the choice from ``mixture_seed``.
+    component: int | str | None = None
     # Initial inputs of the case, passed to proposal rules through the context.
     initial_inputs: Mapping[str, object] = field(default_factory=dict)
 
@@ -138,9 +143,17 @@ def solve_hybrid_sde(system: HybridSystem, settings: SDESolverSettings) -> Hybri
     # Q = P or a single direct component; this preserves the same-seed
     # regression invariant against the nominal SDE runner.
     if proposal is None:
-        chosen = TARGET
+        chosen, chosen_index = TARGET, None
     else:
-        chosen = proposal.choose(choice_rng.random() if proposal.needs_choice else None)
+        if settings.component is not None:
+            chosen_index = settings.component
+            if chosen_index != TARGET_COMPONENT and not (
+                isinstance(chosen_index, int) and 0 <= chosen_index < len(proposal.components)
+            ):
+                raise ValueError(f"sde_component {chosen_index!r} is not a component of the proposal")
+        else:
+            chosen_index = proposal.choose_index(choice_rng.random() if proposal.needs_choice else None)
+        chosen = TARGET if chosen_index == TARGET_COMPONENT else proposal.components[chosen_index]
     sampling_law = target_law if chosen is TARGET else chosen
     components = () if proposal is None else proposal.components
 
@@ -197,6 +210,8 @@ def solve_hybrid_sde(system: HybridSystem, settings: SDESolverSettings) -> Hybri
         noise_log_p=log_p,
         noise_log_q=log_q,
         noise_sample_count=noise_sample_count,
+        noise_log_q_components=tuple(log_r),
+        sampled_component=chosen_index,
     )
 
 

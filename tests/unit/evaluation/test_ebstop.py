@@ -41,7 +41,8 @@ def test_low_variance_data_stops_with_fewer_samples_than_high_variance() -> None
     )
     high_var = pd.DataFrame(
         {
-            "min_ttc": 2.0 + rng.normal(0, 1.0, size=500),
+            # Clipped to the declared range (width 2): EBStop needs every value inside it.
+            "min_ttc": np.clip(2.0 + rng.normal(0, 1.0, size=500), 1.0, 3.0),
             "status": ["success"] * 500,
         }
     )
@@ -147,7 +148,7 @@ def test_evaluate_request_stops_at_max_samples_without_convergence() -> None:
     rng = np.random.default_rng(7)
     df = pd.DataFrame(
         {
-            "min_ttc": 2.0 + rng.normal(0, 5.0, size=10),
+            "min_ttc": np.clip(2.0 + rng.normal(0, 5.0, size=10), -3.0, 7.0),
             "status": ["success"] * 10,
         }
     )
@@ -188,3 +189,15 @@ def test_evaluate_request_returns_error_report_for_missing_metric() -> None:
 
     assert report.next_action == "error"
     assert report.diagnostics["status"] == "error"
+
+
+@pytest.mark.parametrize("values", [[1.0, 2.0, float("inf")], [1.0, 2.0, 12.0], [-1.0, 2.0, 3.0]])
+def test_values_outside_the_range_give_an_error_instead_of_an_interval(values) -> None:
+    df = pd.DataFrame({"min_ttc": values, "status": ["success"] * len(values)})
+    request = StatisticalRequest(method="ebstop", metric="min_ttc", confidence=0.95,
+                                 options={"epsilon": 0.1, "value_range": (0.0, 10.0)})
+
+    report = evaluate_ebstop_request(df, request)
+
+    assert report.next_action == "error" and report.interval is None
+    assert report.diagnostics["out_of_range_count"] == 1

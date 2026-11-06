@@ -772,3 +772,53 @@ def test_worker_loop_execute_until_exit_requests_refresh_after_interval() -> Non
     assert outcome.reason == "refresh_interval_reached"
     assert outcome.processed_count == 1
     assert [record.case_id for record in outcome.records] == ["loop_70"]
+
+
+def test_a_worker_hands_back_a_case_of_another_target_and_stops() -> None:
+    """A late PRISM worker took an AWSIM run's cases and recorded them as successes (verification of 2026-11-05)."""
+    from runtime.cluster.ray_queue import TaskQueue
+
+    queue = TaskQueue()
+    queue.configure_retries(3)
+    queue.add_task({"case_id": "uturn_1", "target": "awsim", "case_kind": "uturn", "input": {"dx0": 15.0}})
+    sink = RecordingSink()
+    ran: list[str] = []
+
+    class QueueSource:
+        def fetch_next(self) -> TestCase | None:
+            payload = queue.get_next_task()
+            if payload is None:
+                return None
+            return TestCase(case_id=payload["case_id"], target=payload["target"], case_kind=payload["case_kind"],
+                            input=dict(payload["input"]), meta={"global_loop_num": payload["global_loop_num"]})
+
+        def report_completion(self, loop_num: int, status: str) -> None:
+            queue.report_completion(loop_num, status)
+
+    loop = WorkerLoop(backend=lambda case: ran.append(case.case_id), result_interpreter=lambda raw: raw,
+                      result_sink=sink, task_source=QueueSource(),
+                      context=WorkerLoopContext(worker_id="worker_23", target="prism"))
+
+    assert loop.run_once() is None
+    assert ran == [] and sink.records == []
+    assert "target=awsim" in loop.last_stop_reason and "target=prism" in loop.last_stop_reason
+    # The case is back in the queue for a worker of the right target.
+    again = queue.get_next_task()
+    assert again["case_id"] == "uturn_1" and again["attempt_id"] == 1
+
+
+def test_a_worker_runs_cases_of_its_own_target() -> None:
+    cases = [TestCase(case_id="uturn_1", target="awsim", case_kind="uturn", meta={"global_loop_num": 1})]
+    ran: list[str] = []
+
+    def backend(case: TestCase) -> RawRunResult:
+        ran.append(case.case_id)
+        return RawRunResult(case_id=case.case_id, target=case.target, case_kind=case.case_kind, status=RunStatus.SUCCESS)
+
+    loop = WorkerLoop(backend=backend,
+                      result_interpreter=lambda raw: EvaluationRecord(case_id=raw.case_id, target=raw.target,
+                                                                      case_kind=raw.case_kind, status=raw.status),
+                      task_source=lambda: cases.pop(0) if cases else None,
+                      context=WorkerLoopContext(worker_id="worker_21", target="awsim"))
+
+    assert loop.run_once() is not None and ran == ["uturn_1"]

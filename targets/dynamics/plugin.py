@@ -4,6 +4,7 @@ import argparse
 from collections.abc import Mapping
 from pathlib import Path
 
+from contracts.capabilities import INTERNAL_DENSITY
 from contracts.target_plugin import TargetComponents
 from targets.dynamics.backend import DynamicsBackend, DynamicsBackendConfig
 from targets.dynamics.models.registry import resolve_dynamics_model, statistical_defaults
@@ -22,6 +23,8 @@ DYNAMICS_DECISION_METRICS = {
 class DynamicsPlugin:
     name = "dynamics"
     default_case_kind = "uturn"
+    # SDE paths report their density under P and every proposal component (contracts/capabilities.py).
+    capabilities = frozenset({INTERNAL_DENSITY})
 
     def default_config_module(self, case_kind: str) -> str:
         # Only the U-turn has a scenario spec; the IID statistical path does
@@ -123,9 +126,9 @@ class DynamicsPlugin:
     @property
     def importance_sampling(self):
         """Importance-sampling hook (contracts/importance_sampling_plugin.py); imported on use."""
-        from targets.dynamics.importance_sampling import DynamicsImportanceSamplingSupport
+        from targets.dynamics.importance_sampling import DynamicsImportanceSampling
 
-        return DynamicsImportanceSamplingSupport()
+        return DynamicsImportanceSampling()
 
 
 PLUGIN = DynamicsPlugin()

@@ -20,7 +20,7 @@ Candidates file::
     budget: 10            # optional, at most this many trials (default 10)
     trials:
       - name: q1_piecewise
-        noise: {kind: gaussian, mean_rule: {...}}      # or noise_path_q: {...}
+        noise: {kind: gaussian, mean_rule: {...}}      # keys of proposal.definition (dynamics: noise or noise_path_q)
 """
 
 from __future__ import annotations
@@ -36,17 +36,15 @@ from pathlib import Path
 
 import yaml
 
-from targets.dynamics.importance_sampling import (
-    DynamicsImportanceSamplingRunConfig,
-    DynamicsImportanceSamplingRunner,
-)
+from orchestration.importance.runner import hooks_for_target
+from orchestration.sampling_plan import sampling_plan_from_mapping
 from runtime.repository.importance_experiment_manifest import fingerprint
-from targets.dynamics.backend import DynamicsBackend, DynamicsBackendConfig
-from targets.dynamics.result_interpreter import DynamicsResultInterpreter
+from tools.validation.importance_runs import check_plan, run_plan_fixed
 
 DEFAULT_BUDGET = 10
 RECORD_NAME = "tuning_record.json"
-PROPOSAL_KEYS = ("noise", "noise_path_q")
+# Keys of proposal.definition a trial replaces, if the target names none
+# (hook attribute ``proposal_keys``): the keys the trial gives.
 
 
 def load_candidates(path: str | Path) -> tuple[int, list[dict[str, object]]]:
@@ -60,25 +58,42 @@ def load_candidates(path: str | Path) -> tuple[int, list[dict[str, object]]]:
     names = [trial.get("name") for trial in trials]
     if any(not isinstance(name, str) or not name for name in names) or len(set(names)) != len(names):
         raise ValueError("every trial needs a unique name")
-    for trial in trials:
-        given = [key for key in PROPOSAL_KEYS if trial.get(key) is not None]
-        if len(given) > 1:
-            raise ValueError(f"trial {trial['name']} must give noise or noise_path_q, not both")
     return budget, trials
 
 
 def trial_plan(base: Mapping[str, object], trial: Mapping[str, object]) -> dict[str, object]:
-    """The base plan with its proposal replaced by the trial's (target unchanged)."""
+    """The base plan with its proposal replaced by the trial's (target unchanged).
+
+    The target names the keys of ``proposal.definition`` that make up a proposal
+    (hook attribute ``proposal_keys``; dynamics: ``noise`` / ``noise_path_q``);
+    the base's are dropped and the trial's set.
+    """
     plan = copy.deepcopy(dict(base))
+    given = {key: value for key, value in trial.items() if key != "name" and value is not None}
+    replaced = tuple(getattr(hooks_for_target(str(plan["target"])), "proposal_keys", ())) or tuple(given)
     definition = {
-        key: value for key, value in dict(plan["proposal"]["definition"]).items() if key not in PROPOSAL_KEYS
+        key: value for key, value in dict(plan["proposal"]["definition"]).items() if key not in replaced
     }
-    for key in PROPOSAL_KEYS:
-        if trial.get(key) is not None:
-            definition[key] = copy.deepcopy(trial[key])
+    for key in (*replaced, *(key for key in given if key not in replaced)):
+        if key in given:
+            definition[key] = copy.deepcopy(given[key])
     plan["proposal"] = {"id": str(trial["name"]), "mode": "manual_proposal", "definition": definition}
     plan["experiment_id"] = f"{plan['experiment_id']}__{trial['name']}"
     return plan
+
+
+def check_trials(base: Mapping[str, object], trials: Sequence[Mapping[str, object]]) -> None:
+    """Let the target check every trial plan before any of them runs."""
+    for trial in trials:
+        check_plan(sampling_plan_from_mapping(trial_plan(base, trial)))
+
+
+def run_trial(plan: Mapping[str, object], trial_dir: Path, *, samples: int, root_entropy: int) -> dict[str, object]:
+    """One pilot trial (phase ``pilot``) through the shared runner; returns the comparison."""
+    trial_dir.mkdir(parents=True, exist_ok=True)
+    plan_path = trial_dir / "plan.yaml"
+    plan_path.write_text(yaml.safe_dump(dict(plan), sort_keys=False), encoding="utf-8")
+    return run_plan_fixed(plan_path, workdir=trial_dir, max_samples=samples, phase="pilot", root_entropy=root_entropy)
 
 
 def run_trials(
@@ -92,24 +107,13 @@ def run_trials(
     base = yaml.safe_load(Path(base_plan).read_text(encoding="utf-8"))
     budget, trials = load_candidates(candidates)
     output = Path(output_dir)
+    check_trials(base, trials)
     results = []
     for trial in trials:
         plan = trial_plan(base, trial)
-        trial_dir = output / "trials" / str(trial["name"])
-        trial_dir.mkdir(parents=True, exist_ok=True)
-        plan_path = trial_dir / "plan.yaml"
-        plan_path.write_text(yaml.safe_dump(plan, sort_keys=False), encoding="utf-8")
-        runner = DynamicsImportanceSamplingRunner(
-            backend=DynamicsBackend(DynamicsBackendConfig(output_root=trial_dir / "artifacts", artifact_policy="summary")),
-            result_interpreter=DynamicsResultInterpreter(),
-        )
         started = time.perf_counter()
-        comparison = runner.run_fixed_samples(
-            DynamicsImportanceSamplingRunConfig(
-                sampling_plan_path=plan_path, output_root=trial_dir / "run", max_samples=samples,
-                phase="pilot", root_entropy=root_entropy,
-            )
-        )["comparison"]
+        comparison = run_trial(plan, output / "trials" / str(trial["name"]), samples=samples,
+                               root_entropy=root_entropy)
         elapsed = time.perf_counter() - started
         results.append(_trial_summary(trial, plan, comparison, elapsed, samples))
     record = {

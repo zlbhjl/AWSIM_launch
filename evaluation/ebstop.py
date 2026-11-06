@@ -11,7 +11,7 @@ from contracts.statistics import StatisticalReport, StatisticalRequest
 from evaluation.alpha_spending import DEFAULT_SPENDING_EXPONENT
 from evaluation.dkw import records_to_data_frame
 from evaluation.empirical_bernstein import empirical_bernstein_radius
-import point_extractors
+from evaluation.region_filter import RegionVocabulary, filter_rows
 
 
 DEFAULT_P = DEFAULT_SPENDING_EXPONENT
@@ -74,6 +74,23 @@ def _resolve_value_range(value_range: float | tuple[float, float]) -> float:
     return float(value_range)
 
 
+def _values_outside_range(values: np.ndarray, value_range: float | tuple[float, float]) -> int:
+    """How many values are not finite or lie outside the declared range.
+
+    A range given as (lo, hi) is checked on both ends; a range given as a width
+    only (legacy callers) is checked for finiteness and for a spread wider than it.
+    """
+    finite = np.isfinite(values)
+    count = int((~finite).sum())
+    kept = values[finite]
+    if isinstance(value_range, (tuple, list)):
+        lo, hi = float(value_range[0]), float(value_range[1])
+        count += int(((kept < lo) | (kept > hi)).sum())
+    elif kept.size and float(kept.max() - kept.min()) > float(value_range):
+        count += 1
+    return count
+
+
 def calculate_ebstop_decision(
     df: pd.DataFrame | None,
     *,
@@ -83,6 +100,7 @@ def calculate_ebstop_decision(
     value_range: float | tuple[float, float],
     bounds: dict[str, tuple[float, float]] | None = None,
     region: str = "custom",
+    vocabulary: RegionVocabulary | None = None,
     reason_pattern: str | None = None,
 ) -> dict[str, object] | None:
     if df is None or df.empty or target_column not in df.columns:
@@ -97,9 +115,10 @@ def calculate_ebstop_decision(
         working_df = working_df[reason_series.str.contains(reason_pattern, na=False)]
 
     try:
-        working_df = point_extractors.filter_by_region_and_bounds(
+        working_df = filter_rows(
             working_df,
             region=region,
+            vocabulary=vocabulary,
             bounds=bounds,
         )
     except Exception:
@@ -115,6 +134,12 @@ def calculate_ebstop_decision(
 
     resolved_range = _resolve_value_range(value_range)
     values = target.to_numpy(dtype=float)
+    outside = _values_outside_range(values, value_range)
+    if outside:
+        # The empirical Bernstein bound assumes every value lies in the range;
+        # with a value outside it the interval carries no guarantee.
+        return {"target_column": target_column, "sample_size": n, "out_of_range_count": outside,
+                "value_range": value_range}
     t = np.arange(1, n + 1, dtype=float)
     running_mean = np.cumsum(values) / t
     running_mean_sq = np.cumsum(values**2) / t
@@ -165,6 +190,7 @@ class EBStopService:
         request: StatisticalRequest,
     ) -> StatisticalReport:
         region = str(request.options.get("region", "custom"))
+        vocabulary = request.options.get("region_vocabulary")
         reason_pattern = request.options.get("reason_pattern")
         if reason_pattern is not None:
             reason_pattern = str(reason_pattern)
@@ -191,6 +217,7 @@ class EBStopService:
             value_range=value_range,
             bounds=request.bounds,
             region=region,
+            vocabulary=vocabulary,
             reason_pattern=reason_pattern,
         )
 
@@ -224,6 +251,30 @@ class EBStopService:
                 diagnostics={
                     "status": "error",
                     "message": "EBStop decision could not be computed.",
+                    "confidence": request.confidence,
+                    "epsilon": epsilon,
+                    "region": region,
+                    "reason_pattern": reason_pattern,
+                },
+            )
+
+        if result.get("out_of_range_count"):
+            return StatisticalReport(
+                method=request.method,
+                metric=request.metric,
+                sample_count=int(result["sample_size"]),
+                estimate=None,
+                interval=None,
+                sufficient=False,
+                next_action="error",
+                diagnostics={
+                    "status": "error",
+                    "message": (
+                        f"EBStop needs every value of {request.metric} in the range {result['value_range']}; "
+                        f"{result['out_of_range_count']} value(s) are infinite or outside it, so an interval "
+                        "would carry no guarantee (docs/statistical_method_selection.md, EBStop)"
+                    ),
+                    "out_of_range_count": int(result["out_of_range_count"]),
                     "confidence": request.confidence,
                     "epsilon": epsilon,
                     "region": region,

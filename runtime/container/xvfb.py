@@ -58,6 +58,9 @@ class XvfbController:
         env: dict[str, str] | None = None,
         signal_sender: Callable[[object, int], None] | None = None,
         supervisor_client: SupervisorClient | None = None,
+        lock_dir: Path | None = Path("/tmp"),
+        process_state: Callable[[int], str | None] | None = None,
+        release_timeout_sec: float = 5.0,
     ) -> None:
         self.popen_factory = popen_factory or subprocess.Popen
         self.system_runner = system_runner or os.system
@@ -69,6 +72,9 @@ class XvfbController:
             if supervisor_client is not None
             else supervisor_client_from_environment()
         )
+        self.lock_dir = lock_dir
+        self.process_state = process_state or _process_state
+        self.release_timeout_sec = float(release_timeout_sec)
 
     def start(self, config: XvfbConfig) -> XvfbSession | None:
         if not config.enabled:
@@ -83,6 +89,7 @@ class XvfbController:
                 )
             else:
                 self.system_runner(config.build_cleanup_command())
+            self._wait_for_display_release(config.display)
 
         if self.supervisor_client is not None:
             process = self.supervisor_client.spawn(
@@ -141,9 +148,49 @@ class XvfbController:
             base_env["VK_ICD_FILENAMES"] = config.vk_icd_filenames
         return base_env
 
+    def _wait_for_display_release(self, display: str) -> None:
+        """Wait until the display's lock is free, so the new Xvfb can take it.
+
+        A killed Xvfb that its parent has not reaped yet (a zombie) still owns
+        the lock: the new Xvfb then exits with "Server is already active" and
+        AWSIM starts with no display (verification V8, 2026-11-06). A dead or
+        zombie owner serves nothing, so its lock is removed.
+        """
+        if self.lock_dir is None:
+            return
+        number = display.lstrip(":").split(".")[0]
+        lock = self.lock_dir / f".X{number}-lock"
+        socket = self.lock_dir / ".X11-unix" / f"X{number}"
+        deadline = time.monotonic() + self.release_timeout_sec
+        while True:
+            try:
+                owner = int(lock.read_text().strip())
+            except (OSError, ValueError):
+                return
+            state = self.process_state(owner)
+            if state is None or state == "Z":
+                for path in (lock, socket):
+                    try:
+                        path.unlink()
+                    except OSError:
+                        pass
+                return
+            if time.monotonic() >= deadline:
+                return
+            self.sleeper(0.2)
+
     @staticmethod
     def _default_signal_sender(process: object, sig: int) -> None:
         pid = getattr(process, "pid", None)
         if pid is None:
             return
         os.kill(pid, sig)
+
+
+def _process_state(pid: int) -> str | None:
+    """The state letter of a process (``Z`` for a zombie), or None when it does not exist."""
+    try:
+        stat = Path(f"/proc/{pid}/stat").read_text()
+    except OSError:
+        return None
+    return stat.rsplit(")", 1)[-1].split()[0]
