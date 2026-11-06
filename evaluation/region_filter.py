@@ -85,9 +85,12 @@ def filter_rows(
         try:
             # Metric and parameter columns are made numeric (invalid values become NaN);
             # string columns are kept.
-            for col in filtered_df.columns:
-                if col not in string_columns:
-                    filtered_df.loc[:, col] = pd.to_numeric(filtered_df[col], errors="coerce")
+            # Replace the column instead of writing into it: pandas 3 stores text in a
+            # string dtype that refuses numbers, so an in-place write raised and the
+            # region silently fell back to the full ranges.
+            numeric = {col: pd.to_numeric(filtered_df[col], errors="coerce")
+                       for col in filtered_df.columns if col not in string_columns}
+            filtered_df = filtered_df.assign(**numeric)
             filtered_df = filtered_df.query(query_str).copy()
         except Exception as e:
             raise ValueError(f"条件式の評価に失敗しました: {e}")
@@ -95,7 +98,7 @@ def filter_rows(
     if bounds:
         for col, (min_val, max_val) in bounds.items():
             if col in filtered_df.columns:
-                filtered_df.loc[:, col] = pd.to_numeric(filtered_df[col], errors="coerce")
+                filtered_df = filtered_df.assign(**{col: pd.to_numeric(filtered_df[col], errors="coerce")})
                 filtered_df = filtered_df[(filtered_df[col] >= min_val) & (filtered_df[col] <= max_val)]
 
     return filtered_df
